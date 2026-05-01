@@ -148,5 +148,17 @@ export const api = {
       throw new Error(error.error || 'Admin login failed');
     }
     return res.json();
+  },
+  async forgotPassword(data: { email?: string, mobile?: string }) {
+    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Password recovery failed');
+    }
+    return res.json();
   }
 };

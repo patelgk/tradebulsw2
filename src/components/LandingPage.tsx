@@ -43,7 +43,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onAdminL
 
   const handleAdminSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminCreds.mobile === '999999999' && adminCreds.pass === '888981') {
+    if (adminCreds.mobile === '9691827337' && adminCreds.pass === '888981') {
       onAdminLogin?.(adminCreds.mobile, adminCreds.pass);
       setShowAdminLogin(false);
     } else {
@@ -191,12 +191,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onAdminL
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button 
                 onClick={onLoginClick}
-                className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-2xl flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(16,185,129,0.3)] font-display"
+                className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-2xl flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(16,185,129,0.3)] font-display uppercase tracking-widest text-xs"
               >
-                {isLoggedIn ? 'Go to Dashboard' : 'Start Free Challenge Now'} <ArrowRight className="w-5 h-5" />
+                {isLoggedIn ? 'Go to Dashboard' : 'Login with Mobile Number'} <ArrowRight className="w-5 h-5" />
               </button>
-              <button className="w-full sm:w-auto px-8 py-4 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 font-black rounded-2xl flex items-center justify-center gap-2 transition-all font-display text-slate-900 dark:text-white">
-                <Play className="w-4 h-4 fill-current" /> Watch Demo
+              <button 
+                onClick={onLoginClick}
+                className="w-full sm:w-auto px-8 py-4 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 font-black rounded-2xl flex items-center justify-center gap-2 transition-all font-display text-slate-900 dark:text-white uppercase tracking-widest text-xs"
+              >
+                Start Free Evaluation
               </button>
             </div>
           </motion.div>

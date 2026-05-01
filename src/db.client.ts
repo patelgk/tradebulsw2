@@ -9,15 +9,24 @@ export interface LocalMarketData {
   optionChain?: any[];
 }
 
+export interface LocalCandle {
+  symbol: string;
+  interval: string;
+  candles: any[];
+  lastUpdated: number;
+}
+
 export class AppDatabase extends Dexie {
   trades!: Table<Trade>;
   marketData!: Table<LocalMarketData>;
+  marketHistorical!: Table<LocalCandle>;
 
   constructor() {
     super('IndoTraderDB');
-    this.version(1).stores({
+    this.version(2).stores({
       trades: 'id, userId, symbol, status',
-      marketData: 'symbol'
+      marketData: 'symbol',
+      marketHistorical: '[symbol+interval]'
     });
   }
 }

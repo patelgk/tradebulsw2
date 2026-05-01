@@ -13,16 +13,17 @@ import WebSocket from 'ws';
 import mongoose from 'mongoose';
 import protobuf from "protobufjs";
 import { v4 as uuidv4 } from 'uuid';
+import nodemailer from 'nodemailer';
 import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction } from './db.js';
 
 // Load environment variables from .env file
 dotenv.config();
 
 // Connect to MongoDB
-connectDB();
+// Removed from top-level to await inside startServer
 
-// Fix Yahoo Finance initialization for ESM
-const yf = (YahooFinance as any).default || YahooFinance;
+// Fix Yahoo Finance initialization
+const yf = new YahooFinance();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +76,58 @@ class DhanServerManager {
 
   isConnectedStatus() {
     return this.isConnected;
+  }
+
+  async getHistory(symbol: string, interval: string) {
+    try {
+      const dhanKey = {
+        'Nifty 50': '13',
+        'Bank Nifty': '25',
+        'Fin Nifty': '27',
+        'Midcap Nifty': '32'
+      }[symbol];
+
+      if (!dhanKey) return null;
+
+      const provider = marketSettings.providers.find(p => p.id === 'dhan');
+      if (!provider?.accessToken) return null;
+
+      const dhanInterval = {
+        '1m': '1',
+        '5m': '5',
+        '15m': '15',
+        '30m': '30',
+        '1h': '60',
+        '1D': 'DAY'
+      }[interval] || '5';
+
+      const res = await axios.post('https://api.dhan.co/v2/charts/historical', {
+        symbol: symbol,
+        exchangeSegment: 'NSE_IDX',
+        instrumentId: dhanKey,
+        expiryCode: 0,
+        fromDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        toDate: new Date().toISOString().split('T')[0],
+        interval: dhanInterval
+      }, {
+        headers: { 'access-token': provider.accessToken, 'Content-Type': 'application/json' }
+      });
+
+      if (res.data?.data) {
+        return res.data.data.map((c: any) => ({
+          time: new Date(c.start_Time * 1000).toISOString(),
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume
+        }));
+      }
+      return null;
+    } catch (err: any) {
+      console.error('[Dhan Server] History fetch failed:', err.response?.data || err.message);
+      return null;
+    }
   }
 
   connect() {
@@ -204,6 +257,9 @@ class UpstoxServerManager {
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private protoRoot: protobuf.Root | null = null;
   private FeedResponse: any = null;
+  private optionInstruments: Record<string, { symbol: string, strike: number, optionType: 'CE' | 'PE' }> = {};
+  private activeSymbolKeys: string[] = [];
+  private lastOptionFetch: Record<string, number> = {};
 
   constructor() {
     this.initProto();
@@ -224,6 +280,132 @@ class UpstoxServerManager {
     return this.isConnected;
   }
 
+  async getHistory(symbol: string, interval: string) {
+    try {
+      const upstoxKey = {
+        'Nifty 50': 'NSE_INDEX|Nifty 50',
+        'Bank Nifty': 'NSE_INDEX|Nifty Bank',
+        'Fin Nifty': 'NSE_INDEX|FINNIFTY',
+        'Midcap Nifty': 'NSE_INDEX|Nifty Midcap 100'
+      }[symbol];
+
+      if (!upstoxKey) return null;
+
+      const provider = marketSettings.providers.find(p => p.id === 'upstox');
+      if (!provider?.accessToken) return null;
+
+      const upstoxInterval = {
+        '1m': '1minute',
+        '3m': '3minute',
+        '5m': '5minute',
+        '15m': '15minute',
+        '30m': '30minute',
+        '1h': '60minute',
+        '1D': 'day'
+      }[interval] || '5minute';
+
+      const toDate = new Date().toISOString().split('T')[0];
+      const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const url = `https://api.upstox.com/v2/historical-candle/${encodeURIComponent(upstoxKey)}/${upstoxInterval}/${toDate}/${fromDate}`;
+      const res = await axios.get(url, {
+        headers: { 'Authorization': `Bearer ${provider.accessToken}`, 'Accept': 'application/json' }
+      });
+
+      if (res.data?.data?.candles) {
+        return res.data.data.candles.map((c: any) => ({
+          time: c[0],
+          open: c[1],
+          high: c[2],
+          low: c[3],
+          close: c[4],
+          volume: c[5]
+        })).reverse(); // Upstox returns newest first
+      }
+      return null;
+    } catch (err: any) {
+      console.error('[Upstox Server] History fetch failed:', err.response?.data || err.message);
+      return null;
+    }
+  }
+
+  async fetchOptionChain(displayName: string, accessToken: string) {
+    try {
+      const now = Date.now();
+      if (this.lastOptionFetch[displayName] && now - this.lastOptionFetch[displayName] < 300000) {
+        return; // Only refresh every 5 mins
+      }
+
+      const upstoxKey = {
+        'Nifty 50': 'NSE_INDEX|Nifty 50',
+        'Bank Nifty': 'NSE_INDEX|Nifty Bank',
+        'Fin Nifty': 'NSE_INDEX|FINNIFTY',
+        'Midcap Nifty': 'NSE_INDEX|Nifty Midcap 100'
+      }[displayName];
+
+      if (!upstoxKey) return;
+
+      console.log(`[Upstox Server] Fetching option chain for ${displayName}...`);
+      
+      const expiry = marketData[displayName].expiry;
+      const url = `https://api.upstox.com/v2/market-quote/option-chain?instrument_key=${encodeURIComponent(upstoxKey)}&expiry_date=${expiry}`;
+      
+      const res = await axios.get(url, {
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
+      });
+
+      if (res.data && res.data.data) {
+        const chain = res.data.data;
+        const newInstruments: string[] = [];
+        const currentChain = marketData[displayName].optionChain || [];
+        
+        // Clean up old instruments for this display name
+        for (const key in this.optionInstruments) {
+          if (this.optionInstruments[key].symbol === displayName) {
+            delete this.optionInstruments[key];
+          }
+        }
+
+        const updatedOptionChain: any[] = [];
+
+        chain.forEach((item: any) => {
+          const strike = item.strike_price;
+          const callKey = item.call_options?.instrument_key;
+          const putKey = item.put_options?.instrument_key;
+
+          if (callKey) {
+            this.optionInstruments[callKey] = { symbol: displayName, strike, optionType: 'CE' };
+            newInstruments.push(callKey);
+          }
+          if (putKey) {
+            this.optionInstruments[putKey] = { symbol: displayName, strike, optionType: 'PE' };
+            newInstruments.push(putKey);
+          }
+
+          updatedOptionChain.push({
+            strike,
+            ce_ltp: item.call_options?.market_data?.ltp || 0,
+            ce_oi: item.call_options?.market_data?.oi || 0,
+            ce_oi_change: 0, // Upstox doesn't provide this in chain API directly usually
+            pe_ltp: item.put_options?.market_data?.ltp || 0,
+            pe_oi: item.put_options?.market_data?.oi || 0,
+            pe_oi_change: 0,
+            ce_key: callKey,
+            pe_key: putKey
+          });
+        });
+
+        marketData[displayName].optionChain = updatedOptionChain.sort((a, b) => a.strike - b.strike);
+        this.lastOptionFetch[displayName] = now;
+        
+        // Re-subscribe to include new options
+        this.subscribe();
+      }
+    } catch (err: any) {
+      console.error(`[Upstox Server] Failed to fetch option chain for ${displayName}:`, err.response?.data || err.message);
+    }
+  }
+
   async connect() {
     try {
       const marketDoc = await Setting.findOne({ id: 'market' });
@@ -237,6 +419,12 @@ class UpstoxServerManager {
 
       if (this.ws) {
         this.ws.terminate();
+      }
+
+      // Fetch initial option chains before connecting WS
+      const symbols = ['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty'];
+      for (const symbol of symbols) {
+        await this.fetchOptionChain(symbol, accessToken);
       }
 
       // 1. Authorize to get the WebSocket URL
@@ -283,24 +471,31 @@ class UpstoxServerManager {
   private subscribe() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    const symbols = [
+    const indexSymbols = [
       'NSE_INDEX|Nifty 50',
       'NSE_INDEX|Nifty Bank',
       'NSE_INDEX|FINNIFTY',
       'NSE_INDEX|Nifty Midcap 100'
     ];
 
+    const optionKeys = Object.keys(this.optionInstruments);
+    
+    // Upstox has a limit of 100 instruments per socket usually.
+    // If we have more, we might need to prioritize ATM strikes or multiple sockets.
+    // Here we'll just take those closest to market price if needed, but for now take first 100
+    const keysToSubscribe = [...indexSymbols, ...optionKeys].slice(0, 500);
+
     const data = {
       guid: "guid",
       method: "sub",
       data: {
-        mode: "ltpc",
-        instrumentKeys: symbols
+        mode: "full", // Full mode for OI and Greeks
+        instrumentKeys: keysToSubscribe
       }
     };
 
     this.ws.send(JSON.stringify(data));
-    console.log("[Upstox Server] Sent subscription for instruments");
+    console.log(`[Upstox Server] Sent subscription for ${keysToSubscribe.length} instruments (mode: full)`);
   }
 
   private handleMessage(data: Buffer) {
@@ -318,28 +513,62 @@ class UpstoxServerManager {
         'NSE_INDEX|NIFTY MIDCAP 100': 'Midcap Nifty'
       };
 
+      const socketUpdates: Record<string, any> = {};
+
       for (const [key, feed] of Object.entries(feeds)) {
-        const displayName = nameMap[key];
-        if (displayName && marketData[displayName]) {
-          const ltpData = (feed as any).ltpc || ((feed as any).fullFeed?.indexFF?.ltpc);
+        // Handle Index Update
+        if (nameMap[key]) {
+          const displayName = nameMap[key];
+          const ltpData = (feed as any).fullFeed?.indexFF?.ltpc || (feed as any).ltpc;
           if (ltpData && ltpData.ltp) {
             marketData[displayName].price = ltpData.ltp;
             marketData[displayName].change = ltpData.ltp - (ltpData.cp || marketData[displayName].price);
             marketData[displayName].dataSource = 'Upstox';
             marketData[displayName].timestamp = new Date().toLocaleTimeString('en-IN', { hour12: false });
+            socketUpdates[displayName] = marketData[displayName];
+          }
+        }
+        
+        // Handle Option Update
+        if (this.optionInstruments[key]) {
+          const { symbol, strike, optionType } = this.optionInstruments[key];
+          const ff = (feed as any).fullFeed?.marketFF;
+          if (ff) {
+            const ltp = ff.ltpc?.ltp;
+            const oi = ff.marketOI;
             
-            // Emit immediate update via socket for real-time feel
-            io.emit("marketUpdate", { [displayName]: marketData[displayName] });
+            if (ltp !== undefined || oi !== undefined) {
+              const chainItem = marketData[symbol].optionChain.find(item => item.strike === strike);
+              if (chainItem) {
+                if (optionType === 'CE') {
+                  if (ltp !== undefined) chainItem.ce_ltp = ltp;
+                  if (oi !== undefined) {
+                    if (chainItem.ce_oi && chainItem.ce_oi !== oi) {
+                      chainItem.ce_oi_change = (chainItem.ce_oi_change || 0) + (oi - chainItem.ce_oi);
+                    }
+                    chainItem.ce_oi = oi;
+                  }
+                } else {
+                  if (ltp !== undefined) chainItem.pe_ltp = ltp;
+                  if (oi !== undefined) {
+                    if (chainItem.pe_oi && chainItem.pe_oi !== oi) {
+                      chainItem.pe_oi_change = (chainItem.pe_oi_change || 0) + (oi - chainItem.pe_oi);
+                    }
+                    chainItem.pe_oi = oi;
+                  }
+                }
+                socketUpdates[symbol] = marketData[symbol];
+              }
+            }
           }
         }
       }
+
+      if (Object.keys(socketUpdates).length > 0) {
+        io.emit("marketUpdate", socketUpdates);
+      }
     } catch (e) {
-      try {
-        const text = data.toString();
-        if (text.startsWith('{')) {
-          // console.log('[Upstox Server] JSON message:', text);
-        }
-      } catch (err) {}
+      // console.error('[Upstox Server] Error decoding message:', e);
     }
   }
 
@@ -554,7 +783,7 @@ let marketSettings = {
   providers: [
     { id: 'yahoo', name: 'Yahoo Finance', type: 'yahoo' as const },
     { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },
-    { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: '', apiSecret: '' }
+    { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: '1421f9f3-d895-42b7-8de3-036656b390e6', apiSecret: '2nmvrknyj6' }
   ] as MarketProvider[]
 };
 
@@ -598,7 +827,7 @@ const updateSettings = async () => {
         providers: [
           { id: 'yahoo', name: 'Yahoo Finance', type: 'yahoo' as const },
           { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },
-          { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: '', apiSecret: '' }
+          { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: '1421f9f3-d895-42b7-8de3-036656b390e6', apiSecret: '2nmvrknyj6' }
         ]
       };
       await Setting.findOneAndUpdate({ id: 'market' }, { data: defaultSettings }, { upsert: true });
@@ -690,16 +919,31 @@ async function fetchMarketData(force = false) {
             expiry = nseChain.expiry;
             if (nseChain.price) { price = nseChain.price; fetched = true; }
           }
+        } else if (activeProvider?.type === 'upstox') {
+          const activeUpstoxProvider = marketSettings.providers.find(p => p.id === 'upstox');
+          if (activeUpstoxProvider?.accessToken) {
+            await upstoxManager.fetchOptionChain(displayName, activeUpstoxProvider.accessToken);
+            optionChain = marketData[displayName].optionChain;
+            expiry = marketData[displayName].expiry;
+            fetched = true;
+          }
         }
       }
 
-      if (!fetched && isMarketOpen()) {
+      const isUpstox = activeProvider?.type === 'upstox';
+      const isUpstoxConnected = upstoxManager.isConnectedStatus();
+      const isDhan = activeProvider?.type === 'dhan';
+      const isDhanConnected = dhanManager.isConnectedStatus();
+      
+      const isRealTimeProviderActive = (isUpstox && isUpstoxConnected) || (isDhan && isDhanConnected);
+
+      if (!fetched && isMarketOpen() && !isRealTimeProviderActive) {
         const tickDelta = (Math.random() - 0.5) * (price * 0.0002);
         price += tickDelta;
         change += tickDelta;
       }
 
-      if (optionChain.length > 0 && isMarketOpen() && (!activeProvider || activeProvider.type === 'yahoo' || !fetched)) {
+      if (optionChain.length > 0 && isMarketOpen() && (!activeProvider || activeProvider.type === 'yahoo' || (!fetched && !isRealTimeProviderActive))) {
         const spotDelta = price - (marketData[displayName]?.price || price);
         optionChain = optionChain.map(opt => {
           const distance = opt.strike - price;
@@ -838,34 +1082,93 @@ app.post("/api/users", async (req, res) => {
 // Auth Routes (Local Backend)
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { email, password, name } = req.body;
-    const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ error: "User already exists" });
+    const { email, password, name, phoneNumber } = req.body;
+    
+    // Check if user exists by email or phone
+    const existingUser = await User.findOne({ $or: [{ email }, { phoneNumber: phoneNumber || '___none___' }] });
+    if (existingUser) return res.status(400).json({ error: "User already exists with this email or mobile number" });
 
     const newUser = new User({
       uid: uuidv4(),
       email,
       password, // In a real app, hash this!
       name,
-      balance: 100000, // Default signup bonus
+      phoneNumber,
+      balance: 100000, 
       initial_balance: 100000
     });
 
     await newUser.save();
     res.json(newUser);
   } catch (err) {
+    console.error('Signup error:', err);
     res.status(500).json({ error: "Signup failed" });
   }
 });
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email, password });
+    const { email, password, mobile } = req.body;
+    
+    let query: any = { password };
+    if (email) {
+      query.email = email;
+    } else if (mobile) {
+      query.phoneNumber = mobile;
+    } else {
+      return res.status(400).json({ error: "Email or Mobile is required" });
+    }
+
+    const user = await User.findOne(query);
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
     res.json(user);
   } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ error: "Login failed" });
+  }
+});
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  try {
+    const { email, mobile } = req.body;
+    const query: any = {};
+    if (email) query.email = email;
+    else if (mobile) query.phoneNumber = mobile;
+    else return res.status(400).json({ error: "Identification required" });
+
+    const user = await User.findOne(query);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // In this app, we'll just return the password for simplicity in this dev environment
+    // In production, you'd send a reset link via email
+    if (process.env.SMTP_USER && process.env.SMTP_PASS && user.email) {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port: parseInt(process.env.SMTP_PORT || "587"),
+        secure: false,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: user.email,
+        subject: "Password Recovery - Indo Trader",
+        text: `Hello ${user.name},\n\nYour password for Indo Trader is: ${user.password}\n\nPlease keep it secure.`,
+      });
+      return res.json({ message: "Password sent to your email" });
+    }
+
+    // Fallback if SMTP not configured: just show it (for demo/development convenience)
+    res.json({ 
+      message: "Security Notice: In production, an email would be sent. For this demo, here is your password:",
+      password: user.password 
+    });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: "Password recovery failed" });
   }
 });
 
@@ -874,7 +1177,7 @@ app.post("/api/auth/admin-login", async (req, res) => {
     const { mobile, password } = req.body;
     
     // Check specific admin credentials from prompt
-    if (mobile === "999999999" && password === "888981") {
+    if (mobile === "9691827337" && password === "888981") {
       let user = await User.findOne({ email: "admin@indotrader.com" });
       
       if (!user) {
@@ -1133,27 +1436,49 @@ app.post("/api/market/dhan/reconnect", (req, res) => {
 app.get("/api/market/history/:symbol", async (req, res) => {
   const { symbol } = req.params;
   const { interval = '5m' } = req.query;
-  const yahooSymbol = SYMBOL_MAP[symbol] || symbol;
-  const intervalMap: Record<string, string> = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '1D': '1d' };
-  const yfInterval = intervalMap[interval as string] || '5m';
-  
-  let period1: Date;
-  const now = Date.now();
-  switch(yfInterval) {
-    case '1m': period1 = new Date(now - 4 * 60 * 60 * 1000); break;
-    case '5m': period1 = new Date(now - 24 * 60 * 60 * 1000); break;
-    case '15m': period1 = new Date(now - 3 * 24 * 60 * 60 * 1000); break;
-    case '1h': period1 = new Date(now - 7 * 24 * 60 * 60 * 1000); break;
-    case '1d': period1 = new Date(now - 30 * 24 * 60 * 60 * 1000); break;
-    default: period1 = new Date(now - 24 * 60 * 60 * 1000);
-  }
 
   try {
+    // 1. Try active provider first
+    const activeProvider = marketSettings.providers.find(p => p.id === marketSettings.activeProviderId);
+    let candles = null;
+
+    if (activeProvider?.type === 'upstox') {
+      candles = await upstoxManager.getHistory(symbol, interval as string);
+    } else if (activeProvider?.type === 'dhan') {
+      candles = await dhanManager.getHistory(symbol, interval as string);
+    }
+
+    if (candles && candles.length > 0) {
+      return res.json(candles);
+    }
+
+    // 2. Fallback to Yahoo Finance
+    const yahooSymbol = SYMBOL_MAP[symbol] || symbol;
+    const intervalMap: Record<string, string> = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '1D': '1d' };
+    const yfInterval = intervalMap[interval as string] || '5m';
+    
+    let period1: Date;
+    const now = Date.now();
+    switch(yfInterval) {
+      case '1m': period1 = new Date(now - 4 * 60 * 60 * 1000); break;
+      case '5m': period1 = new Date(now - 24 * 60 * 60 * 1000); break;
+      case '15m': period1 = new Date(now - 3 * 24 * 60 * 60 * 1000); break;
+      case '1h': period1 = new Date(now - 7 * 24 * 60 * 60 * 1000); break;
+      case '1d': period1 = new Date(now - 30 * 24 * 60 * 60 * 1000); break;
+      default: period1 = new Date(now - 24 * 60 * 60 * 1000);
+    }
+
     const result = await yf.chart(yahooSymbol, { period1, interval: yfInterval as any });
     if (result && result.quotes && result.quotes.length > 0) {
-      res.json(result.quotes.map((q: any) => ({ time: q.date, open: q.open, high: q.high, low: q.low, close: q.close, volume: q.volume })).filter((c: any) => c.open != null));
-    } else { throw new Error("No quotes found"); }
+      return res.json(result.quotes.map((q: any) => ({ time: q.date, open: q.open, high: q.high, low: q.low, close: q.close, volume: q.volume })).filter((c: any) => c.open != null));
+    }
+    
+    throw new Error("No quotes found from provider");
   } catch (error) {
+    // 3. Last fallback: Simulation
+    const now = Date.now();
+    const intervalMap: Record<string, string> = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '1D': '1d' };
+    const yfInterval = intervalMap[interval as string] || '5m';
     const fallbackCandles = [];
     let lastPrice = marketData[symbol]?.price || 20000;
     const ms = { '1m': 60000, '5m': 300000, '15m': 900000, '1h': 3600000, '1d': 86400000 }[yfInterval] || 300000;
@@ -1170,10 +1495,7 @@ app.get("/api/market/history/:symbol", async (req, res) => {
 
 // Final API Handlers (Must be after all API routes)
 // Explicitly handle 404 for /api routes to avoid falling through to SPA fallback
-app.use("/api", (req, res, next) => {
-  if (req.path === '/health' || req.path === '/market/quotes' || req.path.startsWith('/market/')) {
-    return next();
-  }
+app.use("/api/*", (req, res) => {
   res.status(404).json({ error: "API route not found", path: req.originalUrl });
 });
 
@@ -1191,6 +1513,9 @@ const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   try {
+    // Ensure MongoDB is connected before starting
+    await connectDB();
+
     if (process.env.NODE_ENV !== "production") {
       const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
       // Ensure Vite doesn't handle /api requests

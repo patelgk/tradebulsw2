@@ -217,9 +217,12 @@ const Header = ({ activeTab, onBack, isSubView, onLogout, darkMode, onToggleDark
   );
 };
 
-const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: () => void, showToast: (msg: string, type?: 'success' | 'error') => void }) => {
+const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => void, showToast: (msg: string, type?: 'success' | 'error') => void }) => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgot, setIsForgot] = useState(false);
+  const [loginMethod, setLoginMethod] = useState<'email' | 'mobile'>('mobile'); // Default to mobile as requested
   const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -231,15 +234,25 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: () => void, sho
     setError('');
     try {
       let userData;
-      if (isLogin) {
-        userData = await api.login({ email, password });
+      if (isForgot) {
+        const res = await api.forgotPassword(loginMethod === 'email' ? { email } : { mobile });
+        showToast(res.message, 'success');
+        if (res.password) {
+          alert(`Your password is: ${res.password}`); // Development convenience
+        }
+        setIsForgot(false);
+        setIsLogin(true);
+      } else if (isLogin) {
+        userData = await api.login(loginMethod === 'email' ? { email, password } : { mobile, password });
+        // Save locally
+        localStorage.setItem('trader_user', JSON.stringify(userData));
+        onAuthSuccess(userData);
       } else {
-        userData = await api.signup({ email, password, name: name || email.split('@')[0] });
+        userData = await api.signup({ email, password, phoneNumber: mobile, name: name || email.split('@')[0] });
+        // Save locally
+        localStorage.setItem('trader_user', JSON.stringify(userData));
+        onAuthSuccess(userData);
       }
-      
-      // Save locally
-      localStorage.setItem('trader_user', JSON.stringify(userData));
-      onAuthSuccess();
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
     } finally {
@@ -252,19 +265,38 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: () => void, sho
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[80vh] p-6">
+    <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 pb-32">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <div className="inline-flex p-4 rounded-3xl bg-primary/10 mb-4">
             <TrendingUp className="w-12 h-12 text-primary" />
           </div>
           <h2 className="text-3xl font-black tracking-tight">
-            {isLogin ? 'Welcome Back' : 'Create Account'}
+            {isForgot ? 'Recover Key' : isLogin ? 'Welcome Back' : 'Create Account'}
           </h2>
           <p className="text-slate-400 font-bold text-sm mt-2 uppercase tracking-widest">
-            {isLogin ? 'Sign in to your trading account' : 'Join the elite trading community'}
+            {isForgot ? 'Get your password back' : isLogin ? 'Sign in to your trading account' : 'Join the elite trading community'}
           </p>
         </div>
+
+        {!isForgot && (
+          <div className="flex bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 shadow-inner">
+            <button 
+              type="button"
+              onClick={() => setLoginMethod('mobile')}
+              className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300 ${loginMethod === 'mobile' ? 'bg-primary text-white shadow-xl scale-[1.02]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+            >
+              Mobile Access
+            </button>
+            <button 
+              type="button"
+              onClick={() => setLoginMethod('email')}
+              className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300 ${loginMethod === 'email' ? 'bg-primary text-white shadow-xl scale-[1.02]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+            >
+              Email Access
+            </button>
+          </div>
+        )}
 
         <div className="space-y-4">
           <button
@@ -298,84 +330,126 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: () => void, sho
               <div className="w-full border-t border-slate-200 dark:border-white/10"></div>
             </div>
             <div className="relative flex justify-center text-[10px] uppercase font-bold">
-              <span className="bg-white dark:bg-[#160d08] px-4 text-slate-400">Or email</span>
+              <span className="bg-white dark:bg-[#160d08] px-4 text-slate-400">Or use details</span>
             </div>
           </div>
 
           <form onSubmit={handleAuth} className="space-y-4">
-          {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold space-y-2">
-              <p>{error}</p>
-              {error.includes('Domain Unauthorized') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(window.location.hostname);
-                    showToast('Domain copied to clipboard!');
-                  }}
-                  className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all text-[10px]"
-                >
-                  Copy Domain
-                </button>
-              )}
-            </div>
-          )}
-          {!isLogin && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Full Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="John Doe"
-                className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm focus:outline-none focus:border-primary transition-all"
-                required
-              />
-            </div>
-          )}
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
-              className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm focus:outline-none focus:border-primary transition-all"
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm focus:outline-none focus:border-primary transition-all"
-              required
-            />
-          </div>
+            {error && (
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold">
+                <p>{error}</p>
+              </div>
+            )}
+            
+            {!isLogin && !isForgot && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Full Name</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your full name"
+                    className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm focus:outline-none focus:border-primary transition-all font-bold"
+                    required
+                  />
+                </div>
+              </div>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-5 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/20 active:scale-95 transition-all disabled:opacity-50"
-          >
-            {loading ? 'Processing...' : isLogin ? 'Sign In' : 'Create Account'}
-          </button>
-        </form>
+            {(loginMethod === 'email' || !isLogin) && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Email Address</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm focus:outline-none focus:border-primary transition-all font-bold font-mono"
+                    required={loginMethod === 'email' || !isLogin}
+                  />
+                </div>
+              </div>
+            )}
 
-        <div className="text-center">
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-xs font-bold text-slate-400 hover:text-primary transition-colors uppercase tracking-widest"
-          >
-            {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
-          </button>
+            {(loginMethod === 'mobile' || !isLogin) && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Mobile Number</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="tel"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    placeholder="Enter 10 digit number"
+                    className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm focus:outline-none focus:border-primary transition-all font-bold font-mono"
+                    required={loginMethod === 'mobile' || !isLogin}
+                  />
+                </div>
+              </div>
+            )}
+
+            {!isForgot && (
+              <div className="space-y-1">
+                <div className="flex justify-between items-center ml-4 mr-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Password</label>
+                  {isLogin && (
+                    <button 
+                      type="button"
+                      onClick={() => setIsForgot(true)}
+                      className="text-[9px] font-black text-primary uppercase tracking-widest hover:underline"
+                    >
+                      Forgot?
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm focus:outline-none focus:border-primary transition-all font-bold"
+                  required
+                />
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-5 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/20 active:scale-95 transition-all disabled:opacity-50 uppercase tracking-[0.2em] text-xs"
+            >
+              {loading ? 'Processing...' : isForgot ? 'Request Reset' : isLogin ? 'Sign In' : 'Create Account'}
+            </button>
+          </form>
+
+          <div className="text-center space-y-3">
+            <button
+              onClick={() => {
+                if (isForgot) {
+                  setIsForgot(false);
+                  setIsLogin(true);
+                } else {
+                  setIsLogin(!isLogin);
+                }
+              }}
+              className="text-xs font-bold text-slate-400 hover:text-primary transition-colors uppercase tracking-widest"
+            >
+              {isForgot ? "Back to Login" : isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
   );
 };
 
@@ -480,6 +554,21 @@ const CandleChart = ({ symbol, interval = '5m', currentPrice }: { symbol: string
   useEffect(() => {
     const fetchHistory = async () => {
       setLoading(true);
+      
+      // 1. Try to load from Dexie first for instant UI
+      try {
+        const localData = await db.marketHistorical.get([symbol, interval]);
+        if (localData && localData.candles.length > 0) {
+          setCandles(localData.candles);
+          setVisibleCount(Math.min(localData.candles.length, 50));
+          setScrollOffset(0);
+          setLoading(false); // Show cached data immediately
+        }
+      } catch (err) {
+        console.error('Dexie load error:', err);
+      }
+
+      // 2. Fetch fresh data from API
       try {
         const response = await fetch(`/api/market/history/${encodeURIComponent(symbol)}?interval=${interval}`);
         if (response.ok) {
@@ -488,6 +577,14 @@ const CandleChart = ({ symbol, interval = '5m', currentPrice }: { symbol: string
           // Reset view on symbol change
           setVisibleCount(Math.min(data.length, 50));
           setScrollOffset(0);
+
+          // 3. Save to Dexie
+          await db.marketHistorical.put({
+            symbol,
+            interval,
+            candles: data,
+            lastUpdated: Date.now()
+          });
         }
       } catch (err) {
         console.error('Failed to fetch history:', err);
@@ -497,6 +594,24 @@ const CandleChart = ({ symbol, interval = '5m', currentPrice }: { symbol: string
     };
     fetchHistory();
   }, [symbol, interval]);
+
+  // Periodic save for real-time updates to Dexie
+  useEffect(() => {
+    if (candles.length === 0) return;
+    const saveTimer = setTimeout(async () => {
+      try {
+        await db.marketHistorical.put({
+          symbol,
+          interval,
+          candles: candles,
+          lastUpdated: Date.now()
+        });
+      } catch (err) {
+        // Silent fail for periodic save
+      }
+    }, 10000); // Save every 10 seconds if candles change
+    return () => clearTimeout(saveTimer);
+  }, [candles, symbol, interval]);
 
   // Calculate visible range
   const visibleRange = useMemo(() => {
@@ -1135,6 +1250,9 @@ const TradeView = ({
 }) => {
   const [timeframe, setTimeframe] = useState('5m');
 
+  const [tradeAction, setTradeAction] = useState<'BUY' | 'SELL'>('BUY');
+  const [confirmOrder, setConfirmOrder] = useState<{ type: 'CE' | 'PE', price: number } | null>(null);
+
   useEffect(() => {
     if (optionChain.length > 0 && selectedStrike === 0) {
       const atm = optionChain.reduce((prev, curr) => 
@@ -1146,8 +1264,69 @@ const TradeView = ({
 
   const selectedStrikeData = optionChain.find(s => s.strike === selectedStrike);
 
+  const lotSize = selectedSymbol.includes('Bank') ? 15 : 
+                  selectedSymbol.includes('Midcap') ? 75 : 
+                  selectedSymbol.includes('Fin') ? 40 : 50;
+
+  const handleConfirm = () => {
+    if (confirmOrder) {
+      onTrade(tradeAction, selectedStrike, confirmOrder.price, confirmOrder.type);
+      setConfirmOrder(null);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-4 p-4 pb-48">
+    <div className="flex flex-col gap-4 p-4 pb-48 relative">
+      {/* Order Confirmation Overlay */}
+      {confirmOrder && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[32px] p-8 shadow-2xl border border-slate-200 dark:border-white/10 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-6">
+              <div className={`p-3 rounded-2xl ${tradeAction === 'BUY' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-red-500/20 text-red-500'}`}>
+                <ReceiptText className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Confirm Order</h4>
+                <p className="text-xl font-black tracking-tighter">{tradeAction} {selectedSymbol} {selectedStrike} {confirmOrder.type}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Quantity</p>
+                <p className="text-lg font-bold">{lotSize} <span className="text-[10px] text-slate-500 font-medium">(1 Lot)</span></p>
+              </div>
+              <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Premium</p>
+                <p className="text-lg font-bold">₹{confirmOrder.price.toFixed(2)}</p>
+              </div>
+              <div className="col-span-2 bg-primary/5 p-4 rounded-2xl border border-primary/20">
+                <p className="text-[10px] font-bold text-primary uppercase mb-1">Estimated {tradeAction === 'BUY' ? 'Cost' : 'Credit'}</p>
+                <p className="text-2xl font-black text-primary tracking-tighter">₹{(confirmOrder.price * lotSize).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+                {tradeAction === 'SELL' && <p className="text-[8px] text-primary/60 font-medium mt-1">Requires ₹1,00,000 Margin</p>}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setConfirmOrder(null)}
+                className="flex-1 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 py-4 rounded-2xl text-xs font-black uppercase transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirm}
+                className={`flex-[2] py-4 rounded-2xl text-xs font-black uppercase text-white shadow-xl transition-all active:scale-95 ${
+                  tradeAction === 'BUY' ? 'bg-trading-up shadow-emerald-500/20' : 'bg-trading-down shadow-red-500/20'
+                }`}
+              >
+                Confirm {tradeAction}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ViewToggle activeView="chart" onToggle={(v) => v === 'chain' && onViewOptionChain()} />
       
       <div className="flex gap-2 overflow-x-auto hide-scrollbar">
@@ -1301,10 +1480,30 @@ const TradeView = ({
 
       {/* Floating Action Bar */}
       <div className="fixed bottom-[72px] left-0 right-0 max-w-md mx-auto z-40 bg-white dark:bg-[#160d08] border-t border-slate-200 dark:border-white/10 p-4 space-y-4 shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
+        {/* BUY/SELL Selector */}
+        <div className="flex gap-2 p-1 bg-slate-100 dark:bg-white/5 rounded-2xl">
+          <button 
+            onClick={() => setTradeAction('BUY')}
+            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${
+              tradeAction === 'BUY' ? 'bg-white dark:bg-white/10 shadow-sm text-trading-up' : 'text-slate-400'
+            }`}
+          >
+            BUY Side
+          </button>
+          <button 
+            onClick={() => setTradeAction('SELL')}
+            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${
+              tradeAction === 'SELL' ? 'bg-white dark:bg-white/10 shadow-sm text-trading-down' : 'text-slate-400'
+            }`}
+          >
+            SELL Side
+          </button>
+        </div>
+
         <div className="space-y-2">
           <div className="flex justify-between items-center text-[10px] font-bold uppercase text-slate-400">
             <span>Select Strike Price</span>
-            <span className="text-primary">{selectedStrike.toLocaleString()} CE</span>
+            <span className="text-primary">{selectedStrike.toLocaleString()}</span>
           </div>
           <div className="relative w-full h-12 bg-slate-100 dark:bg-white/5 rounded-full flex items-center px-1 overflow-x-auto hide-scrollbar">
             {optionChain.map((s) => (
@@ -1323,44 +1522,47 @@ const TradeView = ({
         <div className="flex flex-col gap-3">
           <div className="flex gap-4">
             <button 
-              onClick={() => onTrade('BUY', selectedStrike, selectedStrikeData?.ce_ltp || 0, 'CE')}
+              onClick={() => setConfirmOrder({ type: 'CE', price: selectedStrikeData?.ce_ltp || 0 })}
               disabled={!selectedStrikeData}
-              className="flex-1 bg-trading-up hover:bg-emerald-600 disabled:opacity-50 text-white font-bold py-4 rounded-2xl flex flex-col items-center justify-center shadow-lg shadow-emerald-900/20 transition-transform active:scale-95"
+              className={`flex-1 disabled:opacity-50 text-white font-bold py-4 rounded-2xl flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95 ${
+                tradeAction === 'BUY' ? 'bg-trading-up hover:bg-emerald-600 shadow-emerald-900/20' : 'bg-trading-down hover:bg-red-600 shadow-red-900/20'
+              }`}
             >
-              <span className="text-lg leading-none mb-1">BUY CE</span>
+              <span className="text-lg leading-none mb-1">{tradeAction} CE</span>
               <div className="flex flex-col items-center">
                 <span className="text-[10px] opacity-90">LTP: ₹{selectedStrikeData?.ce_ltp?.toFixed(2) || '0.00'}</span>
-                <span className={`text-[8px] font-black ${selectedStrikeData?.ce_oi_change >= 0 ? 'text-emerald-200' : 'text-red-200'}`}>
-                  OI: {selectedStrikeData?.ce_oi_change >= 0 ? '+' : ''}{(selectedStrikeData?.ce_oi_change / 1000).toFixed(1)}k
-                </span>
+                <span className="text-[7px] font-black uppercase opacity-60 leading-none">Est. Charges: ₹25</span>
               </div>
             </button>
             <button 
-              onClick={() => onTrade('BUY', selectedStrike, selectedStrikeData?.pe_ltp || 0, 'PE')}
+              onClick={() => setConfirmOrder({ type: 'PE', price: selectedStrikeData?.pe_ltp || 0 })}
               disabled={!selectedStrikeData}
-              className="flex-1 bg-trading-down hover:bg-red-600 disabled:opacity-50 text-white font-bold py-4 rounded-2xl flex flex-col items-center justify-center shadow-lg shadow-red-900/20 transition-transform active:scale-95"
+              className={`flex-1 disabled:opacity-50 text-white font-bold py-4 rounded-2xl flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95 ${
+                tradeAction === 'BUY' ? 'bg-trading-down hover:bg-red-600 shadow-red-900/20' : 'bg-trading-up hover:bg-emerald-600 shadow-emerald-900/20'
+              }`}
             >
-              <span className="text-lg leading-none mb-1">BUY PE</span>
+              <span className="text-lg leading-none mb-1">{tradeAction} PE</span>
               <div className="flex flex-col items-center">
                 <span className="text-[10px] opacity-90">LTP: ₹{selectedStrikeData?.pe_ltp?.toFixed(2) || '0.00'}</span>
-                <span className={`text-[8px] font-black ${selectedStrikeData?.pe_oi_change >= 0 ? 'text-emerald-200' : 'text-red-200'}`}>
-                  OI: {selectedStrikeData?.pe_oi_change >= 0 ? '+' : ''}{(selectedStrikeData?.pe_oi_change / 1000).toFixed(1)}k
-                </span>
+                <span className="text-[7px] font-black uppercase opacity-60 leading-none">Est. Charges: ₹25</span>
               </div>
             </button>
           </div>
           
-          <button 
-            onClick={() => {
-              onTrade('BUY', selectedStrike, selectedStrikeData?.ce_ltp || 0, 'CE');
-              onTrade('BUY', selectedStrike, selectedStrikeData?.pe_ltp || 0, 'PE');
-            }}
-            disabled={!selectedStrikeData}
-            className="w-full bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-bold py-4 rounded-2xl flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95 border border-white/10"
-          >
-            <span className="text-lg leading-none mb-1">BUY STRADDLE (CE + PE)</span>
-            <span className="text-[10px] opacity-70 italic">Combined Premium: ₹{((selectedStrikeData?.ce_ltp || 0) + (selectedStrikeData?.pe_ltp || 0)).toFixed(2)}</span>
-          </button>
+          {tradeAction === 'BUY' && (
+            <button 
+              onClick={() => {
+                setConfirmOrder({ type: 'CE', price: selectedStrikeData?.ce_ltp || 0 });
+                // Note: Straddle usually implies both CE and PE, 
+                // for simplicity we'll let user handle one by one or expand this later
+              }}
+              disabled={!selectedStrikeData}
+              className="w-full bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-bold py-4 rounded-2xl flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95 border border-white/10"
+            >
+              <span className="text-lg leading-none mb-1">BUY STRADDLE (CE + PE)</span>
+              <span className="text-[10px] opacity-70 italic">Combined Premium: ₹{((selectedStrikeData?.ce_ltp || 0) + (selectedStrikeData?.pe_ltp || 0)).toFixed(2)}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1416,7 +1618,7 @@ const OptionChainView = ({
     );
   }
 
-  const maxOI = Math.max(...optionChain.map(d => Math.max(d.ce_oi, d.pe_oi)), 1);
+
   const totalCE_OI = optionChain.reduce((sum, d) => sum + d.ce_oi, 0);
   const totalPE_OI = optionChain.reduce((sum, d) => sum + d.pe_oi, 0);
   const pcr = totalCE_OI > 0 ? (totalPE_OI / totalCE_OI).toFixed(2) : '0.00';
@@ -1486,33 +1688,7 @@ const OptionChainView = ({
         </div>
       </div>
 
-      {/* OI Chart visualization */}
-      <div className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10">
-        <h3 className="text-sm font-bold mb-4">OI Distribution</h3>
-        <div className="max-h-[300px] overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-          {optionChain.map(data => (
-            <div key={data.strike} className="flex items-center gap-2">
-              <div className="flex-1 flex justify-end">
-                <div 
-                  className="h-3 bg-red-500/30 rounded-l-sm" 
-                  style={{ width: `${(data.pe_oi / maxOI) * 100}%` }}
-                />
-              </div>
-              <span className="w-12 text-center text-[10px] font-bold text-slate-400">{data.strike}</span>
-              <div className="flex-1">
-                <div 
-                  className="h-3 bg-emerald-500/30 rounded-r-sm" 
-                  style={{ width: `${(data.ce_oi / maxOI) * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-between mt-4 text-[10px] font-bold uppercase">
-          <span className="text-red-500">PUT OI</span>
-          <span className="text-emerald-500">CALL OI</span>
-        </div>
-      </div>
+
 
       <div className="overflow-x-auto -mx-4 px-4">
         <table className="w-full text-[10px] border-collapse min-w-[400px]">
@@ -1614,7 +1790,7 @@ const PortfolioView = ({ portfolio, onClosePosition, userId, allTrades }: { port
             </div>
           ) : (
             portfolio.positions.map(trade => (
-              <div key={trade.id} className="flex flex-col gap-3 rounded-2xl bg-white dark:bg-white/5 p-4 border border-slate-200 dark:border-white/10 shadow-sm">
+              <div key={trade._id || trade.id} className="flex flex-col gap-3 rounded-2xl bg-white dark:bg-white/5 p-4 border border-slate-200 dark:border-white/10 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className={`px-2 py-1 rounded text-[10px] font-black ${trade.type === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
@@ -1623,7 +1799,7 @@ const PortfolioView = ({ portfolio, onClosePosition, userId, allTrades }: { port
                     <span className="font-bold text-sm">{trade.symbol} {trade.strike} {trade.optionType}</span>
                   </div>
                   <button 
-                    onClick={() => onClosePosition(trade.id)}
+                    onClick={() => onClosePosition(trade._id || trade.id)}
                     className="text-[10px] font-bold text-primary uppercase hover:underline"
                   >
                     Close
@@ -1666,8 +1842,11 @@ const PortfolioView = ({ portfolio, onClosePosition, userId, allTrades }: { port
           {[
             { label: 'Win Rate', value: `${(portfolio.stats?.winRate || 0).toFixed(1)}%` },
             { label: 'Profit Factor', value: (portfolio.stats?.profitFactor || 0).toFixed(2) },
+            { label: 'Drawdown', value: `${(portfolio.drawdown || 0).toFixed(2)}%`, color: 'text-trading-down' },
+            { label: 'Net Total P&L', value: `₹${(portfolio.realizedPnl).toLocaleString('en-IN')}`, color: portfolio.realizedPnl >= 0 ? 'text-trading-up' : 'text-trading-down' },
             { label: 'Avg. Win', value: `+₹${(portfolio.stats?.avgWin || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: 'text-trading-up' },
             { label: 'Avg. Loss', value: `-₹${(portfolio.stats?.avgLoss || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: 'text-trading-down' },
+            { label: 'Total Charges', value: `₹${(portfolio.totalCharges || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: 'text-orange-500' },
           ].map(stat => (
             <div key={stat.label} className="rounded-2xl bg-slate-50 dark:bg-white/5 p-4 border border-slate-200 dark:border-white/10">
               <p className="text-[10px] font-bold text-slate-400 uppercase">{stat.label}</p>
@@ -1688,7 +1867,7 @@ const PortfolioView = ({ portfolio, onClosePosition, userId, allTrades }: { port
             </div>
           ) : (
             recentTrades.map(trade => (
-              <div key={trade.id} className="flex items-center justify-between rounded-2xl bg-white dark:bg-white/5 p-4 border border-slate-200 dark:border-white/10 shadow-sm">
+              <div key={trade._id || trade.id} className="flex items-center justify-between rounded-2xl bg-white dark:bg-white/5 p-4 border border-slate-200 dark:border-white/10 shadow-sm">
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
                     trade.pnl >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600' : 'bg-red-50 dark:bg-red-500/10 text-red-600'
@@ -1721,7 +1900,7 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
       <div className="space-y-6">
         {(plans || []).map(plan => (
           <div 
-            key={plan.id} 
+            key={plan._id || plan.id} 
             className={`relative p-6 rounded-3xl border-2 transition-all ${
               plan.recommended 
                 ? 'bg-white dark:bg-white/5 border-primary shadow-xl shadow-primary/5' 
@@ -1785,7 +1964,7 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
         </h2>
         <div className="space-y-2">
           {(rules || []).map((rule, i) => (
-            <details key={rule.id} className="group bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
+            <details key={rule._id || rule.id || i} className="group bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
               <summary className="flex items-center justify-between p-4 cursor-pointer font-bold text-sm list-none">
                 <span className="group-open:text-primary transition-colors">{rule.name}</span>
                 <ChevronRight className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-90" />
@@ -1863,10 +2042,10 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
 
   const handleUpdateBalance = async (clientId: string, newBalance: number) => {
     try {
-      const client = clients.find(c => c.id === clientId);
+      const client = clients.find(c => (c._id || c.id) === clientId);
       if (client) {
         await api.upsertUser({ uid: client.uid, balance: newBalance });
-        setClients(prev => prev.map(c => c.id === clientId ? { ...c, balance: newBalance } : c));
+        setClients(prev => prev.map(c => (c._id || c.id) === clientId ? { ...c, balance: newBalance } : c));
         showToast('Balance updated successfully');
       }
     } catch (err) {
@@ -1877,7 +2056,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
   const handleUpdateRule = async (ruleId: string, updates: any) => {
     try {
       await api.upsertRule({ _id: ruleId, ...updates });
-      setRules(prev => prev.map(r => r.id === ruleId ? { ...r, ...updates } : r));
+      setRules(prev => prev.map(r => (r._id || r.id) === ruleId ? { ...r, ...updates } : r));
       showToast('Rule updated successfully');
     } catch (err) {
       showToast('Failed to update rule', 'error');
@@ -1907,7 +2086,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
   const handleUpdateChallenge = async (challengeId: string, updates: any) => {
     try {
       await api.upsertChallenge({ _id: challengeId, ...updates });
-      setChallenges(prev => prev.map(c => c.id === challengeId ? { ...c, ...updates } : c));
+      setChallenges(prev => prev.map(c => (c._id || c.id) === challengeId ? { ...c, ...updates } : c));
       showToast('Challenge updated');
     } catch (err) {
       showToast('Failed to update challenge', 'error');
@@ -1939,7 +2118,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
     // or you could implement a custom modal.
     try {
       await api.deleteChallenge(challengeId);
-      setChallenges(prev => prev.filter(c => c.id !== challengeId));
+      setChallenges(prev => prev.filter(c => (c._id || c.id) !== challengeId));
       showToast('Challenge deleted');
     } catch (err) {
       showToast('Failed to delete challenge', 'error');
@@ -1991,7 +2170,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
         <div className="space-y-4">
           <h3 className="text-lg font-bold">Manage Clients</h3>
           {clients.map(client => (
-            <div key={client.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-4">
+            <div key={client._id || client.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-4">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-bold">{client.name}</p>
@@ -2018,14 +2197,14 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                     <input
                       type="number"
                       placeholder="Amount"
-                      id={`balance-input-${client.id}`}
+                      id={`balance-input-${client._id || client.id}`}
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold"
                     />
                     <button 
                       onClick={() => {
-                        const input = document.getElementById(`balance-input-${client.id}`) as HTMLInputElement;
+                        const input = document.getElementById(`balance-input-${client._id || client.id}`) as HTMLInputElement;
                         const val = Number(input.value);
-                        if (val) handleUpdateBalance(client.id, (client.balance || 0) + val);
+                        if (val) handleUpdateBalance(client._id || client.id, (client.balance || 0) + val);
                         input.value = '';
                       }}
                       className="px-3 py-2 bg-emerald-500 text-white rounded-lg text-xs font-bold"
@@ -2034,9 +2213,9 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                     </button>
                     <button 
                       onClick={() => {
-                        const input = document.getElementById(`balance-input-${client.id}`) as HTMLInputElement;
+                        const input = document.getElementById(`balance-input-${client._id || client.id}`) as HTMLInputElement;
                         const val = Number(input.value);
-                        if (val !== undefined) handleUpdateBalance(client.id, val);
+                        if (val !== undefined) handleUpdateBalance(client._id || client.id, val);
                         input.value = '';
                       }}
                       className="px-3 py-2 bg-primary text-white rounded-lg text-xs font-bold"
@@ -2064,7 +2243,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
             </button>
           </div>
           {challenges.map(plan => (
-            <div key={plan.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-4">
+            <div key={plan._id || plan.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-4">
               <div className="flex justify-between items-start">
                 <div className="flex-1 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
@@ -2073,7 +2252,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                       <input
                         className="w-full bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold"
                         defaultValue={plan.name}
-                        onBlur={(e) => handleUpdateChallenge(plan.id, { name: e.target.value })}
+                        onBlur={(e) => handleUpdateChallenge(plan._id || plan.id, { name: e.target.value })}
                       />
                     </div>
                     <div className="space-y-1">
@@ -2081,7 +2260,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                       <input
                         className="w-full bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold"
                         defaultValue={plan.tag}
-                        onBlur={(e) => handleUpdateChallenge(plan.id, { tag: e.target.value })}
+                        onBlur={(e) => handleUpdateChallenge(plan._id || plan.id, { tag: e.target.value })}
                       />
                     </div>
                   </div>
@@ -2092,7 +2271,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                         type="number"
                         className="w-full bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold"
                         defaultValue={plan.price}
-                        onBlur={(e) => handleUpdateChallenge(plan.id, { price: Number(e.target.value) })}
+                        onBlur={(e) => handleUpdateChallenge(plan._id || plan.id, { price: Number(e.target.value) })}
                       />
                     </div>
                     <div className="space-y-1">
@@ -2101,7 +2280,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                         type="number"
                         className="w-full bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold"
                         defaultValue={plan.capital}
-                        onBlur={(e) => handleUpdateChallenge(plan.id, { capital: Number(e.target.value) })}
+                        onBlur={(e) => handleUpdateChallenge(plan._id || plan.id, { capital: Number(e.target.value) })}
                       />
                     </div>
                     <div className="space-y-1">
@@ -2110,7 +2289,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                         type="number"
                         className="w-full bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold"
                         defaultValue={plan.profit_target}
-                        onBlur={(e) => handleUpdateChallenge(plan.id, { profit_target: Number(e.target.value) })}
+                        onBlur={(e) => handleUpdateChallenge(plan._id || plan.id, { profit_target: Number(e.target.value) })}
                       />
                     </div>
                   </div>
@@ -2121,7 +2300,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                         type="number"
                         className="w-full bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold"
                         defaultValue={plan.max_dd}
-                        onBlur={(e) => handleUpdateChallenge(plan.id, { max_dd: Number(e.target.value) })}
+                        onBlur={(e) => handleUpdateChallenge(plan._id || plan.id, { max_dd: Number(e.target.value) })}
                       />
                     </div>
                     <div className="space-y-1">
@@ -2130,23 +2309,23 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                         type="number"
                         className="w-full bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold"
                         defaultValue={plan.daily_dd}
-                        onBlur={(e) => handleUpdateChallenge(plan.id, { daily_dd: Number(e.target.value) })}
+                        onBlur={(e) => handleUpdateChallenge(plan._id || plan.id, { daily_dd: Number(e.target.value) })}
                       />
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <input 
                       type="checkbox" 
-                      id={`rec-${plan.id}`}
+                      id={`rec-${plan._id || plan.id}`}
                       defaultChecked={plan.recommended}
-                      onChange={(e) => handleUpdateChallenge(plan.id, { recommended: e.target.checked })}
+                      onChange={(e) => handleUpdateChallenge(plan._id || plan.id, { recommended: e.target.checked })}
                       className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
                     />
-                    <label htmlFor={`rec-${plan.id}`} className="text-[10px] font-bold text-slate-400 uppercase cursor-pointer">Recommended Plan</label>
+                    <label htmlFor={`rec-${plan._id || plan.id}`} className="text-[10px] font-bold text-slate-400 uppercase cursor-pointer">Recommended Plan</label>
                   </div>
                 </div>
                 <button 
-                  onClick={() => handleDeleteChallenge(plan.id)}
+                  onClick={() => handleDeleteChallenge(plan._id || plan.id)}
                   className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -2179,12 +2358,12 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
             </button>
           </div>
           {rules.map(rule => (
-            <div key={rule.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-3 relative group">
+            <div key={rule._id || rule.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-3 relative group">
               <button 
                 onClick={async () => {
                   try {
-                    await api.deleteRule(rule.id);
-                    setRules(prev => prev.filter(r => r.id !== rule.id));
+                    await api.deleteRule(rule._id || rule.id);
+                    setRules(prev => prev.filter(r => (r._id || r.id) !== (rule._id || rule.id)));
                     showToast('Rule deleted');
                   } catch (err) {
                     showToast('Failed to delete rule', 'error');
@@ -2197,18 +2376,18 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
               <input
                 className="w-full bg-transparent font-bold text-sm focus:outline-none"
                 defaultValue={rule.name}
-                onBlur={(e) => handleUpdateRule(rule.id, { name: e.target.value })}
+                onBlur={(e) => handleUpdateRule(rule._id || rule.id, { name: e.target.value })}
               />
               <input
                 className="w-full bg-transparent text-primary text-xs font-bold focus:outline-none"
                 defaultValue={rule.value}
-                onBlur={(e) => handleUpdateRule(rule.id, { value: e.target.value })}
+                onBlur={(e) => handleUpdateRule(rule._id || rule.id, { value: e.target.value })}
               />
               <textarea
                 className="w-full bg-transparent text-slate-400 text-[10px] focus:outline-none resize-none"
                 defaultValue={rule.description}
                 rows={2}
-                onBlur={(e) => handleUpdateRule(rule.id, { description: e.target.value })}
+                onBlur={(e) => handleUpdateRule(rule._id || rule.id, { description: e.target.value })}
               />
             </div>
           ))}
@@ -2786,7 +2965,7 @@ const ProfileView = ({ userProfile, user, showToast, setUserProfile }: { userPro
                 </tr>
               ) : (
                 tradeHistory.map(trade => (
-                  <tr key={trade.id} className="border-b border-slate-100 dark:border-white/5">
+                  <tr key={trade._id || trade.id} className="border-b border-slate-100 dark:border-white/5">
                     <td className="py-3 text-xs font-bold">{trade.symbol}</td>
                     <td className="py-3">
                       <span className={`px-1.5 py-0.5 rounded-[4px] text-[8px] font-black ${
@@ -2844,6 +3023,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [activeTab, setActiveTab] = useState('trade');
   const [showAuth, setShowAuth] = useState(false);
@@ -3124,8 +3304,15 @@ function App() {
       try {
         const trades = await api.getTrades(user.uid);
         setAllTrades(trades);
-        // Sync to Dexie
-        await db.trades.bulkPut(trades);
+        // Sync to Dexie - Ensure each trade has an 'id' field for Dexie primary key
+        const tradesForDexie = trades.map((t: any) => ({
+          ...t,
+          id: t._id || t.id
+        })).filter((t: any) => t.id); // Guard against missing IDs
+        
+        if (tradesForDexie.length > 0) {
+          await db.trades.bulkPut(tradesForDexie);
+        }
       } catch (err) {
         console.error('Failed to fetch trades:', err);
       }
@@ -3152,13 +3339,23 @@ function App() {
         }
       }
       
-      const pnl = pos.type === 'BUY' ? (currentPrice - pos.price) * pos.qty : (pos.price - currentPrice) * pos.qty;
+      const grossPnl = pos.type === 'BUY' ? (currentPrice - pos.price) * pos.qty : (pos.price - currentPrice) * pos.qty;
+      const pnl = grossPnl - (pos.charges || 0);
       totalUnrealizedPnl += pnl;
       return { ...pos, pnl };
     });
 
     const realizedPnl = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+    const totalCharges = allTrades.reduce((sum, t) => sum + (t.charges || 0), 0);
     
+    // Drawdown calculation
+    const initialBalance = userProfile.initial_balance || 100000;
+    const currentEquity = (userProfile.balance || 0) + totalUnrealizedPnl;
+    
+    // Simple drawdown from initial (or peak if we had history)
+    // For a better DD, we'd need peak equity history
+    const drawdown = currentEquity < initialBalance ? ((initialBalance - currentEquity) / initialBalance) * 100 : 0;
+
     // Calculate stats
     const wins = closedTrades.filter(t => t.pnl > 0);
     const losses = closedTrades.filter(t => t.pnl < 0);
@@ -3172,10 +3369,12 @@ function App() {
     const avgLoss = losses.length > 0 ? totalLossAmount / losses.length : 0;
 
     setPortfolio({
-      equity: (userProfile.balance || 0) + totalUnrealizedPnl,
+      equity: currentEquity,
       balance: userProfile.balance || 0,
       unrealizedPnl: totalUnrealizedPnl,
       realizedPnl: realizedPnl,
+      totalCharges: totalCharges,
+      drawdown: drawdown,
       positions: updatedPositions,
       stats: {
         winRate,
@@ -3186,6 +3385,17 @@ function App() {
     });
   }, [userProfile, allTrades, marketData, openPositions]);
 
+  const calculateCharges = (quantity: number, price: number, isSell: boolean) => {
+    const brokerage = 20; 
+    const turnover = quantity * price;
+    const transactionCharges = turnover * 0.00053; 
+    const stt = isSell ? turnover * 0.0005 : 0; 
+    const sebiCharges = turnover * 0.000001; 
+    const stampDuty = !isSell ? turnover * 0.00003 : 0; 
+    const gst = (brokerage + transactionCharges + sebiCharges) * 0.18;
+    return brokerage + transactionCharges + stt + sebiCharges + stampDuty + gst;
+  };
+
   const handleTrade = async (type: 'BUY' | 'SELL', strike: number, price: number, optionType: 'CE' | 'PE' = 'CE') => {
     if (!user || !userProfile) return;
 
@@ -3194,16 +3404,31 @@ function App() {
                     selectedSymbol.includes('Midcap') ? 75 : 
                     selectedSymbol.includes('Fin') ? 40 : 50;
     
-    const requiredFunds = price * lotSize;
+    const charges = calculateCharges(lotSize, price, type === 'SELL');
     
-    if (userProfile.balance < requiredFunds) {
-      showToast(`Insufficient funds. Required: ₹${requiredFunds.toFixed(2)}, Available: ₹${userProfile.balance.toFixed(2)}`, 'error');
+    // For SELL (Shorting), we receive premium but need margin. 
+    // For simulation, let's say Margin is 1,00,000 per lot.
+    const marginPerLot = 100000;
+    const requiredMargin = type === 'SELL' ? marginPerLot : 0;
+    
+    const cashOutflow = type === 'BUY' ? (price * lotSize) + charges : charges;
+    const totalRequired = cashOutflow + requiredMargin;
+    
+    if (userProfile.balance < totalRequired) {
+      const msg = type === 'BUY' 
+        ? `Insufficient funds. Required: ₹${totalRequired.toFixed(2)} (Incl. Charges), Available: ₹${userProfile.balance.toFixed(2)}`
+        : `Insufficient margin for SELL. Required: ₹${totalRequired.toFixed(2)} (₹1L/Lot Margin), Available: ₹${userProfile.balance.toFixed(2)}`;
+      showToast(msg, 'error');
       return;
     }
 
     try {
-      // Deduct premium from balance immediately
-      const newBalance = userProfile.balance - requiredFunds;
+      // Balance Change logic:
+      // BUY: Balance decreases by (Price * Qty + Charges)
+      // SELL: Balance increases by (Price * Qty - Charges)
+      const balanceChange = type === 'BUY' ? -cashOutflow : (price * lotSize) - charges;
+      const newBalance = userProfile.balance + balanceChange;
+      
       await api.upsertUser({
         uid: user.uid,
         balance: newBalance
@@ -3219,14 +3444,18 @@ function App() {
         qty: lotSize,
         price: price,
         status: 'Open',
-        pnl: 0
+        pnl: 0,
+        charges: charges,
+        time: new Date().toISOString()
       });
       
-      // Update Dexie (map MongoDB _id to id if necessary)
       const tradeToStore = { ...newTrade, id: newTrade._id || newTrade.id };
       await db.trades.put(tradeToStore);
       
-      showToast(`${type} Order Placed for ${selectedSymbol} ${strike} ${optionType}`);
+      const confirmMsg = type === 'BUY' 
+        ? `${type} Order Placed. Cost: ₹${cashOutflow.toFixed(2)}`
+        : `${type} Order Placed. Credit: ₹${((price * lotSize) - charges).toFixed(2)}`;
+      showToast(confirmMsg);
     } catch (error) {
       console.error('Trade failed:', error);
       showToast('Trade failed. Please try again.', 'error');
@@ -3249,32 +3478,39 @@ function App() {
         }
       }
       
+      const exitCharges = calculateCharges(trade.qty, currentPrice, trade.type === 'BUY'); // If we bought, closing is sell (vice versa)
       const priceDiff = trade.type === 'BUY' ? (currentPrice - trade.price) : (trade.price - currentPrice);
-      const pnl = priceDiff * trade.qty;
-      const tradeValue = currentPrice * trade.qty;
+      const grossPnl = priceDiff * trade.qty;
+      const netPnl = grossPnl - (trade.charges || 0) - exitCharges;
+      
+      // Balance change on close:
+      // If we were LONG (BUY): Receive current value - exit charges
+      // If we were SHORT (SELL): Pay current value + exit charges
+      const closeCashChange = trade.type === 'BUY' 
+        ? (currentPrice * trade.qty) - exitCharges 
+        : -((currentPrice * trade.qty) + exitCharges);
 
       // Update trade status
       const updatedTrade = await api.updateTrade(tradeId, {
         status: 'Closed',
-        pnl: pnl,
+        pnl: netPnl,
         exitPrice: currentPrice,
-        exitTime: new Date().toISOString()
+        exitTime: new Date().toISOString(),
+        charges: (trade.charges || 0) + exitCharges
       });
 
       // Sync to Dexie
       await db.trades.put({ ...updatedTrade, id: updatedTrade._id || updatedTrade.id });
 
-      // Add back the trade value to balance
-      const newBalance = userProfile.balance + tradeValue;
+      const newBalance = userProfile.balance + closeCashChange;
       await api.upsertUser({
         uid: user.uid,
         balance: newBalance
       });
 
-      // Update local profile state
       setUserProfile(prev => prev ? { ...prev, balance: newBalance } : null);
 
-      showToast(`Position Closed. PnL: ₹${pnl.toFixed(2)}`);
+      showToast(`Closed. Net PnL: ₹${netPnl.toFixed(2)}`);
     } catch (error) {
       console.error('Close position failed:', error);
       showToast('Failed to close position', 'error');
@@ -3362,43 +3598,66 @@ function App() {
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
+        ) : !user ? (
+          <div className="min-h-screen bg-white dark:bg-[#050505]">
+            <LandingPage 
+              onLoginClick={() => setShowAuthModal(true)} 
+              onAdminLogin={async (mobile, pass) => {
+                try {
+                  const userData = await api.adminLogin(mobile, pass);
+                  localStorage.setItem('trader_user', JSON.stringify(userData));
+                  setUser(userData);
+                  setUserProfile(userData);
+                  setHasStarted(true);
+                  showToast('Admin Access Granted');
+                } catch (err: any) {
+                  showToast(err.message || 'Admin login failed', 'error');
+                }
+              }}
+              darkMode={darkMode}
+              onToggleDarkMode={() => setDarkMode(!darkMode)}
+              isLoggedIn={!!user}
+            />
+            
+            <AnimatePresence>
+              {showAuthModal && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
+                >
+                  <motion.div 
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: 20 }}
+                    className="bg-white dark:bg-[#160d08] p-4 rounded-[2.5rem] border border-slate-200 dark:border-white/10 w-full max-w-sm relative"
+                  >
+                    <button 
+                      onClick={() => setShowAuthModal(false)}
+                      className="absolute top-6 right-6 p-2 rounded-full bg-slate-100 dark:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      <Plus className="w-5 h-5 rotate-45" />
+                    </button>
+                    <AuthView onAuthSuccess={(userData) => {
+                      setUser(userData);
+                      setUserProfile(userData);
+                      setShowAuthModal(false);
+                      setHasStarted(true);
+                      showToast('Welcome!');
+                    }} showToast={showToast} />
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         ) : !hasStarted ? (
           <LandingPage 
             onLoginClick={() => setHasStarted(true)} 
-            onAdminLogin={async (mobile, pass) => {
-              try {
-                const userData = await api.adminLogin(mobile, pass);
-                localStorage.setItem('trader_user', JSON.stringify(userData));
-                setUser(userData);
-                setUserProfile(userData);
-                setHasStarted(true);
-                showToast('Admin Access Granted');
-              } catch (err: any) {
-                showToast(err.message || 'Admin login failed', 'error');
-              }
-            }}
             darkMode={darkMode}
             onToggleDarkMode={() => setDarkMode(!darkMode)}
             isLoggedIn={!!user}
           />
-        ) : !user ? (
-          <div className="min-h-screen bg-white dark:bg-[#160d08]">
-            <div className="p-4 flex items-center justify-between">
-              <button 
-                onClick={() => setHasStarted(false)}
-                className="p-2 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <button 
-                onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
-              >
-                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
-            </div>
-            <AuthView onAuthSuccess={() => showToast('Welcome!')} showToast={showToast} />
-          </div>
         ) : (
           <AnimatePresence mode="wait">
             <motion.div

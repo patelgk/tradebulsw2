@@ -7,6 +7,7 @@ export interface NavItem {
 }
 
 export interface Trade {
+  _id?: string;
   id: string;
   symbol: string;
   type: 'BUY' | 'SELL';
@@ -15,11 +16,15 @@ export interface Trade {
   price: number;
   qty: number;
   time: string;
+  exitTime?: string;
+  exitPrice?: number;
   status: 'Open' | 'Closed';
   pnl: number;
+  charges?: number;
 }
 
 export interface Plan {
+  _id?: string;
   id: string;
   name: string;
   price: number;
@@ -32,6 +37,7 @@ export interface Plan {
 }
 
 export interface Rule {
+  _id?: string;
   id: string;
   name: string;
   value: string;
@@ -53,6 +59,8 @@ export interface Portfolio {
   balance: number;
   unrealizedPnl: number;
   realizedPnl: number;
+  totalCharges: number;
+  drawdown: number;
   positions: Trade[];
   stats?: {
     winRate: number;
@@ -60,9 +68,11 @@ export interface Portfolio {
     avgWin: number;
     avgLoss: number;
   };
+  equityCurve?: { time: string, value: number }[];
 }
 
 export interface Account {
+  _id?: string;
   id: string;
   balance: number;
   initialBalance: number;
@@ -70,6 +80,7 @@ export interface Account {
 }
 
 export interface Client {
+  _id?: string;
   uid: string;
   id: string;
   name: string;
