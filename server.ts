@@ -254,6 +254,8 @@ class DhanServerManager {
 class UpstoxServerManager {
   private ws: WebSocket | null = null;
   private isConnected = false;
+  private connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'failed' = 'disconnected';
+  private reconnectAttempts = 0;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private protoRoot: protobuf.Root | null = null;
   private FeedResponse: any = null;
@@ -278,6 +280,10 @@ class UpstoxServerManager {
 
   isConnectedStatus() {
     return this.isConnected;
+  }
+
+  getConnectionStatus() {
+    return this.connectionStatus;
   }
 
   async getHistory(symbol: string, interval: string) {
@@ -357,7 +363,6 @@ class UpstoxServerManager {
       if (res.data && res.data.data) {
         const chain = res.data.data;
         const newInstruments: string[] = [];
-        const currentChain = marketData[displayName].optionChain || [];
         
         // Clean up old instruments for this display name
         for (const key in this.optionInstruments) {
@@ -386,7 +391,7 @@ class UpstoxServerManager {
             strike,
             ce_ltp: item.call_options?.market_data?.ltp || 0,
             ce_oi: item.call_options?.market_data?.oi || 0,
-            ce_oi_change: 0, // Upstox doesn't provide this in chain API directly usually
+            ce_oi_change: 0, 
             pe_ltp: item.put_options?.market_data?.ltp || 0,
             pe_oi: item.put_options?.market_data?.oi || 0,
             pe_oi_change: 0,
@@ -406,14 +411,24 @@ class UpstoxServerManager {
     }
   }
 
+  private getReconnectDelay() {
+    const baseDelay = 2000; // 2 seconds
+    const maxDelay = 60000; // 60 seconds
+    const delay = Math.min(baseDelay * Math.pow(2, this.reconnectAttempts), maxDelay);
+    const jitter = Math.random() * 2000; // Add up to 2 seconds of jitter
+    return delay + jitter;
+  }
+
   async connect() {
     try {
+      this.connectionStatus = 'connecting';
       const marketDoc = await Setting.findOne({ id: 'market' });
       const activeProvider = marketDoc?.data?.providers?.find((p: any) => p.id === 'upstox');
       const accessToken = activeProvider?.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
 
       if (!accessToken) {
         console.log('[Upstox Server] No access token found, skipping connection.');
+        this.connectionStatus = 'failed';
         return;
       }
 
@@ -433,7 +448,8 @@ class UpstoxServerManager {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/json'
-        }
+        },
+        timeout: 10000
       });
 
       const wsUrl = authRes.data.data.authorizedRedirectUri;
@@ -444,7 +460,15 @@ class UpstoxServerManager {
       this.ws.on('open', () => {
         console.log('✅ [Upstox Server] WebSocket Connected!');
         this.isConnected = true;
+        this.connectionStatus = 'connected';
+        this.reconnectAttempts = 0;
         this.subscribe();
+        
+        // Notify all clients about status change
+        io.emit("marketStatus", {
+           provider: 'upstox',
+           status: 'connected'
+        });
       });
 
       this.ws.on('message', (data: Buffer) => {
@@ -453,18 +477,45 @@ class UpstoxServerManager {
 
       this.ws.on('error', (error) => {
         console.error("❌ [Upstox Server] WebSocket Error:", error.message);
+        this.connectionStatus = 'failed';
       });
 
       this.ws.on('close', () => {
-        console.log("🔴 [Upstox Server] WebSocket Closed. Reconnecting in 10s...");
         this.isConnected = false;
+        this.connectionStatus = 'disconnected';
+        const delay = this.getReconnectDelay();
+        console.log(`🔴 [Upstox Server] WebSocket Closed. Reconnecting in ${Math.round(delay/1000)}s... (Attempt: ${this.reconnectAttempts + 1})`);
+        
         if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-        this.reconnectTimeout = setTimeout(() => this.connect(), 10000);
+        this.reconnectTimeout = setTimeout(() => {
+          this.reconnectAttempts++;
+          this.connect();
+        }, delay);
+
+        io.emit("marketStatus", {
+           provider: 'upstox',
+           status: 'disconnected',
+           nextRetryIn: delay
+        });
       });
     } catch (err: any) {
+      this.connectionStatus = 'failed';
+      const delay = this.getReconnectDelay();
       console.error('[Upstox Server] Connection failed:', err.response?.data || err.message);
+      console.log(`[Upstox Server] Retrying in ${Math.round(delay/1000)}s...`);
+      
       if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = setTimeout(() => this.connect(), 30000); 
+      this.reconnectTimeout = setTimeout(() => {
+        this.reconnectAttempts++;
+        this.connect();
+      }, delay);
+
+      io.emit("marketStatus", {
+         provider: 'upstox',
+         status: 'failed',
+         error: err.message,
+         nextRetryIn: delay
+      });
     }
   }
 
@@ -1023,7 +1074,8 @@ app.get("/api/market/status", (req, res) => {
       connected: dhanManager.isConnectedStatus()
     },
     upstox: {
-      connected: upstoxManager.isConnectedStatus()
+      connected: upstoxManager.isConnectedStatus(),
+      status: upstoxManager.getConnectionStatus()
     }
   });
 });

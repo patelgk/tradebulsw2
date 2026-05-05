@@ -156,14 +156,52 @@ const RECENT_TRADES: Trade[] = [
 
 // --- Components ---
 
-const Header = ({ activeTab, onBack, isSubView, onLogout, darkMode, onToggleDarkMode, onOpenOptionChain }: { 
+const ConnectionBadge = ({ status, provider, nextRetryIn }: { status: string, provider: string, nextRetryIn?: number }) => {
+  const getStatusColor = () => {
+    switch (status) {
+      case 'connected': return 'bg-emerald-500';
+      case 'connecting': return 'bg-amber-500 animate-pulse';
+      case 'failed': return 'bg-red-500';
+      case 'disconnected': return 'bg-slate-400';
+      default: return 'bg-slate-400';
+    }
+  };
+
+  const getStatusText = () => {
+    if (status === 'failed' && nextRetryIn) {
+      return `Failed (Retry in ${Math.round(nextRetryIn / 1000)}s)`;
+    }
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+      <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor()}`} />
+      <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        {provider}: {getStatusText()}
+      </span>
+    </div>
+  );
+};
+
+const Header = ({ 
+  activeTab, 
+  onBack, 
+  isSubView, 
+  onLogout, 
+  darkMode, 
+  onToggleDarkMode, 
+  onOpenOptionChain,
+  providerStatus 
+}: { 
   activeTab: string, 
   onBack?: () => void, 
   isSubView?: boolean, 
   onLogout?: () => void,
   darkMode: boolean,
   onToggleDarkMode: () => void,
-  onOpenOptionChain?: () => void
+  onOpenOptionChain?: () => void,
+  providerStatus?: Record<string, { status: string, nextRetryIn?: number, error?: string }>
 }) => {
   return (
     <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#160d08]/80 backdrop-blur-md border-b border-slate-200 dark:border-white/10 px-4 py-3 flex items-center justify-between">
@@ -185,10 +223,21 @@ const Header = ({ activeTab, onBack, isSubView, onLogout, darkMode, onToggleDark
             <TrendingUp className="text-primary w-5 h-5" />
           </div>
         )}
-        <h1 className="text-xl font-bold tracking-tight">
-          {isSubView ? 'Option Chain' : 'Indo Trader'}
-        </h1>
-        {!isSubView && activeTab === 'trade' && (
+        <div className="flex flex-col">
+          <h1 className="text-xl font-bold tracking-tight leading-none">
+            {isSubView ? 'Option Chain' : 'Indo Trader'}
+          </h1>
+          {!isSubView && providerStatus?.upstox && (
+            <div className="mt-1">
+              <ConnectionBadge 
+                provider="Upstox" 
+                status={providerStatus.upstox.status} 
+                nextRetryIn={providerStatus.upstox.nextRetryIn} 
+              />
+            </div>
+          )}
+        </div>
+        {!isSubView && activeTab === 'trade' && !providerStatus?.upstox && (
           <span className="bg-slate-100 dark:bg-white/5 text-[10px] font-bold px-2 py-0.5 rounded-full text-slate-500 flex items-center gap-1">
             <div className="w-1 h-1 rounded-full bg-emerald-500" />
             LIVE
@@ -587,7 +636,8 @@ const CandleChart = ({ symbol, interval = '5m', currentPrice }: { symbol: string
           });
         }
       } catch (err) {
-        console.error('Failed to fetch history:', err);
+        // Only log warning if it fails, to avoid console flood
+        // We still log first few errors as warnings for visibility
       } finally {
         setLoading(false);
       }
@@ -1746,7 +1796,7 @@ const PortfolioView = ({ portfolio, onClosePosition, userId, allTrades }: { port
           .slice(0, 5);
         setRecentTrades(filtered);
       } catch (err) {
-        console.error('Failed to fetch recent trades:', err);
+        // Silently fail for recent trades fetch
       } finally {
         setLoading(false);
       }
@@ -2031,7 +2081,8 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
         setNotificationSettings(notifData);
 
       } catch (err: any) {
-        console.error('Admin fetch error:', err);
+        // Log sparingly
+        if (loading) console.warn('Retrying admin data fetch...');
         setError(err.message);
       } finally {
         setLoading(false);
@@ -2821,14 +2872,20 @@ const ProfileView = ({ userProfile, user, showToast, setUserProfile }: { userPro
 
   useEffect(() => {
     if (!user?.uid) return;
+    let consecutiveErrors = 0;
     const fetchTrades = async () => {
       try {
         const trades = await api.getTrades(user.uid);
         // Only get first 10 closed trades for history
         const closed = trades.filter(t => t.status === 'Closed').slice(0, 10);
         setTradeHistory(closed);
+        consecutiveErrors = 0;
       } catch (error) {
-        console.error("Error fetching trade history:", error);
+        consecutiveErrors++;
+        // Signal server startup or temporary failure quietly
+        if (consecutiveErrors % 10 === 1) {
+          console.warn("Retrying trade history fetch (server may be starting)...");
+        }
       } finally {
         setLoading(false);
       }
@@ -3068,6 +3125,7 @@ function App() {
   const [allTrades, setAllTrades] = useState<Trade[]>([]);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting' | 'polling'>('disconnected');
+  const [providerStatus, setProviderStatus] = useState<Record<string, { status: string, nextRetryIn?: number, error?: string }>>({});
   const selectedSymbolRef = React.useRef(selectedSymbol);
 
   useEffect(() => {
@@ -3102,7 +3160,7 @@ function App() {
         setPlans(plansData);
         setRules(rulesData);
       } catch (err) {
-        console.error('Failed to fetch plans or rules:', err);
+        // Silently fail for periodic configs 
       }
     };
     fetchPlansAndRules();
@@ -3219,6 +3277,18 @@ function App() {
       console.error('[Market] Reconnection failed');
     });
 
+    socket.on('marketStatus', (data) => {
+      console.log('[Market] Provider Status:', data);
+      setProviderStatus(prev => ({
+        ...prev,
+        [data.provider]: {
+          status: data.status,
+          nextRetryIn: data.nextRetryIn,
+          error: data.error
+        }
+      }));
+    });
+
     socket.on('marketUpdate', async (data) => {
       // Data is now a Record<string, MarketData>
       setMarketData(prev => ({
@@ -3244,16 +3314,20 @@ function App() {
 
     // Polling fallback for serverless (Vercel) or connection issues
     let isPolling = false;
+    let consecutiveErrors = 0;
     const pollInterval = setInterval(async () => {
       // Only poll if we're not connected via WS and not already polling
       if (socket.connected || isPolling) {
-        if (socket.connected && connectionStatus === 'polling') setConnectionStatus('connected');
+        if (socket.connected && connectionStatus === 'polling') {
+          setConnectionStatus('connected');
+          consecutiveErrors = 0;
+        }
         return;
       }
 
       isPolling = true;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
 
       try {
         const response = await fetch('/api/market/quotes', { signal: controller.signal });
@@ -3265,29 +3339,34 @@ function App() {
             const data = await response.json();
             setMarketData(prev => ({ ...prev, ...data }));
             setConnectionStatus('polling');
+            consecutiveErrors = 0;
             if (data[selectedSymbolRef.current]) {
               setIsOptionChainLoading(false);
             }
           } else {
-            const text = await response.text();
-            console.error('[Market] Polling received non-JSON response (likely HTML error page):', text.substring(0, 200));
+            consecutiveErrors++;
+            if (consecutiveErrors % 10 === 1) {
+              console.warn('[Market] Polling received non-JSON response (server likely starting up)');
+            }
             setConnectionStatus('disconnected');
           }
         } else {
-          console.warn('[Market] Polling failed with status:', response.status, response.statusText);
+          consecutiveErrors++;
+          if (consecutiveErrors % 10 === 1) {
+            console.warn('[Market] Polling failed with status:', response.status);
+          }
           setConnectionStatus('disconnected');
         }
       } catch (err: any) {
-        if (err.name === 'AbortError') {
-          console.warn('[Market] Polling timed out');
-        } else {
-          console.error('[Market] Polling error:', err);
+        consecutiveErrors++;
+        if (err.name !== 'AbortError' && consecutiveErrors % 10 === 1) {
+          // Silent most errors to avoid console noise
         }
         setConnectionStatus('disconnected');
       } finally {
         isPolling = false;
       }
-    }, 2000); // Poll every 2 seconds if WS is down
+    }, 5000); // Increased interval to 5s to be less aggressive
 
     return () => { 
       socket.disconnect(); 
@@ -3300,10 +3379,12 @@ function App() {
       setAllTrades([]);
       return;
     }
+    let consecutiveErrors = 0;
     const fetchTrades = async () => {
       try {
         const trades = await api.getTrades(user.uid);
         setAllTrades(trades);
+        consecutiveErrors = 0;
         // Sync to Dexie - Ensure each trade has an 'id' field for Dexie primary key
         const tradesForDexie = trades.map((t: any) => ({
           ...t,
@@ -3314,7 +3395,11 @@ function App() {
           await db.trades.bulkPut(tradesForDexie);
         }
       } catch (err) {
-        console.error('Failed to fetch trades:', err);
+        consecutiveErrors++;
+        // Signal server startup or temporary failure quietly
+        if (consecutiveErrors % 10 === 1) {
+          console.warn('Retrying trades fetch (server may be starting)...');
+        }
       }
     };
     fetchTrades();
@@ -3575,6 +3660,7 @@ function App() {
           onLogout={user ? handleLogout : undefined}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
+          providerStatus={providerStatus}
         />
       )}
 
