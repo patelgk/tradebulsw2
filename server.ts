@@ -148,7 +148,7 @@ const SYMBOL_MAP: Record<string, string> = {
   'Nifty 50': 'NSE_INDEX|Nifty 50',
   'Bank Nifty': 'NSE_INDEX|Nifty Bank',
   'Fin Nifty': 'NSE_INDEX|FINNIFTY',
-  'Midcap Nifty': 'NSE_INDEX|NIFTY MIDCAP 100'
+  'Midcap Nifty': 'NSE_INDEX|MIDCPNIFTY'
 };
 
 const DHAN_SYMBOLS: Record<string, string> = {
@@ -439,10 +439,20 @@ class UpstoxServerManager {
         return [];
       }
 
-      console.log(`[Upstox Server] Fetching expiries for ${displayName} (${upstoxKey})...`);
+      if (!accessToken) {
+        console.warn(`[Upstox Server] No access token provided for fetchExpiries(${displayName})`);
+        return [];
+      }
+
       const url = `https://api.upstox.com/v2/market-quote/expiry-dates?instrument_key=${encodeURIComponent(upstoxKey)}`;
+      console.log(`[Upstox Server] Fetching expiries for ${displayName} (${upstoxKey})`);
+      console.log(`[Upstox Server] API Headers: { Authorization: 'Bearer ${accessToken.substring(0, 10)}...', Accept: 'application/json' }`);
+      
       const res = await axios.get(url, {
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
+        headers: { 
+          'Authorization': `Bearer ${accessToken}`, 
+          'Accept': 'application/json' 
+        }
       });
 
       if (res.data?.data) {
@@ -451,13 +461,25 @@ class UpstoxServerManager {
       }
       return [];
     } catch (err: any) {
-      console.error(`[Upstox Server] Failed to fetch expiries for ${displayName}:`, err.response?.data || err.message);
+      const errorData = err.response?.data;
+      console.error(`[Upstox Server] Failed to fetch expiries for ${displayName}:`, JSON.stringify(errorData || err.message));
+      
+      // If unauthorized, log special warning
+      if (err.response?.status === 401 || errorData?.errors?.[0]?.errorCode === 'UDAPI100012') {
+        console.error(`[Upstox Server] Token invalidated for ${displayName}. User needs to re-authenticate via OAuth.`);
+      }
+      
       return [];
     }
   }
 
   async fetchOptionChain(displayName: string, accessToken: string) {
     try {
+      if (!accessToken) {
+        console.warn(`[Upstox Server] No access token provided for fetchOptionChain(${displayName})`);
+        return;
+      }
+
       const now = Date.now();
       if (this.lastOptionFetch[displayName] && now - this.lastOptionFetch[displayName] < 300000) {
         return; 
@@ -495,16 +517,18 @@ class UpstoxServerManager {
         return;
       }
 
-      console.log(`[Upstox Server] Fetching option chain for ${displayName} with expiry ${expiry}...`);
-      
       const url = `https://api.upstox.com/v2/market-quote/option-chain?instrument_key=${encodeURIComponent(upstoxKey)}&expiry_date=${expiry}`;
+      console.log(`[Upstox Server] Fetching option chain for ${displayName} (${upstoxKey}) with expiry ${expiry}`);
       
       const res = await axios.get(url, {
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
+        headers: { 
+          'Authorization': `Bearer ${accessToken}`, 
+          'Accept': 'application/json' 
+        }
       });
 
-      if (res.data && res.data.status === 'error') {
-        console.error(`[Upstox Server] API Error for ${displayName} option chain:`, res.data);
+      if (res.data?.status === 'error') {
+        console.error(`[Upstox Server] API Error fetching option chain for ${displayName}:`, JSON.stringify(res.data));
         return;
       }
 
@@ -556,7 +580,12 @@ class UpstoxServerManager {
         this.subscribeToSymbols();
       }
     } catch (err: any) {
-      console.error(`[Upstox Server] Failed to fetch option chain for ${displayName}:`, err.response?.data || err.message);
+      const errorData = err.response?.data;
+      console.error(`[Upstox Server] Failed to fetch option chain for ${displayName}:`, JSON.stringify(errorData || err.message));
+      
+      if (err.response?.status === 401 || errorData?.errors?.[0]?.errorCode === 'UDAPI100012') {
+        console.error(`[Upstox Server] Token invalidated for ${displayName} during option chain fetch.`);
+      }
     }
   }
 
@@ -571,10 +600,16 @@ class UpstoxServerManager {
   async connect() {
     try {
       this.connectionStatus = 'connecting';
-      const marketDoc = await Setting.findOne({ id: 'market' });
-      const activeProvider = marketDoc?.data?.providers?.find((p: any) => p.id === 'upstox');
-      const accessToken = activeProvider?.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
-
+      
+      // Prioritize environment token if provided, fallback to DB
+      let accessToken = process.env.UPSTOX_ACCESS_TOKEN;
+      
+      if (!accessToken) {
+        const marketDoc = await Setting.findOne({ id: 'market' });
+        const activeProvider = marketDoc?.data?.providers?.find((p: any) => p.id === 'upstox');
+        accessToken = activeProvider?.accessToken;
+      }
+      
       if (!accessToken) {
         console.log('[Upstox Server] No access token found in DB or process.env. Skipping connection.');
         this.connectionStatus = 'failed';
@@ -1401,24 +1436,15 @@ app.post("/api/transactions", async (req, res) => {
 // --- Upstox OAuth Routes ---
 app.get("/api/market/upstox/auth-url", (req, res) => {
   const apiKey = process.env.UPSTOX_API_KEY;
-  let redirectUri = process.env.UPSTOX_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/market/upstox/callback`;
+  // Use exact redirect URI provided in requirements
+  const redirectUri = "https://tradebulsw2.onrender.com/api/market/upstox/callback";
   
-  // Robustness check: If redirectUri is a full Auth URL (common user mistake), extract the actual redirect_uri param
-  if (redirectUri.includes('redirect_uri=')) {
-    try {
-      const url = new URL(redirectUri);
-      const extracted = url.searchParams.get('redirect_uri');
-      if (extracted) redirectUri = extracted;
-    } catch (e) {
-      // Fallback
-    }
-  }
-
   if (!apiKey) {
     return res.status(400).json({ error: "UPSTOX_API_KEY not configured" });
   }
 
   const authUrl = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${apiKey}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  console.log(`[Upstox OAuth] Generated Auth URL with Redirect URI: ${redirectUri}`);
   res.json({ url: authUrl });
 });
 
@@ -1426,30 +1452,27 @@ app.get("/api/market/upstox/callback", async (req, res) => {
   const { code } = req.query;
   const apiKey = process.env.UPSTOX_API_KEY;
   const apiSecret = process.env.UPSTOX_API_SECRET;
-  let redirectUri = process.env.UPSTOX_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/market/upstox/callback`;
-
-  // Robustness check: Same as above
-  if (redirectUri.includes('redirect_uri=')) {
-    try {
-      const url = new URL(redirectUri);
-      const extracted = url.searchParams.get('redirect_uri');
-      if (extracted) redirectUri = extracted;
-    } catch (e) {}
-  }
+  const redirectUri = "https://tradebulsw2.onrender.com/api/market/upstox/callback";
 
   if (!code || !apiKey || !apiSecret) {
-    return res.status(400).send("Missing code or Upstox configuration");
+    console.error("[Upstox OAuth] Missing configuration:", { hasCode: !!code, hasApiKey: !!apiKey, hasApiSecret: !!apiSecret });
+    return res.status(400).send("Missing code or Upstox configuration in environment");
   }
 
   try {
+    console.log(`[Upstox OAuth] Exchanging code for token... Code: ${String(code).substring(0, 5)}***`);
+    console.log(`[Upstox OAuth] Using redirect_uri: ${redirectUri}`);
+    
+    const tokenParams = new URLSearchParams({
+      code: code as string,
+      client_id: apiKey!,
+      client_secret: apiSecret!,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code'
+    });
+
     const response = await axios.post('https://api.upstox.com/v2/login/authorization/token', 
-      new URLSearchParams({
-        code: code as string,
-        client_id: apiKey,
-        client_secret: apiSecret,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code'
-      }).toString(),
+      tokenParams.toString(),
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -1459,47 +1482,73 @@ app.get("/api/market/upstox/callback", async (req, res) => {
     );
 
     const { access_token } = response.data;
+    console.log(`[Upstox OAuth] Token received successfully. Length: ${access_token?.length}`);
     
-    // Update settings in MongoDB
+    // Update settings in MongoDB - More robust handling
+    console.log("[Upstox OAuth] Updating MongoDB settings...");
+    const marketDoc = await Setting.findOne({ id: 'market' });
+    let marketDataObj = marketDoc?.data || { activeProviderId: 'upstox', providers: [] };
+    
+    if (!marketDataObj.providers) marketDataObj.providers = [];
+    
+    let upstoxProvider = marketDataObj.providers.find((p: any) => p.id === 'upstox');
+    if (upstoxProvider) {
+      upstoxProvider.accessToken = access_token;
+      upstoxProvider.apiKey = apiKey;
+      upstoxProvider.apiSecret = apiSecret;
+      console.log("[Upstox OAuth] Updated existing provider record.");
+    } else {
+      marketDataObj.providers.push({
+        id: 'upstox',
+        name: 'Upstox',
+        type: 'upstox',
+        accessToken: access_token,
+        apiKey: apiKey,
+        apiSecret: apiSecret
+      });
+      console.log("[Upstox OAuth] Created new provider record.");
+    }
+    marketDataObj.activeProviderId = 'upstox';
+    
     await Setting.findOneAndUpdate(
       { id: 'market' },
-      { 
-        $set: { 
-          'data.activeProviderId': 'upstox',
-          'data.providers.$[elem].accessToken': access_token 
-        } 
-      },
-      { 
-        arrayFilters: [{ 'elem.id': 'upstox' }],
-        new: true 
-      }
+      { $set: { data: marketDataObj } },
+      { upsert: true, new: true }
     );
 
-    // Explicitly trigger connection since we have a new token
-    upstoxManager.connect();
+    // Stop and re-connect Upstox manager to use the new token
+    upstoxManager.stop();
+    setTimeout(() => {
+       console.log("[Upstox OAuth] Triggering automatic connection with new token...");
+       upstoxManager.connect();
+    }, 1500);
 
     res.setHeader('Content-Type', 'text/html');
     res.send(`
       <html>
         <head><title>Upstox Auth Success</title></head>
-        <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5;">
-          <div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center;">
-            <h1 style="color: #2e7d32;">Authentication Successful!</h1>
-            <p>Upstox has been connected. You can close this window now.</p>
-            <button onclick="window.close()" style="background: #1976d2; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px;">Close Window</button>
+        <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0f172a; color: white;">
+          <div style="background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
+            <h1 style="color: #10b981; margin-top: 0;">Authentication Successful!</h1>
+            <p style="color: #94a3b8;">Upstox API has been authorized and the session is being initialized.</p>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 1.5rem 0;">This window will close automatically.</p>
+            <button onclick="window.close()" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; cursor: pointer; font-weight: bold; transition: background 0.2s;">Close Now</button>
           </div>
           <script>
             if (window.opener) {
               window.opener.postMessage({ type: 'UPSTOX_AUTH_SUCCESS' }, '*');
-              setTimeout(() => window.close(), 2000);
             }
+            setTimeout(() => window.close(), 3000);
           </script>
         </body>
       </html>
     `);
   } catch (error: any) {
-    console.error('[Upstox Auth] Error:', error.response?.data || error.message);
-    res.status(500).send("Authentication failed: " + (error.response?.data?.errors?.[0]?.message || error.message));
+    const errorData = error.response?.data;
+    const errorMsg = errorData?.errors?.[0]?.message || errorData?.message || error.message;
+    console.error('[Upstox OAuth] Token Exchange failed:', JSON.stringify(errorData || error.message));
+    res.status(500).send("Authentication failed: " + errorMsg);
   }
 });
 
