@@ -5,7 +5,6 @@ import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import YahooFinance from 'yahoo-finance2';
 import axios from 'axios';
 import fs from 'fs';
 import * as dotenv from 'dotenv';
@@ -21,9 +20,6 @@ dotenv.config();
 
 // Connect to MongoDB
 // Removed from top-level to await inside startServer
-
-// Fix Yahoo Finance initialization
-const yf = new YahooFinance();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,18 +41,114 @@ const io = new Server(httpServer, {
   },
 });
 
-const marketData: Record<string, { price: number, change: number, optionChain: any[], timestamp: string, expiry: string, isMarketOpen?: boolean, dataSource?: string }> = {
-  'Nifty 50': { price: 22453.80, change: 102.45, optionChain: [], timestamp: '--:--:--', expiry: '2026-03-26', isMarketOpen: false, dataSource: 'Live' },
-  'Bank Nifty': { price: 47500.00, change: 250.00, optionChain: [], timestamp: '--:--:--', expiry: '2026-03-26', isMarketOpen: false, dataSource: 'Live' },
-  'Fin Nifty': { price: 21000.00, change: 50.00, optionChain: [], timestamp: '--:--:--', expiry: '2026-03-26', isMarketOpen: false, dataSource: 'Live' },
-  'Midcap Nifty': { price: 10500.00, change: 30.00, optionChain: [], timestamp: '--:--:--', expiry: '2026-03-26', isMarketOpen: false, dataSource: 'Live' },
+// --- Helper Functions ---
+const isMarketOpen = () => {
+  const now = new Date();
+  // Convert to IST (UTC + 5:30)
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istTime = new Date(now.getTime() + istOffset);
+  
+  const day = istTime.getUTCDay(); // 0: Sun, 1: Mon, ..., 6: Sat
+  const hours = istTime.getUTCHours();
+  const minutes = istTime.getUTCMinutes();
+  const timeInMinutes = hours * 60 + minutes;
+
+  // Market open: Mon-Fri, 09:15 to 15:30 IST
+  const isOpenDay = day >= 1 && day <= 5;
+  const isOpenTime = timeInMinutes >= (9 * 60 + 15) && timeInMinutes <= (15 * 60 + 30);
+
+  return isOpenDay && isOpenTime;
 };
 
+const getNextExpiry = (symbol: string) => {
+  const today = new Date();
+  const day = today.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
+  
+  // Default expiry days for Indian Indices
+  // Nifty 50: Thursday (4)
+  // Bank Nifty: Wednesday (3)
+  // Fin Nifty: Tuesday (2)
+  // Midcap Nifty: Monday (1)
+  const expiryDays: Record<string, number> = {
+    'Nifty 50': 4,
+    'Bank Nifty': 3,
+    'Fin Nifty': 2,
+    'Midcap Nifty': 1
+  };
+
+  const targetDay = expiryDays[symbol] || 4;
+  let diff = (targetDay - day + 7) % 7;
+  
+  // If today is the expiry day, we might want today's expiry or next week's
+  // For simplicity, if it's before 3:30 PM, we use today, else next week
+  const now = new Date();
+  const isAfterMarket = now.getHours() > 15 || (now.getHours() === 15 && now.getMinutes() > 30);
+  
+  if (diff === 0 && isAfterMarket) {
+    diff = 7;
+  }
+
+  const nextExpiry = new Date(today);
+  nextExpiry.setDate(today.getDate() + diff);
+  return nextExpiry.toISOString().split('T')[0];
+};
+
+const generateOptionChain = (spotPrice: number, strikeStep: number = 50, symbol: string = 'Nifty 50') => {
+  const strikes = [];
+  const roundedSpot = Math.round(spotPrice / strikeStep) * strikeStep;
+  
+  // Black-Scholes-like simplified pricing
+  const volatility = 0.15; // 15% annual vol
+  const daysToExpiry = 4; // Assuming 4 days to expiry
+  const t = daysToExpiry / 365;
+  
+  // Realistic OI base based on symbol
+  const oiBase = symbol.includes('Bank') ? 100000 : (symbol.includes('Midcap') ? 50000 : 200000);
+  
+  for (let i = -10; i <= 10; i++) {
+    const strike = roundedSpot + (i * strikeStep);
+    
+    // Simplified Intrinsic + Extrinsic value
+    const intrinsic_ce = Math.max(0, spotPrice - strike);
+    const intrinsic_pe = Math.max(0, strike - spotPrice);
+    
+    // Extrinsic value using a simple Gaussian-like curve centered at ATM
+    const distance = Math.abs(strike - spotPrice);
+    const extrinsic = spotPrice * volatility * Math.sqrt(t) * Math.exp(-Math.pow(distance / (spotPrice * volatility * Math.sqrt(t) * 2), 2));
+    
+    const ce_ltp = intrinsic_ce + extrinsic + (Math.random() - 0.5) * 2;
+    const pe_ltp = intrinsic_pe + extrinsic + (Math.random() - 0.5) * 2;
+    
+    strikes.push({
+      strike,
+      ce_oi: Math.floor(Math.random() * oiBase) + (oiBase / 2),
+      ce_oi_change: Math.floor((Math.random() - 0.2) * (oiBase / 10)),
+      ce_ltp: Number(Math.max(0.05, ce_ltp).toFixed(2)),
+      pe_ltp: Number(Math.max(0.05, pe_ltp).toFixed(2)),
+      pe_oi_change: Math.floor((Math.random() - 0.2) * (oiBase / 10)),
+      pe_oi: Math.floor(Math.random() * oiBase) + (oiBase / 2),
+    });
+  }
+  return strikes;
+};
+
+const marketData: Record<string, { price: number, change: number, optionChain: any[], timestamp: string, expiry: string, isMarketOpen?: boolean, dataSource?: string }> = {
+  'Nifty 50': { price: 22453.80, change: 102.45, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
+  'Bank Nifty': { price: 47500.00, change: 250.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
+  'Fin Nifty': { price: 21000.00, change: 50.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
+  'Midcap Nifty': { price: 10500.00, change: 30.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
+};
+
+// Update expiries immediately
+Object.keys(marketData).forEach(symbol => {
+  marketData[symbol].expiry = getNextExpiry(symbol);
+});
+
 const SYMBOL_MAP: Record<string, string> = {
-  'Nifty 50': '^NSEI',
-  'Bank Nifty': '^NSEBANK',
-  'Fin Nifty': 'NIFTY_FIN_SERVICE.NS',
-  'Midcap Nifty': '^NSEMDCP50',
+  'Nifty 50': 'NSE_INDEX|Nifty 50',
+  'Bank Nifty': 'NSE_INDEX|Nifty Bank',
+  'Fin Nifty': 'NSE_INDEX|FINNIFTY',
+  'Midcap Nifty': 'NSE_INDEX|Nifty Midcap 100'
 };
 
 const DHAN_SYMBOLS: Record<string, string> = {
@@ -262,6 +354,7 @@ class UpstoxServerManager {
   private optionInstruments: Record<string, { symbol: string, strike: number, optionType: 'CE' | 'PE' }> = {};
   private activeSymbolKeys: string[] = [];
   private lastOptionFetch: Record<string, number> = {};
+  private availableExpiries: Record<string, string[]> = {};
 
   constructor() {
     this.initProto();
@@ -335,11 +428,39 @@ class UpstoxServerManager {
     }
   }
 
+  async fetchExpiries(displayName: string, accessToken: string) {
+    try {
+      const upstoxKey = {
+        'Nifty 50': 'NSE_INDEX|Nifty 50',
+        'Bank Nifty': 'NSE_INDEX|Nifty Bank',
+        'Fin Nifty': 'NSE_INDEX|FINNIFTY',
+        'Midcap Nifty': 'NSE_INDEX|Nifty Midcap 100'
+      }[displayName];
+
+      if (!upstoxKey) return [];
+
+      console.log(`[Upstox Server] Fetching expiries for ${displayName}...`);
+      const url = `https://api.upstox.com/v2/market-quote/expiry-dates?instrument_key=${encodeURIComponent(upstoxKey)}`;
+      const res = await axios.get(url, {
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
+      });
+
+      if (res.data?.data) {
+        this.availableExpiries[displayName] = res.data.data;
+        return res.data.data;
+      }
+      return [];
+    } catch (err) {
+      console.error(`[Upstox Server] Failed to fetch expiries for ${displayName}`);
+      return [];
+    }
+  }
+
   async fetchOptionChain(displayName: string, accessToken: string) {
     try {
       const now = Date.now();
       if (this.lastOptionFetch[displayName] && now - this.lastOptionFetch[displayName] < 300000) {
-        return; // Only refresh every 5 mins
+        return; 
       }
 
       const upstoxKey = {
@@ -351,9 +472,23 @@ class UpstoxServerManager {
 
       if (!upstoxKey) return;
 
-      console.log(`[Upstox Server] Fetching option chain for ${displayName}...`);
+      // Ensure we have available expiries
+      if (!this.availableExpiries[displayName] || this.availableExpiries[displayName].length === 0) {
+        await this.fetchExpiries(displayName, accessToken);
+      }
+
+      let expiry = marketData[displayName].expiry;
+      const expiries = this.availableExpiries[displayName] || [];
       
-      const expiry = marketData[displayName].expiry;
+      // If our calculated expiry isn't in Upstox list, use their first one
+      if (expiries.length > 0 && !expiries.includes(expiry)) {
+        console.log(`[Upstox Server] Expiry ${expiry} not found for ${displayName}. Using available: ${expiries[0]}`);
+        expiry = expiries[0];
+        marketData[displayName].expiry = expiry;
+      }
+
+      console.log(`[Upstox Server] Fetching option chain for ${displayName} with expiry ${expiry}...`);
+      
       const url = `https://api.upstox.com/v2/market-quote/option-chain?instrument_key=${encodeURIComponent(upstoxKey)}&expiry_date=${expiry}`;
       
       const res = await axios.get(url, {
@@ -362,6 +497,7 @@ class UpstoxServerManager {
 
       if (res.data && res.data.data) {
         const chain = res.data.data;
+        console.log(`[Upstox Server] Received ${chain.length} strikes for ${displayName}`);
         const newInstruments: string[] = [];
         
         // Clean up old instruments for this display name
@@ -499,9 +635,14 @@ class UpstoxServerManager {
         });
       });
     } catch (err: any) {
+      this.isConnected = false;
       this.connectionStatus = 'failed';
       const delay = this.getReconnectDelay();
-      console.error('[Upstox Server] Connection failed:', err.response?.data || err.message);
+      const errorData = err.response?.data;
+      const errorMessage = errorData?.errors?.[0]?.message || errorData?.message || err.message;
+      const errorCode = errorData?.errorCode || err.response?.status;
+      
+      console.error(`[Upstox Server] Connection failed: ${errorMessage} (Code: ${errorCode})`, errorData || '');
       console.log(`[Upstox Server] Retrying in ${Math.round(delay/1000)}s...`);
       
       if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
@@ -513,7 +654,8 @@ class UpstoxServerManager {
       io.emit("marketStatus", {
          provider: 'upstox',
          status: 'failed',
-         error: err.message,
+         error: errorMessage,
+         errorCode: errorCode,
          nextRetryIn: delay
       });
     }
@@ -642,185 +784,14 @@ let lastOptionChainFetchTime = 0;
 let isFetching = false;
 let connectedClients = 0;
 
-const isMarketOpen = () => {
-  const now = new Date();
-  // Convert to IST (UTC + 5:30)
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istTime = new Date(now.getTime() + istOffset);
-  
-  const day = istTime.getUTCDay(); // 0: Sun, 1: Mon, ..., 6: Sat
-  const hours = istTime.getUTCHours();
-  const minutes = istTime.getUTCMinutes();
-  const timeInMinutes = hours * 60 + minutes;
-
-  // Market open: Mon-Fri, 09:15 to 15:30 IST
-  const isOpenDay = day >= 1 && day <= 5;
-  const isOpenTime = timeInMinutes >= (9 * 60 + 15) && timeInMinutes <= (15 * 60 + 30);
-
-  return isOpenDay && isOpenTime;
-};
-
-const getNextExpiry = (symbol: string) => {
-  const today = new Date();
-  const day = today.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
-  
-  // Default expiry days for Indian Indices
-  // Nifty 50: Thursday (4)
-  // Bank Nifty: Wednesday (3)
-  // Fin Nifty: Tuesday (2)
-  // Midcap Nifty: Monday (1)
-  const expiryDays: Record<string, number> = {
-    'Nifty 50': 4,
-    'Bank Nifty': 3,
-    'Fin Nifty': 2,
-    'Midcap Nifty': 1
-  };
-
-  const targetDay = expiryDays[symbol] || 4;
-  let diff = (targetDay - day + 7) % 7;
-  
-  // If today is the expiry day, we might want today's expiry or next week's
-  // For simplicity, if it's before 3:30 PM, we use today, else next week
-  const now = new Date();
-  const isAfterMarket = now.getHours() > 15 || (now.getHours() === 15 && now.getMinutes() > 30);
-  
-  if (diff === 0 && isAfterMarket) {
-    diff = 7;
-  }
-
-  const nextExpiry = new Date(today);
-  nextExpiry.setDate(today.getDate() + diff);
-  return nextExpiry.toISOString().split('T')[0];
-};
-
-const generateOptionChain = (spotPrice: number, strikeStep: number = 50, symbol: string = 'Nifty 50') => {
-  const strikes = [];
-  const roundedSpot = Math.round(spotPrice / strikeStep) * strikeStep;
-  
-  // Black-Scholes-like simplified pricing
-  const volatility = 0.15; // 15% annual vol
-  const daysToExpiry = 4; // Assuming 4 days to expiry
-  const t = daysToExpiry / 365;
-  
-  // Realistic OI base based on symbol
-  const oiBase = symbol.includes('Bank') ? 100000 : (symbol.includes('Midcap') ? 50000 : 200000);
-  
-  for (let i = -10; i <= 10; i++) {
-    const strike = roundedSpot + (i * strikeStep);
-    
-    // Simplified Intrinsic + Extrinsic value
-    const intrinsic_ce = Math.max(0, spotPrice - strike);
-    const intrinsic_pe = Math.max(0, strike - spotPrice);
-    
-    // Extrinsic value using a simple Gaussian-like curve centered at ATM
-    const distance = Math.abs(strike - spotPrice);
-    const extrinsic = spotPrice * volatility * Math.sqrt(t) * Math.exp(-Math.pow(distance / (spotPrice * volatility * Math.sqrt(t) * 2), 2));
-    
-    const ce_ltp = intrinsic_ce + extrinsic + (Math.random() - 0.5) * 2;
-    const pe_ltp = intrinsic_pe + extrinsic + (Math.random() - 0.5) * 2;
-    
-    strikes.push({
-      strike,
-      ce_oi: Math.floor(Math.random() * oiBase) + (oiBase / 2),
-      ce_oi_change: Math.floor((Math.random() - 0.2) * (oiBase / 10)),
-      ce_ltp: Number(Math.max(0.05, ce_ltp).toFixed(2)),
-      pe_ltp: Number(Math.max(0.05, pe_ltp).toFixed(2)),
-      pe_oi_change: Math.floor((Math.random() - 0.2) * (oiBase / 10)),
-      pe_oi: Math.floor(Math.random() * oiBase) + (oiBase / 2),
-    });
-  }
-  return strikes;
-};
 
 // --- NSE Session Management ---
 let nseCookies = '';
-let lastCookieFetch = 0;
-
-const getNSECookies = async (retries = 3) => {
-  const now = Date.now();
-  if (nseCookies && now - lastCookieFetch < 600000) return nseCookies;
-
-  const userAgents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-  ];
-
-  const headers = {
-    'User-Agent': userAgents[Math.floor(Math.random() * userAgents.length)],
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'Cache-Control': 'max-age=0',
-  };
-
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await axios.get('https://www.nseindia.com', { headers, timeout: 10000 });
-      const cookies = response.headers['set-cookie'];
-      if (cookies) {
-        nseCookies = cookies.map(c => c.split(';')[0]).join('; ');
-        lastCookieFetch = now;
-        return nseCookies;
-      }
-    } catch (err) {
-      if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, 3000 * (i + 1)));
-    }
-  }
-  return nseCookies;
-};
-
-const fetchNSEOptionChain = async (symbol: string) => {
-  const nseSymbol = symbol === 'Nifty 50' ? 'NIFTY' : 
-                    symbol === 'Bank Nifty' ? 'BANKNIFTY' : 
-                    symbol === 'Fin Nifty' ? 'FINNIFTY' : 
-                    symbol === 'Midcap Nifty' ? 'MIDCPNIFTY' : 'NIFTY';
-  
-  const cookies = await getNSECookies();
-  if (!cookies) return null;
-  
-  try {
-    const response = await axios.get(`https://www.nseindia.com/api/option-chain-indices?symbol=${nseSymbol}`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Cookie': cookies,
-        'Referer': 'https://www.nseindia.com/option-chain',
-      },
-      timeout: 10000
-    });
-
-    if (response.data && response.data.records && response.data.filtered && Array.isArray(response.data.filtered.data)) {
-      const data = response.data;
-      const price = data.records.underlyingValue || 0;
-      const expiry = data.records.expiryDates ? data.records.expiryDates[0] : '';
-      const optionChain = data.filtered.data.map((item: any) => ({
-        strike: item.strikePrice || 0,
-        ce_ltp: item.CE?.lastPrice || 0,
-        ce_oi: item.CE?.openInterest || 0,
-        ce_oi_change: item.CE?.changeinOpenInterest || 0,
-        pe_ltp: item.PE?.lastPrice || 0,
-        pe_oi: item.PE?.openInterest || 0,
-        pe_oi_change: item.PE?.changeinOpenInterest || 0,
-      })).sort((a: any, b: any) => a.strike - b.strike);
-
-      return { price, expiry, optionChain };
-    }
-  } catch (err) {
-    if ((err as any).response?.status === 401 || (err as any).response?.status === 403) {
-      nseCookies = '';
-      lastCookieFetch = 0;
-    }
-  }
-  return null;
-};
-
 // --- Market API State ---
 interface MarketProvider {
   id: string;
   name: string;
-  type: 'yahoo' | 'dhan' | 'upstox' | 'custom';
+  type: 'dhan' | 'upstox' | 'custom';
   clientId?: string;
   accessToken?: string;
   apiKey?: string;
@@ -830,15 +801,14 @@ interface MarketProvider {
 }
 
 let marketSettings = {
-  activeProviderId: 'yahoo',
+  activeProviderId: 'upstox',
   providers: [
-    { id: 'yahoo', name: 'Yahoo Finance', type: 'yahoo' as const },
     { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },
-    { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: '1421f9f3-d895-42b7-8de3-036656b390e6', apiSecret: '2nmvrknyj6' }
+    { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: process.env.UPSTOX_API_KEY || '1421f9f3-d895-42_api_key', apiSecret: process.env.UPSTOX_API_SECRET || 'static_secret' }
   ] as MarketProvider[]
 };
 
-let prevActiveProviderId = 'yahoo';
+let prevActiveProviderId = 'upstox';
 
 const updateSettings = async () => {
   try {
@@ -847,10 +817,10 @@ const updateSettings = async () => {
       const data = marketDoc.data;
       if (data.marketApiProvider && !data.activeProviderId) {
         marketSettings = {
-          activeProviderId: data.marketApiProvider,
+          activeProviderId: data.marketApiProvider === 'yahoo' ? 'upstox' : data.marketApiProvider,
           providers: [
-            { id: 'yahoo', name: 'Yahoo Finance', type: 'yahoo' },
-            { id: 'dhan', name: 'Dhan API', type: 'dhan', clientId: data.dhanClientId || '', accessToken: data.dhanAccessToken || '' }
+            { id: 'dhan', name: 'Dhan API', type: 'dhan', clientId: data.dhanClientId || '', accessToken: data.dhanAccessToken || '' },
+            { id: 'upstox', name: 'Upstox API', type: 'upstox', apiKey: process.env.UPSTOX_API_KEY || '', apiSecret: process.env.UPSTOX_API_SECRET || '' }
           ]
         };
       } else {
@@ -874,11 +844,10 @@ const updateSettings = async () => {
     } else {
       console.log('[Market Feed] Settings document not found. Creating defaults...');
       const defaultSettings = {
-        activeProviderId: 'yahoo',
+        activeProviderId: process.env.VITE_ACTIVE_PROVIDER || 'upstox',
         providers: [
-          { id: 'yahoo', name: 'Yahoo Finance', type: 'yahoo' as const },
           { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },
-          { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: '1421f9f3-d895-42b7-8de3-036656b390e6', apiSecret: '2nmvrknyj6' }
+          { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: process.env.UPSTOX_API_KEY || '1421f9f3-d895-42b7-8de3-036656b390e6', apiSecret: process.env.UPSTOX_API_SECRET || '2nmvrknyj6' }
         ]
       };
       await Setting.findOneAndUpdate({ id: 'market' }, { data: defaultSettings }, { upsert: true });
@@ -908,39 +877,8 @@ async function fetchMarketData(force = false) {
       isFetching = true;
 
       if (activeProvider) {
-        if (activeProvider.type === 'yahoo') {
-          try {
-            const symbolsToFetch = symbols.map(s => SYMBOL_MAP[s]);
-            const results = await yf.quote(symbolsToFetch);
-            
-            if (results && Array.isArray(results)) {
-              quotes = {};
-              results.forEach((result: any) => {
-                // Find the original display name from the yahoo symbol
-                const displayName = Object.keys(SYMBOL_MAP).find(key => SYMBOL_MAP[key] === result.symbol);
-                if (displayName) {
-                  quotes![displayName] = {
-                    price: result.regularMarketPrice || 0,
-                    change: result.regularMarketChange || 0
-                  };
-                }
-              });
-            } else if (results && typeof results === 'object') {
-              // Handle single result if only one symbol was passed or returned
-              const result = results as any;
-              const displayName = Object.keys(SYMBOL_MAP).find(key => SYMBOL_MAP[key] === result.symbol);
-              if (displayName) {
-                quotes = {
-                  [displayName]: {
-                    price: result.regularMarketPrice || 0,
-                    change: result.regularMarketChange || 0
-                  }
-                };
-              }
-            }
-          } catch (err) {
-            console.error('[Market Feed] Yahoo Finance fetch error:', (err as Error).message);
-          }
+        if (activeProvider.id === 'upstox' && activeProvider.apiSecret && activeProvider.apiSecret.length > 50) {
+          console.warn('[Market Feed] Warning: Upstox API Secret looks like a JWT token. Please check your credentials.');
         }
       }
     }
@@ -963,14 +901,7 @@ async function fetchMarketData(force = false) {
       }
 
       if (isRealFetchTime && shouldFetchOptionChain && !quotes?.[displayName]?.optionChain) {
-        if (activeProvider?.type === 'yahoo') {
-          const nseChain = await fetchNSEOptionChain(displayName);
-          if (nseChain) {
-            optionChain = nseChain.optionChain;
-            expiry = nseChain.expiry;
-            if (nseChain.price) { price = nseChain.price; fetched = true; }
-          }
-        } else if (activeProvider?.type === 'upstox') {
+        if (activeProvider?.type === 'upstox') {
           const activeUpstoxProvider = marketSettings.providers.find(p => p.id === 'upstox');
           if (activeUpstoxProvider?.accessToken) {
             await upstoxManager.fetchOptionChain(displayName, activeUpstoxProvider.accessToken);
@@ -985,7 +916,6 @@ async function fetchMarketData(force = false) {
       const isUpstoxConnected = upstoxManager.isConnectedStatus();
       const isDhan = activeProvider?.type === 'dhan';
       const isDhanConnected = dhanManager.isConnectedStatus();
-      
       const isRealTimeProviderActive = (isUpstox && isUpstoxConnected) || (isDhan && isDhanConnected);
 
       if (!fetched && isMarketOpen() && !isRealTimeProviderActive) {
@@ -994,7 +924,7 @@ async function fetchMarketData(force = false) {
         change += tickDelta;
       }
 
-      if (optionChain.length > 0 && isMarketOpen() && (!activeProvider || activeProvider.type === 'yahoo' || (!fetched && !isRealTimeProviderActive))) {
+      if (optionChain.length > 0 && isMarketOpen() && (!fetched && !isRealTimeProviderActive)) {
         const spotDelta = price - (marketData[displayName]?.price || price);
         optionChain = optionChain.map(opt => {
           const distance = opt.strike - price;
@@ -1013,9 +943,25 @@ async function fetchMarketData(force = false) {
         optionChain = generateOptionChain(price, strikeStep, displayName);
       }
 
+      // Determine the correct data source
+      let currentDataSource = marketData[displayName]?.dataSource || 'Live';
+      if (fetched) {
+        currentDataSource = activeProvider?.name || 'API';
+      } else if (isRealTimeProviderActive) {
+        // Keep the existing data source if real-time is active and we didn't fetch anything new in this poll
+        currentDataSource = marketData[displayName]?.dataSource || (isUpstox ? 'Upstox' : 'Dhan');
+      } else {
+        currentDataSource = 'Simulated';
+      }
+
       marketData[displayName] = {
-        price, change, optionChain, timestamp: new Date().toLocaleTimeString('en-IN', { hour12: false }),
-        expiry, isMarketOpen: isMarketOpen(), dataSource: fetched ? (activeProvider?.name || 'API') : 'Live'
+        price, 
+        change, 
+        optionChain, 
+        timestamp: new Date().toLocaleTimeString('en-IN', { hour12: false }),
+        expiry, 
+        isMarketOpen: isMarketOpen(), 
+        dataSource: currentDataSource
       };
       updates[displayName] = marketData[displayName];
     }
@@ -1065,6 +1011,27 @@ app.get("/api/market/quotes", async (req, res) => {
     fetchMarketData(true).catch(err => console.error('[Market Feed] Background fetch error:', err));
   }
   res.json(marketData);
+});
+
+app.get("/api/debug/market-status", (req, res) => {
+  res.json({
+    activeProviderId: marketSettings.activeProviderId,
+    providers: marketSettings.providers.map(p => ({
+      id: p.id,
+      name: p.name,
+      hasKey: !!(p.apiKey || p.clientId),
+      hasSecret: !!(p.apiSecret || p.accessToken),
+      secretLength: p.apiSecret?.length || 0,
+      tokenLength: p.accessToken?.length || 0
+    })),
+    upstoxStatus: upstoxManager.getConnectionStatus(),
+    upstoxConnected: upstoxManager.isConnectedStatus(),
+    env: {
+      hasUpstoxKey: !!process.env.UPSTOX_API_KEY,
+      hasUpstoxSecret: !!process.env.UPSTOX_API_SECRET,
+      secretStart: process.env.UPSTOX_API_SECRET?.substring(0, 10)
+    }
+  });
 });
 
 app.get("/api/market/status", (req, res) => {
@@ -1504,30 +1471,9 @@ app.get("/api/market/history/:symbol", async (req, res) => {
       return res.json(candles);
     }
 
-    // 2. Fallback to Yahoo Finance
-    const yahooSymbol = SYMBOL_MAP[symbol] || symbol;
-    const intervalMap: Record<string, string> = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '1D': '1d' };
-    const yfInterval = intervalMap[interval as string] || '5m';
-    
-    let period1: Date;
-    const now = Date.now();
-    switch(yfInterval) {
-      case '1m': period1 = new Date(now - 4 * 60 * 60 * 1000); break;
-      case '5m': period1 = new Date(now - 24 * 60 * 60 * 1000); break;
-      case '15m': period1 = new Date(now - 3 * 24 * 60 * 60 * 1000); break;
-      case '1h': period1 = new Date(now - 7 * 24 * 60 * 60 * 1000); break;
-      case '1d': period1 = new Date(now - 30 * 24 * 60 * 60 * 1000); break;
-      default: period1 = new Date(now - 24 * 60 * 60 * 1000);
-    }
-
-    const result = await yf.chart(yahooSymbol, { period1, interval: yfInterval as any });
-    if (result && result.quotes && result.quotes.length > 0) {
-      return res.json(result.quotes.map((q: any) => ({ time: q.date, open: q.open, high: q.high, low: q.low, close: q.close, volume: q.volume })).filter((c: any) => c.open != null));
-    }
-    
     throw new Error("No quotes found from provider");
   } catch (error) {
-    // 3. Last fallback: Simulation
+    // 2. Last fallback: Simulation
     const now = Date.now();
     const intervalMap: Record<string, string> = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '1D': '1d' };
     const yfInterval = intervalMap[interval as string] || '5m';

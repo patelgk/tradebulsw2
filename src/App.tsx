@@ -50,7 +50,11 @@ import {
   ChevronLeft,
   Sun,
   Moon,
-  Mail
+  Mail,
+  AlertTriangle,
+  CircleOff,
+  Info,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
@@ -156,7 +160,13 @@ const RECENT_TRADES: Trade[] = [
 
 // --- Components ---
 
-const ConnectionBadge = ({ status, provider, nextRetryIn }: { status: string, provider: string, nextRetryIn?: number }) => {
+const ConnectionBadge = ({ status, provider, nextRetryIn, error, onReconnect }: { 
+  status: string, 
+  provider: string, 
+  nextRetryIn?: number, 
+  error?: string,
+  onReconnect?: () => void
+}) => {
   const getStatusColor = () => {
     switch (status) {
       case 'connected': return 'bg-emerald-500';
@@ -175,11 +185,26 @@ const ConnectionBadge = ({ status, provider, nextRetryIn }: { status: string, pr
   };
 
   return (
-    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10">
-      <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor()}`} />
-      <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        {provider}: {getStatusText()}
-      </span>
+    <div className="flex flex-col gap-1 items-start">
+      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 group relative">
+        <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor()}`} />
+        <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          {provider}: {getStatusText()}
+        </span>
+        {status === 'failed' && (
+          <button 
+            onClick={(e) => { e.stopPropagation(); onReconnect?.(); }}
+            className="ml-1 text-[8px] bg-primary/20 text-primary px-1 rounded hover:bg-primary/30 transition-colors"
+          >
+            Retry Now
+          </button>
+        )}
+        {error && (
+          <div className="absolute top-full left-0 mt-1 hidden group-hover:block z-[100] bg-red-600 text-white text-[10px] p-2 rounded shadow-lg max-w-[200px]">
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -203,6 +228,16 @@ const Header = ({
   onOpenOptionChain?: () => void,
   providerStatus?: Record<string, { status: string, nextRetryIn?: number, error?: string }>
 }) => {
+  const handleReconnect = async (provider: string) => {
+    try {
+      if (provider === 'upstox') {
+        await fetch('/api/market/upstox/connect', { method: 'POST' });
+      }
+    } catch (err) {
+      console.error('Manual reconnect failed:', err);
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#160d08]/80 backdrop-blur-md border-b border-slate-200 dark:border-white/10 px-4 py-3 flex items-center justify-between">
       <div className="flex items-center gap-2">
@@ -233,6 +268,8 @@ const Header = ({
                 provider="Upstox" 
                 status={providerStatus.upstox.status} 
                 nextRetryIn={providerStatus.upstox.nextRetryIn} 
+                error={providerStatus.upstox.error}
+                onReconnect={() => handleReconnect('upstox')}
               />
             </div>
           )}
@@ -1685,24 +1722,35 @@ const OptionChainView = ({
       <ViewToggle activeView="chain" onToggle={(v) => v === 'chart' && onShowChart?.()} />
       
       {/* Symbol Switcher */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-          {['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty'].map((idx) => (
-            <button 
-              key={idx}
-              onClick={() => onSymbolChange?.(idx)}
-              className={`px-4 py-2 rounded-xl whitespace-nowrap text-sm font-bold transition-all ${
-                symbol === idx ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500'
-              }`}
-            >
-              {idx}
-            </button>
-          ))}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+            {['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty'].map((idx) => (
+              <button 
+                key={idx}
+                onClick={() => onSymbolChange?.(idx)}
+                className={`px-4 py-2 rounded-xl whitespace-nowrap text-sm font-bold transition-all ${
+                  symbol === idx ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500'
+                }`}
+              >
+                {idx}
+              </button>
+            ))}
+          </div>
+          {dataSource && (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-white/5 rounded-lg border border-slate-200 dark:border-white/10">
+              <div className={`w-1.5 h-1.5 rounded-full ${dataSource === 'Simulated' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span className="text-[8px] font-black uppercase text-slate-500">{dataSource}</span>
+            </div>
+          )}
         </div>
-        {dataSource && (
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-white/5 rounded-lg border border-slate-200 dark:border-white/10">
-            <div className={`w-1.5 h-1.5 rounded-full ${dataSource === 'Offline' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-            <span className="text-[8px] font-black uppercase text-slate-500">{dataSource}</span>
+        
+        {dataSource === 'Simulated' && (
+          <div className="px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2">
+            <AlertTriangle className="w-3 h-3 text-amber-500" />
+            <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+              Viewing Simulated Data. Connect a Live API in Settings for Real-time feeds.
+            </p>
           </div>
         )}
       </div>
@@ -2510,14 +2558,14 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
 
             {apiSettings?.providers?.map((p: any) => (
               <div key={p.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-4 relative group">
-                {p.id !== 'yahoo' && p.id !== 'dhan' && (
+                {p.id !== 'upstox' && p.id !== 'dhan' && (
                   <button 
                     onClick={() => {
                       const newProviders = apiSettings.providers.filter((pr: any) => pr.id !== p.id);
                       handleUpdateApi({ 
                         ...apiSettings, 
                         providers: newProviders,
-                        activeProviderId: apiSettings.activeProviderId === p.id ? 'yahoo' : apiSettings.activeProviderId
+                        activeProviderId: apiSettings.activeProviderId === p.id ? 'upstox' : apiSettings.activeProviderId
                       });
                     }}
                     className="absolute top-4 right-4 p-1.5 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -2644,12 +2692,19 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                         <input
                           type="password"
                           defaultValue={p.apiSecret}
+                          placeholder="Your Upstox API Secret (Static)"
                           onBlur={(e) => {
                             const newProviders = apiSettings.providers.map((pr: any) => pr.id === p.id ? { ...pr, apiSecret: e.target.value } : pr);
                             handleUpdateApi({ ...apiSettings, providers: newProviders });
+                            if (e.target.value.length > 50) {
+                              showToast('Warning: Secret looks like a token. Use the static secret from Upstox dashboard.', 'error');
+                            }
                           }}
                           className="w-full px-4 py-2 bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-xl text-xs"
                         />
+                        <p className="text-[9px] text-slate-400 italic px-2">
+                          Note: This is the <b>API Secret</b> from your Upstox dashboard, NOT an access token.
+                        </p>
                       </div>
                       <div className="pt-2 flex items-center justify-between">
                         <button
