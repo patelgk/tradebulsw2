@@ -2706,29 +2706,34 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                           Note: This is the <b>API Secret</b> from your Upstox dashboard, NOT an access token.
                         </p>
                       </div>
-                      <div className="pt-2 flex items-center justify-between">
-                        <button
-                          onClick={async () => {
-                            try {
-                              const response = await fetch('/api/market/upstox/auth-url');
-                              if (!response.ok) {
-                                const err = await response.json();
-                                throw new Error(err.error || 'Failed to get auth URL');
+                      <div className="pt-2 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await fetch('/api/market/upstox/auth-url');
+                                if (!response.ok) {
+                                  const err = await response.json();
+                                  throw new Error(err.error || 'Failed to get auth URL');
+                                }
+                                const { url } = await response.json();
+                                window.open(url, 'upstox_auth', 'width=600,height=700');
+                              } catch (err: any) {
+                                showToast(err.message, 'error');
                               }
-                              const { url } = await response.json();
-                              window.open(url, 'upstox_auth', 'width=600,height=700');
-                            } catch (err: any) {
-                              showToast(err.message, 'error');
-                            }
-                          }}
-                          className="px-4 py-2 bg-primary text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-colors"
-                        >
-                          Connect to Upstox
-                        </button>
-                        <div className="flex gap-2">
-                          <div className={`w-2 h-2 rounded-full ${p.accessToken ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">{p.accessToken ? 'Authorized' : 'Not Authorized'}</span>
+                            }}
+                            className="px-4 py-2 bg-primary text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-colors"
+                          >
+                            Connect to Upstox
+                          </button>
+                          <div className="flex gap-2 items-center">
+                            <div className={`w-2 h-2 rounded-full ${p.accessToken ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">{p.accessToken ? 'Authorized' : 'Not Authorized'}</span>
+                          </div>
                         </div>
+                        <p className="text-[9px] text-center text-amber-600 dark:text-amber-400 font-black uppercase tracking-tight bg-amber-500/10 py-1.5 rounded-lg border border-amber-500/20">
+                          ⚠️ Click Connect after updating API Key/Secret to start real-time data
+                        </p>
                       </div>
                     </>
                   )}
