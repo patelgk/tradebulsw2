@@ -866,7 +866,7 @@ let marketSettings = {
   activeProviderId: 'upstox',
   providers: [
     { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },
-    { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: process.env.UPSTOX_API_KEY || '2e24fff4-7138-4474-bee8-a8c568a0f491', apiSecret: process.env.UPSTOX_API_SECRET || 'evlgprx0bk', accessToken: process.env.UPSTOX_ACCESS_TOKEN || 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1RkNKTVoiLCJqdGkiOiI2OWY5YTE1NjJlMzM1ZTRkOTFjMGYzOTkiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3Nzk2NzQ0NiwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzc4MDE4NDAwfQ.NSUGMJBPGfSv-ERNGmBe0RhST7tgsdiwU0NxDjtdAz4' }
+    { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: process.env.UPSTOX_CLIENT_ID || '2e24fff4-7138-4474-bee8-a8c568a0f491', apiSecret: process.env.UPSTOX_CLIENT_SECRET || 'evlgprx0bk', accessToken: process.env.UPSTOX_ACCESS_TOKEN || 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1RkNKTVoiLCJqdGkiOiI2OWY5YTE1NjJlMzM1ZTRkOTFjMGYzOTkiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3Nzk2NzQ0NiwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzc4MDE4NDAwfQ.NSUGMJBPGfSv-ERNGmBe0RhST7tgsdiwU0NxDjtdAz4' }
   ] as MarketProvider[]
 };
 
@@ -882,7 +882,7 @@ const updateSettings = async () => {
           activeProviderId: data.marketApiProvider === 'yahoo' ? 'upstox' : data.marketApiProvider,
           providers: [
             { id: 'dhan', name: 'Dhan API', type: 'dhan', clientId: data.dhanClientId || '', accessToken: data.dhanAccessToken || '' },
-            { id: 'upstox', name: 'Upstox API', type: 'upstox', apiKey: process.env.UPSTOX_API_KEY || '', apiSecret: process.env.UPSTOX_API_SECRET || '', accessToken: data.upstoxAccessToken || process.env.UPSTOX_ACCESS_TOKEN || '' }
+            { id: 'upstox', name: 'Upstox API', type: 'upstox', apiKey: process.env.UPSTOX_CLIENT_ID || '', apiSecret: process.env.UPSTOX_CLIENT_SECRET || '', accessToken: data.upstoxAccessToken || process.env.UPSTOX_ACCESS_TOKEN || '' }
           ]
         };
       } else {
@@ -922,7 +922,7 @@ const updateSettings = async () => {
         activeProviderId: process.env.VITE_ACTIVE_PROVIDER || 'upstox',
         providers: [
           { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },
-          { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: process.env.UPSTOX_API_KEY || '2e24fff4-7138-4474-bee8-a8c568a0f491', apiSecret: process.env.UPSTOX_API_SECRET || 'evlgprx0bk', accessToken: process.env.UPSTOX_ACCESS_TOKEN || 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1RkNKTVoiLCJqdGkiOiI2OWY5YTE1NjJlMzM1ZTRkOTFjMGYzOTkiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3Nzk2NzQ0NiwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzc4MDE4NDAwfQ.NSUGMJBPGfSv-ERNGmBe0RhST7tgsdiwU0NxDjtdAz4' }
+          { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: process.env.UPSTOX_CLIENT_ID || '2e24fff4-7138-4474-bee8-a8c568a0f491', apiSecret: process.env.UPSTOX_CLIENT_SECRET || 'evlgprx0bk', accessToken: process.env.UPSTOX_ACCESS_TOKEN || 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1RkNKTVoiLCJqdGkiOiI2OWY5YTE1NjJlMzM1ZTRkOTFjMGYzOTkiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3Nzk2NzQ0NiwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzc4MDE4NDAwfQ.NSUGMJBPGfSv-ERNGmBe0RhST7tgsdiwU0NxDjtdAz4' }
         ]
       };
       await Setting.findOneAndUpdate({ id: 'market' }, { data: defaultSettings }, { upsert: true });
@@ -1102,8 +1102,8 @@ app.get("/api/debug/market-status", (req, res) => {
     upstoxStatus: upstoxManager.getConnectionStatus(),
     upstoxConnected: upstoxManager.isConnectedStatus(),
     env: {
-      hasUpstoxKey: !!process.env.UPSTOX_API_KEY,
-      hasUpstoxSecret: !!process.env.UPSTOX_API_SECRET,
+      hasUpstoxKey: !!process.env.UPSTOX_CLIENT_ID,
+      hasUpstoxSecret: !!process.env.UPSTOX_CLIENT_SECRET,
       hasUpstoxToken: !!process.env.UPSTOX_ACCESS_TOKEN
     }
   });
@@ -1435,12 +1435,11 @@ app.post("/api/transactions", async (req, res) => {
 
 // --- Upstox OAuth Routes ---
 app.get("/api/market/upstox/auth-url", (req, res) => {
-  const apiKey = process.env.UPSTOX_API_KEY;
-  // Use exact redirect URI provided in requirements
-  const redirectUri = "https://tradebulsw2.onrender.com/api/market/upstox/callback";
+  const apiKey = process.env.UPSTOX_CLIENT_ID;
+  const redirectUri = process.env.REDIRECT_URI || "https://tradebulsw2.onrender.com/api/market/upstox/callback";
   
   if (!apiKey) {
-    return res.status(400).json({ error: "UPSTOX_API_KEY not configured" });
+    return res.status(400).json({ error: "UPSTOX_CLIENT_ID not configured" });
   }
 
   const authUrl = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${apiKey}&redirect_uri=${encodeURIComponent(redirectUri)}`;
@@ -1450,13 +1449,13 @@ app.get("/api/market/upstox/auth-url", (req, res) => {
 
 app.get("/api/market/upstox/callback", async (req, res) => {
   const { code } = req.query;
-  const apiKey = process.env.UPSTOX_API_KEY;
-  const apiSecret = process.env.UPSTOX_API_SECRET;
-  const redirectUri = "https://tradebulsw2.onrender.com/api/market/upstox/callback";
+  const apiKey = process.env.UPSTOX_CLIENT_ID;
+  const apiSecret = process.env.UPSTOX_CLIENT_SECRET;
+  const redirectUri = process.env.REDIRECT_URI || "https://tradebulsw2.onrender.com/api/market/upstox/callback";
 
   if (!code || !apiKey || !apiSecret) {
     console.error("[Upstox OAuth] Missing configuration:", { hasCode: !!code, hasApiKey: !!apiKey, hasApiSecret: !!apiSecret });
-    return res.status(400).send("Missing code or Upstox configuration in environment");
+    return res.status(400).send("Missing code or Upstox configuration (CLIENT_ID/CLIENT_SECRET) in environment");
   }
 
   try {
