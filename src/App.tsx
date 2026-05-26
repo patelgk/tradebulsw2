@@ -1417,7 +1417,7 @@ const TradeView = ({
       <ViewToggle activeView="chart" onToggle={(v) => v === 'chain' && onViewOptionChain()} />
       
       <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-        {['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty'].map((idx) => (
+        {['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty', 'RELIANCE'].map((idx) => (
           <button 
             key={idx}
             onClick={() => {
@@ -1725,7 +1725,7 @@ const OptionChainView = ({
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-            {['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty'].map((idx) => (
+            {['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty', 'RELIANCE'].map((idx) => (
               <button 
                 key={idx}
                 onClick={() => onSymbolChange?.(idx)}

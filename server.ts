@@ -137,6 +137,7 @@ const marketData: Record<string, { price: number, change: number, optionChain: a
   'Bank Nifty': { price: 47500.00, change: 250.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
   'Fin Nifty': { price: 21000.00, change: 50.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
   'Midcap Nifty': { price: 10500.00, change: 30.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
+  'RELIANCE': { price: 2950.00, change: 15.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
 };
 
 // Update expiries immediately
@@ -148,7 +149,8 @@ const SYMBOL_MAP: Record<string, string> = {
   'Nifty 50': 'NSE_INDEX|Nifty 50',
   'Bank Nifty': 'NSE_INDEX|Nifty Bank',
   'Fin Nifty': 'NSE_INDEX|FINNIFTY',
-  'Midcap Nifty': 'NSE_INDEX|MIDCPNIFTY'
+  'Midcap Nifty': 'NSE_INDEX|MIDCPNIFTY',
+  'RELIANCE': 'NSE_EQ|RELIANCE'
 };
 
 const DHAN_SYMBOLS: Record<string, string> = {
@@ -623,7 +625,7 @@ class UpstoxServerManager {
       }
 
       // Fetch initial option chains before connecting WS
-      const symbols = ['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty'];
+      const symbols = ['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty', 'RELIANCE'];
       for (const symbol of symbols) {
         await this.fetchOptionChain(symbol, accessToken);
       }
@@ -756,11 +758,12 @@ class UpstoxServerManager {
       }
 
       for (const [key, feed] of Object.entries(feeds)) {
-        // Handle Index Update
+        // Handle Map-based Update (Indices and Stocks)
         if (nameMap[key]) {
           const displayName = nameMap[key];
-          const ff = (feed as any).fullFeed?.indexFF;
-          const ltpData = ff?.ltpc || (feed as any).ltpc;
+          const feedAny = feed as any;
+          const ff = feedAny.fullFeed?.indexFF || feedAny.fullFeed?.marketFF;
+          const ltpData = ff?.ltpc || feedAny.ltpc;
           
           if (ltpData && ltpData.ltp) {
             marketData[displayName].price = ltpData.ltp;
@@ -940,7 +943,7 @@ async function fetchMarketData(force = false) {
   const isRealFetchTime = force || (now - lastFetchTime >= 3000);
   if (isRealFetchTime) console.log(`[Market Feed] Fetching data (force=${force}, clients=${connectedClients})...`);
   
-  const symbols = ['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty'];
+  const symbols = ['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty', 'RELIANCE'];
   const updates: Record<string, any> = {};
   
   try {
@@ -1080,11 +1083,16 @@ app.get("/api/market/quotes", async (req, res) => {
   // Log request for debugging
   // console.log(`[API] ${req.method} ${req.path} from ${req.ip}`);
   
-  if (now - lastFetchTime > 5000 && !isFetching) {
+    if (now - lastFetchTime > 5000 && !isFetching) {
     // Trigger update in background, don't await
     fetchMarketData(true).catch(err => console.error('[Market Feed] Background fetch error:', err));
   }
-  res.json(marketData);
+  // Strip huge option chain if not requested to save bandwidth
+  const data = JSON.parse(JSON.stringify(marketData));
+  if (req.query.minimal === 'true') {
+     Object.keys(data).forEach(k => data[k].optionChain = []);
+  }
+  res.json(data);
 });
 
 app.get("/api/debug/market-status", (req, res) => {
@@ -1176,10 +1184,11 @@ app.post("/api/users", async (req, res) => {
 // Auth Routes (Local Backend)
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { email, password, name, phoneNumber } = req.body;
+    const { email, password, name, phoneNumber, mobile } = req.body;
+    const finalPhone = phoneNumber || mobile;
     
     // Check if user exists by email or phone
-    const existingUser = await User.findOne({ $or: [{ email }, { phoneNumber: phoneNumber || '___none___' }] });
+    const existingUser = await User.findOne({ $or: [{ email }, { phoneNumber: finalPhone || '___none___' }] });
     if (existingUser) return res.status(400).json({ error: "User already exists with this email or mobile number" });
 
     const newUser = new User({
@@ -1187,38 +1196,44 @@ app.post("/api/auth/signup", async (req, res) => {
       email,
       password, // In a real app, hash this!
       name,
-      phoneNumber,
+      phoneNumber: finalPhone,
       balance: 100000, 
       initial_balance: 100000
     });
 
     await newUser.save();
+    console.log('[Auth] New user registered:', email);
     res.json(newUser);
   } catch (err) {
     console.error('Signup error:', err);
-    res.status(500).json({ error: "Signup failed" });
+    res.status(500).json({ error: "Signup failed: " + (err instanceof Error ? err.message : String(err)) });
   }
 });
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password, mobile } = req.body;
+    const { email, password, mobile, phoneNumber } = req.body;
+    const finalPhone = mobile || phoneNumber;
     
     let query: any = { password };
     if (email) {
       query.email = email;
-    } else if (mobile) {
-      query.phoneNumber = mobile;
+    } else if (finalPhone) {
+      query.phoneNumber = finalPhone;
     } else {
       return res.status(400).json({ error: "Email or Mobile is required" });
     }
 
     const user = await User.findOne(query);
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (!user) {
+      console.warn('[Auth] Login failed for:', email || finalPhone);
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    console.log('[Auth] User logged in:', user.email);
     res.json(user);
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ error: "Login failed" });
+    res.status(500).json({ error: "Login failed: " + (err instanceof Error ? err.message : String(err)) });
   }
 });
 
@@ -1435,8 +1450,8 @@ app.post("/api/transactions", async (req, res) => {
 
 // --- Upstox OAuth Routes ---
 app.get("/api/market/upstox/auth-url", (req, res) => {
-  const apiKey = process.env.UPSTOX_CLIENT_ID;
-  const redirectUri = process.env.REDIRECT_URI || "https://tradebulsw2.onrender.com/api/market/upstox/callback";
+  const apiKey = process.env.UPSTOX_CLIENT_ID || process.env.CLIENT_ID;
+  const redirectUri = process.env.UPSTOX_REDIRECT_URI || process.env.REDIRECT_URI || "https://tradebulsw2.onrender.com/api/market/upstox/callback";
   
   if (!apiKey) {
     return res.status(400).json({ error: "UPSTOX_CLIENT_ID not configured" });
@@ -1449,9 +1464,9 @@ app.get("/api/market/upstox/auth-url", (req, res) => {
 
 app.get("/api/market/upstox/callback", async (req, res) => {
   const { code } = req.query;
-  const apiKey = process.env.UPSTOX_CLIENT_ID;
-  const apiSecret = process.env.UPSTOX_CLIENT_SECRET;
-  const redirectUri = process.env.REDIRECT_URI || "https://tradebulsw2.onrender.com/api/market/upstox/callback";
+  const apiKey = process.env.UPSTOX_CLIENT_ID || process.env.CLIENT_ID;
+  const apiSecret = process.env.UPSTOX_CLIENT_SECRET || process.env.CLIENT_SECRET;
+  const redirectUri = process.env.UPSTOX_REDIRECT_URI || process.env.REDIRECT_URI || "https://tradebulsw2.onrender.com/api/market/upstox/callback";
 
   if (!code || !apiKey || !apiSecret) {
     console.error("[Upstox OAuth] Missing configuration:", { hasCode: !!code, hasApiKey: !!apiKey, hasApiSecret: !!apiSecret });
