@@ -14,6 +14,8 @@ import protobuf from "protobufjs";
 import { v4 as uuidv4 } from 'uuid';
 import nodemailer from 'nodemailer';
 import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction } from './db.js';
+import dhanRoutes from "./routes/dhanRoutes.js";
+import { dhanServiceInstance } from "./services/dhanService.js";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -34,6 +36,10 @@ process.on('unhandledRejection', (reason, promise) => {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Dhan API routes registration
+app.use("/", dhanRoutes);
+app.use("/api", dhanRoutes);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -132,7 +138,7 @@ const generateOptionChain = (spotPrice: number, strikeStep: number = 50, symbol:
   return strikes;
 };
 
-const marketData: Record<string, { price: number, change: number, optionChain: any[], timestamp: string, expiry: string, isMarketOpen?: boolean, dataSource?: string }> = {
+const marketData: Record<string, { price: number, change: number, optionChain: any[], timestamp: string, expiry: string, expiries?: string[], isMarketOpen?: boolean, dataSource?: string }> = {
   'Nifty 50': { price: 22453.80, change: 102.45, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
   'Bank Nifty': { price: 47500.00, change: 250.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
   'Fin Nifty': { price: 21000.00, change: 50.00, optionChain: [], timestamp: '--:--:--', expiry: '', isMarketOpen: false, dataSource: 'Live' },
@@ -158,6 +164,7 @@ const DHAN_SYMBOLS: Record<string, string> = {
   '25': 'Bank Nifty',
   '27': 'Fin Nifty',
   '31': 'Midcap Nifty',
+  '32': 'Midcap Nifty',
 };
 
 // --- Dhan Server Service ---
@@ -165,8 +172,180 @@ class DhanServerManager {
   private ws: WebSocket | null = null;
   private isConnected = false;
   private reconnectTimeout: NodeJS.Timeout | null = null;
+  private lastOptionFetch: Record<string, number> = {};
+  private availableExpiries: Record<string, string[]> = {};
 
   constructor() {}
+
+  clearCache(displayName: string) {
+    delete this.lastOptionFetch[displayName];
+  }
+
+  getAvailableExpiries(displayName: string) {
+    return this.availableExpiries[displayName] || [];
+  }
+
+  getDhanScripDetails(displayName: string) {
+    const mappings: Record<string, { scrip: number, seg: string }> = {
+      'Nifty 50': { scrip: 13, seg: 'IDX_I' },
+      'Bank Nifty': { scrip: 25, seg: 'IDX_I' },
+      'Fin Nifty': { scrip: 27, seg: 'IDX_I' },
+      'Midcap Nifty': { scrip: 31, seg: 'IDX_I' },
+      'RELIANCE': { scrip: 2885, seg: 'NSE_EQ' },
+    };
+    return mappings[displayName] || { scrip: 13, seg: 'IDX_I' };
+  }
+
+  async fetchExpiries(displayName: string, accessToken: string) {
+    try {
+      if (!accessToken) {
+        console.warn(`[Dhan Server] No access token provided for fetchExpiries(${displayName})`);
+        return [];
+      }
+
+      const details = this.getDhanScripDetails(displayName);
+      const url = 'https://api.dhan.co/v2/optionchain/expiry-list';
+      console.log(`[Dhan Server] Fetching expiries for ${displayName} (Scrip: ${details.scrip}, Seg: ${details.seg})`);
+      
+      const provider = marketSettings.providers.find(p => p.id === 'dhan');
+      const clientId = provider?.clientId || process.env.VITE_DHAN_CLIENT_ID || "";
+
+      const res = await axios.post(url, {
+        UnderlyingScrip: details.scrip,
+        UnderlyingSeg: details.seg
+      }, {
+        headers: {
+          'access-token': accessToken,
+          'client-id': clientId,
+          'Content-Type': 'application/json'
+        },
+        timeout: 8000
+      });
+
+      if (res.data?.data) {
+        const list = Array.isArray(res.data.data) ? res.data.data : [];
+        this.availableExpiries[displayName] = list;
+        return list;
+      }
+      return [];
+    } catch (err: any) {
+      console.error(`[Dhan Server] Failed to fetch expiries for ${displayName}:`, err.response?.data || err.message);
+      return [];
+    }
+  }
+
+  async fetchOptionChain(displayName: string, accessToken: string) {
+    try {
+      if (!accessToken) {
+        console.warn(`[Dhan Server] No access token provided for fetchOptionChain(${displayName})`);
+        return;
+      }
+
+      const now = Date.now();
+      if (this.lastOptionFetch[displayName] && now - this.lastOptionFetch[displayName] < 300000) {
+        return; 
+      }
+
+      const details = this.getDhanScripDetails(displayName);
+      
+      // Ensure we have expiries
+      if (!this.availableExpiries[displayName] || this.availableExpiries[displayName].length === 0) {
+        await this.fetchExpiries(displayName, accessToken);
+      }
+
+      let expiry = marketData[displayName].expiry;
+      const expiries = this.availableExpiries[displayName] || [];
+      
+      if (expiries.length > 0 && !expiries.includes(expiry)) {
+        console.log(`[Dhan Server] Expiry ${expiry} not found for ${displayName}. Using available: ${expiries[0]}`);
+        expiry = expiries[0];
+        marketData[displayName].expiry = expiry;
+      }
+
+      if (!expiry && expiries.length > 0) {
+        expiry = expiries[0];
+        marketData[displayName].expiry = expiry;
+      }
+
+      if (!expiry) {
+        expiry = getNextExpiry(displayName);
+        marketData[displayName].expiry = expiry;
+      }
+
+      const url = 'https://api.dhan.co/v2/optionchain';
+      console.log(`[Dhan Server] Fetching option chain for ${displayName} with expiry ${expiry}`);
+      
+      const provider = marketSettings.providers.find(p => p.id === 'dhan');
+      const clientId = provider?.clientId || process.env.VITE_DHAN_CLIENT_ID || "";
+
+      const res = await axios.post(url, {
+        UnderlyingScrip: details.scrip,
+        UnderlyingSeg: details.seg,
+        Expiry: expiry
+      }, {
+        headers: {
+          'access-token': accessToken,
+          'client-id': clientId,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      });
+
+      if (res.data) {
+        this.lastOptionFetch[displayName] = now;
+        
+        let chain: any[] = [];
+        if (res.data.data) {
+          if (Array.isArray(res.data.data)) {
+            chain = res.data.data;
+          } else if (res.data.data.oc_list && Array.isArray(res.data.data.oc_list)) {
+            chain = res.data.data.oc_list;
+          } else if (res.data.data.data && Array.isArray(res.data.data.data)) {
+            chain = res.data.data.data;
+          }
+        } else if (Array.isArray(res.data)) {
+          chain = res.data;
+        }
+
+        console.log(`[Dhan Server] Received ${chain.length} strikes for ${displayName}`);
+        
+        const updatedOptionChain: any[] = [];
+
+        chain.forEach((item: any) => {
+          const strike = item.strikePrice || item.strike_price || item.strike || 0;
+          if (!strike) return;
+
+          const callObj = item.callOption || item.call_options || item.ce;
+          const putObj = item.putOption || item.put_options || item.pe;
+
+          const ce_ltp = callObj ? (callObj.lastPrice || callObj.last_price || callObj.ltp || 0) : 0;
+          const ce_oi = callObj ? (callObj.openInterest || callObj.open_interest || callObj.oi || 0) : 0;
+          const ce_oi_change = callObj ? (callObj.oiChange || callObj.oi_change || 0) : 0;
+
+          const pe_ltp = putObj ? (putObj.lastPrice || putObj.last_price || putObj.ltp || 0) : 0;
+          const pe_oi = putObj ? (putObj.openInterest || putObj.open_interest || putObj.oi || 0) : 0;
+          const pe_oi_change = putObj ? (putObj.oiChange || putObj.oi_change || 0) : 0;
+
+          updatedOptionChain.push({
+            strike,
+            ce_ltp,
+            ce_oi,
+            ce_oi_change,
+            pe_ltp,
+            pe_oi,
+            pe_oi_change
+          });
+        });
+
+        if (updatedOptionChain.length > 0) {
+          marketData[displayName].optionChain = updatedOptionChain;
+          marketData[displayName].dataSource = 'Dhan';
+        }
+      }
+    } catch (err: any) {
+      console.error(`[Dhan Server] Failed to fetch option chain for ${displayName}:`, err.response?.data || err.message);
+    }
+  }
 
   isConnectedStatus() {
     return this.isConnected;
@@ -184,7 +363,8 @@ class DhanServerManager {
       if (!dhanKey) return null;
 
       const provider = marketSettings.providers.find(p => p.id === 'dhan');
-      if (!provider?.accessToken) return null;
+      const accessToken = provider?.accessToken || process.env.VITE_DHAN_ACCESS_TOKEN || process.env.DHAN_ACCESS_TOKEN || "";
+      if (!accessToken) return null;
 
       const dhanInterval = {
         '1m': '1',
@@ -195,27 +375,55 @@ class DhanServerManager {
         '1D': 'DAY'
       }[interval] || '5';
 
-      const res = await axios.post('https://api.dhan.co/v2/charts/historical', {
+      const isIntraday = dhanInterval !== 'DAY';
+      const endpoint = isIntraday 
+        ? 'https://api.dhan.co/v2/charts/intraday' 
+        : 'https://api.dhan.co/v2/charts/historical';
+
+      const payload: any = {
         symbol: symbol,
         exchangeSegment: 'NSE_IDX',
-        instrumentId: dhanKey,
-        expiryCode: 0,
+        instrumentType: 'INDEX',
         fromDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         toDate: new Date().toISOString().split('T')[0],
-        interval: dhanInterval
-      }, {
-        headers: { 'access-token': provider.accessToken, 'Content-Type': 'application/json' }
+        securityId: dhanKey
+      };
+
+      if (isIntraday) {
+        payload.interval = dhanInterval;
+      } else {
+        payload.expiryCode = 0;
+      }
+
+      console.log(`[Dhan Server] Fetching historical charts for ${symbol} using endpoint: ${endpoint}`);
+      const res = await axios.post(endpoint, payload, {
+        headers: { 'access-token': accessToken, 'Content-Type': 'application/json' }
       });
 
       if (res.data?.data) {
-        return res.data.data.map((c: any) => ({
-          time: new Date(c.start_Time * 1000).toISOString(),
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
-          volume: c.volume
-        }));
+        const data = res.data.data;
+        // Case 1: Object of arrays (e.g. { start_Time: [...], open: [...] })
+        if (data && Array.isArray(data.start_Time)) {
+          return data.start_Time.map((timeVal: number, idx: number) => ({
+            time: new Date(timeVal * 1000).toISOString(),
+            open: data.open?.[idx] || 0,
+            high: data.high?.[idx] || 0,
+            low: data.low?.[idx] || 0,
+            close: data.close?.[idx] || 0,
+            volume: data.volume?.[idx] || 0
+          }));
+        }
+        // Case 2: Array of objects
+        if (Array.isArray(data)) {
+          return data.map((c: any) => ({
+            time: new Date((c.start_Time || c.startTime || c.time || 0) * 1000).toISOString(),
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume || 0
+          }));
+        }
       }
       return null;
     } catch (err: any) {
@@ -226,8 +434,8 @@ class DhanServerManager {
 
   connect() {
     const activeProvider = marketSettings.providers.find(p => p.id === 'dhan');
-    const clientId = activeProvider?.clientId || process.env.VITE_DHAN_CLIENT_ID || "";
-    const accessToken = activeProvider?.accessToken || process.env.VITE_DHAN_ACCESS_TOKEN || "";
+    const clientId = activeProvider?.clientId || process.env.VITE_DHAN_CLIENT_ID || process.env.DHAN_CLIENT_ID || "";
+    const accessToken = activeProvider?.accessToken || process.env.VITE_DHAN_ACCESS_TOKEN || process.env.DHAN_ACCESS_TOKEN || "";
 
     if (!clientId || !accessToken) {
       console.log('[Dhan Server] Missing credentials (ClientId or AccessToken), skipping connection.');
@@ -239,7 +447,7 @@ class DhanServerManager {
     }
 
     console.log(`[Dhan Server] Connecting to Dhan WebSocket... (ClientId: ${clientId.substring(0, 4)}***, Token: ${accessToken.substring(0, 4)}***)`);
-    const url = `wss://api-feed.dhan.co/?api_key=${accessToken}&client_id=${clientId}`;
+    const url = "wss://api-feed.dhan.co";
     
     try {
       this.ws = new WebSocket(url);
@@ -295,10 +503,11 @@ class DhanServerManager {
 
   private subscribeToSymbols() {
     const symbolsToSubscribe = [
-      { ExchangeSegment: 1, SecurityId: '13' }, // Nifty 50
-      { ExchangeSegment: 1, SecurityId: '25' }, // Bank Nifty
-      { ExchangeSegment: 1, SecurityId: '27' }, // Fin Nifty
-      { ExchangeSegment: 1, SecurityId: '31' }, // Midcap Nifty
+      { ExchangeSegment: 2, SecurityId: '13' }, // Nifty 50 (NSE_IDX)
+      { ExchangeSegment: 2, SecurityId: '25' }, // Bank Nifty (NSE_IDX)
+      { ExchangeSegment: 2, SecurityId: '27' }, // Fin Nifty (NSE_IDX)
+      { ExchangeSegment: 2, SecurityId: '31' }, // Midcap Nifty (NSE_IDX)
+      { ExchangeSegment: 2, SecurityId: '32' }, // Midcap Nifty Fallback (NSE_IDX)
     ];
 
     const subscribePacket = {
@@ -307,7 +516,7 @@ class DhanServerManager {
     };
 
     this.ws?.send(JSON.stringify(subscribePacket));
-    console.log("[Dhan Server] Subscribed to indices.");
+    console.log("[Dhan Server] Subscribed to index symbols (ExchangeSegment: 2).");
   }
 
   private handlePriceUpdate(data: any) {
@@ -325,9 +534,28 @@ class DhanServerManager {
         const displayName = DHAN_SYMBOLS[securityId];
 
         if (displayName && marketData[displayName]) {
+          const oldPrice = marketData[displayName].price;
           marketData[displayName].price = ltp;
           marketData[displayName].dataSource = 'Dhan';
           marketData[displayName].timestamp = new Date().toLocaleTimeString('en-IN', { hour12: false });
+
+          // Synchronize Option Chain LTP values dynamically on every WebSocket tick
+          let optionChain = marketData[displayName].optionChain || [];
+          if (optionChain.length > 0 && oldPrice > 0) {
+            const spotDelta = ltp - oldPrice;
+            marketData[displayName].optionChain = optionChain.map(opt => {
+              const distance = opt.strike - ltp;
+              const ce_delta = 1 / (1 + Math.exp(distance / (ltp * 0.01)));
+              const pe_delta = ce_delta - 1;
+              return {
+                ...opt,
+                ce_ltp: Number(Math.max(0.05, opt.ce_ltp + (spotDelta * ce_delta)).toFixed(2)),
+                pe_ltp: Number(Math.max(0.05, opt.pe_ltp + (spotDelta * pe_delta)).toFixed(2)),
+              };
+            });
+          }
+
+          io.emit("marketUpdate", { [displayName]: marketData[displayName] });
         }
       }
     } catch (e) {}
@@ -360,6 +588,14 @@ class UpstoxServerManager {
 
   constructor() {
     this.initProto();
+  }
+
+  clearCache(displayName: string) {
+    delete this.lastOptionFetch[displayName];
+  }
+
+  getAvailableExpiries(displayName: string) {
+    return this.availableExpiries[displayName] || [];
   }
 
   async initProto() {
@@ -987,6 +1223,14 @@ async function fetchMarketData(force = false) {
             expiry = marketData[displayName].expiry;
             fetched = true;
           }
+        } else if (activeProvider?.type === 'dhan') {
+          const activeDhanProvider = marketSettings.providers.find(p => p.id === 'dhan');
+          if (activeDhanProvider?.accessToken) {
+            await dhanManager.fetchOptionChain(displayName, activeDhanProvider.accessToken);
+            optionChain = marketData[displayName].optionChain;
+            expiry = marketData[displayName].expiry;
+            fetched = true;
+          }
         }
       }
 
@@ -1031,12 +1275,35 @@ async function fetchMarketData(force = false) {
         currentDataSource = 'Simulated';
       }
 
+      let expiries: string[] = [];
+      if (activeProvider?.type === 'dhan') {
+        expiries = dhanManager.getAvailableExpiries(displayName);
+      } else if (activeProvider?.type === 'upstox') {
+        expiries = upstoxManager.getAvailableExpiries(displayName);
+      }
+
+      if (!expiries || expiries.length === 0) {
+        const defaultExp = expiry || getNextExpiry(displayName);
+        expiries = [defaultExp];
+        try {
+          const date = new Date(defaultExp);
+          if (!isNaN(date.getTime())) {
+            for (let i = 1; i < 4; i++) {
+              const nextW = new Date(date);
+              nextW.setDate(date.getDate() + i * 7);
+              expiries.push(nextW.toISOString().split('T')[0]);
+            }
+          }
+        } catch (e) {}
+      }
+
       marketData[displayName] = {
         price, 
         change, 
         optionChain, 
         timestamp: new Date().toLocaleTimeString('en-IN', { hour12: false }),
         expiry, 
+        expiries,
         isMarketOpen: isMarketOpen(), 
         dataSource: currentDataSource
       };
@@ -1420,6 +1687,10 @@ app.post("/api/settings/:id", async (req, res) => {
       { $set: { data: req.body } },
       { upsert: true, new: true }
     );
+    if (req.params.id === 'market') {
+      console.log("[API] Setting update detected for market. Forcing instant sync...");
+      await updateSettings();
+    }
     res.json(setting.data);
   } catch (err) {
     res.status(500).json({ error: "Failed to update settings" });
@@ -1578,6 +1849,44 @@ app.post("/api/market/dhan/reconnect", (req, res) => {
   res.json({ status: "Dhan reconnection triggered on server" });
 });
 
+app.post("/api/market/expiry", async (req, res) => {
+  const { symbol, expiry } = req.body;
+  if (!symbol || !expiry) {
+    return res.status(400).json({ error: "Missing symbol or expiry parameter" });
+  }
+
+  try {
+    if (marketData[symbol]) {
+      console.log(`[API] Updating expiry for ${symbol} to ${expiry}`);
+      marketData[symbol].expiry = expiry;
+      
+      const activeProvider = marketSettings.providers.find(p => p.id === marketSettings.activeProviderId);
+      
+      if (activeProvider?.type === 'dhan') {
+        const activeDhanProvider = marketSettings.providers.find(p => p.id === 'dhan');
+        if (activeDhanProvider?.accessToken) {
+          dhanManager.clearCache(symbol);
+          await dhanManager.fetchOptionChain(symbol, activeDhanProvider.accessToken);
+        }
+      } else if (activeProvider?.type === 'upstox') {
+        const activeUpstoxProvider = marketSettings.providers.find(p => p.id === 'upstox');
+        if (activeUpstoxProvider?.accessToken) {
+          upstoxManager.clearCache(symbol);
+          await upstoxManager.fetchOptionChain(symbol, activeUpstoxProvider.accessToken);
+        }
+      }
+      
+      io.emit("marketUpdate", { [symbol]: marketData[symbol] });
+      return res.json({ success: true, marketData: marketData[symbol] });
+    } else {
+      return res.status(404).json({ error: "Symbol not found" });
+    }
+  } catch (error: any) {
+    console.error("[API] Failed to update expiry:", error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 app.get("/api/market/history/:symbol", async (req, res) => {
   const { symbol } = req.params;
   const { interval = '5m' } = req.query;
@@ -1661,6 +1970,13 @@ async function startServer() {
 
     httpServer.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
+
+      // Start Dhan WebSocket connection for real-time market data feed
+      try {
+        dhanServiceInstance.connectWebSocket();
+      } catch (wsError: any) {
+        console.error("❌ [Server] Failed to initialize Dhan WebSocket:", wsError.message);
+      }
     });
 
     try {

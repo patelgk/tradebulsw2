@@ -1662,6 +1662,7 @@ const OptionChainView = ({
   spotPrice, 
   onSelectStrike, 
   expiry, 
+  expiries = [],
   isLoading,
   onSymbolChange,
   onExpiryChange,
@@ -1673,6 +1674,7 @@ const OptionChainView = ({
   spotPrice: number, 
   onSelectStrike: (strike: number) => void, 
   expiry: string, 
+  expiries?: string[],
   isLoading?: boolean,
   onSymbolChange?: (s: string) => void,
   onExpiryChange?: (e: string) => void,
@@ -1770,8 +1772,18 @@ const OptionChainView = ({
             }}
             className="bg-transparent text-xs font-bold text-primary focus:outline-none cursor-pointer"
           >
-            <option value={expiry}>{expiry}</option>
-            <option value="Next Expiry">Next Expiry</option>
+            {expiries && expiries.length > 0 ? (
+              expiries.map((exp) => (
+                <option key={exp} value={exp} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                  {exp}
+                </option>
+              ))
+            ) : (
+              <>
+                <option value={expiry}>{expiry}</option>
+                <option value="Next Expiry">Next Expiry</option>
+              </>
+            )}
           </select>
         </div>
         <div className="flex flex-col items-end">
@@ -3145,7 +3157,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('trade');
   const [showAuth, setShowAuth] = useState(false);
   const [showOptionChain, setShowOptionChain] = useState(true);
-  const [marketData, setMarketData] = useState<Record<string, { price: number, change: number, optionChain: any[], timestamp: string, expiry: string, isMarketOpen?: boolean, dataSource?: string }>>({
+  const [marketData, setMarketData] = useState<Record<string, { price: number, change: number, optionChain: any[], timestamp: string, expiry: string, expiries?: string[], isMarketOpen?: boolean, dataSource?: string }>>({
     'Nifty 50': { price: 22453.80, change: 102.45, optionChain: [], timestamp: '--:--:--', expiry: '-- --- ----', isMarketOpen: false, dataSource: 'Live' },
     'Bank Nifty': { price: 47500.00, change: 250.00, optionChain: [], timestamp: '--:--:--', expiry: '-- --- ----', isMarketOpen: false, dataSource: 'Live' },
     'Fin Nifty': { price: 21000.00, change: 50.00, optionChain: [], timestamp: '--:--:--', expiry: '-- --- ----', isMarketOpen: false, dataSource: 'Live' },
@@ -3825,6 +3837,7 @@ function App() {
                       showToast(`Selected Strike: ${s}`);
                     }} 
                     expiry={marketData[selectedSymbol].expiry}
+                    expiries={marketData[selectedSymbol].expiries || []}
                     isLoading={isOptionChainLoading}
                     dataSource={marketData[selectedSymbol].dataSource}
                     onSymbolChange={(s) => {
@@ -3832,10 +3845,33 @@ function App() {
                       setSelectedStrike(0);
                       setIsOptionChainLoading(true);
                     }}
-                    onExpiryChange={(e) => {
+                    onExpiryChange={async (e) => {
                       setIsOptionChainLoading(true);
-                      // Simulate fetch delay
-                      setTimeout(() => setIsOptionChainLoading(false), 800);
+                      try {
+                        const res = await fetch('/api/market/expiry', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ symbol: selectedSymbol, expiry: e })
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          if (data.success && data.marketData) {
+                            setMarketData(prev => ({
+                              ...prev,
+                              [selectedSymbol]: {
+                                ...prev[selectedSymbol],
+                                ...data.marketData
+                              }
+                            }));
+                            showToast(`Updated Expiry to ${e}`, 'success');
+                          }
+                        }
+                      } catch (err) {
+                        console.error("Failed to update expiry on server:", err);
+                        showToast(`Failed to update expiry`, 'error');
+                      } finally {
+                        setIsOptionChainLoading(false);
+                      }
                     }}
                     onShowChart={() => setShowOptionChain(false)}
                   />
