@@ -16,6 +16,10 @@ export class DhanService {
   private readonly baseUrl = "https://api.dhan.co/v2";
   private readonly wsUrl = "wss://api-feed.dhan.co";
 
+  // Retry policy
+  private readonly maxApiRetries = 3;
+  private readonly baseRetryDelay = 1000; // ms
+
   constructor() {
     // Get credentials from environment variables
     const token = process.env.DHAN_ACCESS_TOKEN;
@@ -47,22 +51,13 @@ export class DhanService {
    */
   async getFunds() {
     const { token, clientId } = this.validateCredentials();
-
-    try {
-      console.log("[DhanService] Fetching fund details from Dhan API...");
-      const response = await axios.get(`${this.baseUrl}/fundlimit`, {
-        headers: {
-          "access-token": token,
-          "client-id": clientId,
-          "Content-Type": "application/json",
-        },
-        timeout: 10000, // 10s timeout
-      });
-
-      return response.data;
-    } catch (error: any) {
-      this.handleApiError("getFunds", error);
-    }
+    console.log("[DhanService] Fetching fund details from Dhan API...");
+    const url = `${this.baseUrl}/fundlimit`;
+    return await this.requestWithRetry("get", url, undefined, {
+      "access-token": token,
+      "client-id": clientId,
+      "Content-Type": "application/json",
+    });
   }
 
   /**
@@ -71,22 +66,13 @@ export class DhanService {
    */
   async getOptionChain(payload: { UnderlyingScrip: number; UnderlyingSeg: string; Expiry: string }) {
     const { token, clientId } = this.validateCredentials();
-
-    try {
-      console.log(`[DhanService] Fetching option chain for UnderlyingScrip: ${payload.UnderlyingScrip}, Expiry: ${payload.Expiry}...`);
-      const response = await axios.post(`${this.baseUrl}/optionchain`, payload, {
-        headers: {
-          "access-token": token,
-          "client-id": clientId,
-          "Content-Type": "application/json",
-        },
-        timeout: 10000,
-      });
-
-      return response.data;
-    } catch (error: any) {
-      this.handleApiError("getOptionChain", error);
-    }
+    console.log(`[DhanService] Fetching option chain for UnderlyingScrip: ${payload.UnderlyingScrip}, Expiry: ${payload.Expiry}...`);
+    const url = `${this.baseUrl}/optionchain`;
+    return await this.requestWithRetry("post", url, payload, {
+      "access-token": token,
+      "client-id": clientId,
+      "Content-Type": "application/json",
+    });
   }
 
   /**
@@ -95,6 +81,12 @@ export class DhanService {
   connectWebSocket() {
     const token = process.env.DHAN_ACCESS_TOKEN;
     const clientId = process.env.DHAN_CLIENT_ID;
+
+    // Allow disabling WS during development to avoid rate-limits and repeated 400s
+    if (process.env.DISABLE_DHAN_WS === 'true') {
+      console.log('⚠️ [DhanService WS] DISABLE_DHAN_WS=true, skipping WebSocket connection');
+      return;
+    }
 
     // Check credentials before connecting
     if (!token || !clientId) {
@@ -108,12 +100,45 @@ export class DhanService {
       this.ws = null;
     }
 
-    // Construct connection URL with credentials (standard query parametrization)
-    const url = `${this.wsUrl}/?api_key=${encodeURIComponent(token)}&client_id=${encodeURIComponent(clientId)}`;
-    console.log(`[DhanService WS] Connecting to ${this.wsUrl} (ClientID: ${clientId.substring(0, 4)}***)`);
+    // Construct connection URL and set auth headers for the initial handshake.
+    // Some Dhan endpoints reject query-params in the WS handshake; prefer headers.
+    const url = `${this.wsUrl}`;
+    const wsHeaders: any = {
+      "access-token": token,
+      "client-id": clientId,
+    };
+    console.log(`[DhanService WS] Connecting to ${this.wsUrl} (ClientID: ${clientId.substring(0, 4)}***) using headers`);
 
     try {
-      this.ws = new WebSocket(url);
+      // Pass credentials as headers during websocket handshake to avoid 400 responses
+      // Include common headers and origin to match browser handshake expectations
+      const handshakeHeaders = Object.assign({}, wsHeaders, {
+        Origin: "https://api.dhan.co",
+        "User-Agent": "tradebulsw2/1.0 (Node)",
+        // Provide multiple header variants in case the server expects a different casing/format
+        "client_id": clientId,
+        "clientid": clientId,
+        "clientId": clientId,
+        "Client-Id": clientId,
+        "access_token": token,
+        Authorization: `Bearer ${token}`,
+        api_key: token,
+      });
+
+      // Some implementations require `api_key` and `client_id` as query params
+      const urlWithQuery = `${url}/?api_key=${encodeURIComponent(token)}&client_id=${encodeURIComponent(clientId)}`;
+      this.ws = new WebSocket(urlWithQuery, { headers: handshakeHeaders } as any);
+
+      // Capture non-101 upgrade responses for diagnostics
+      (this.ws as any).on && (this.ws as any).on("unexpected-response", (req: any, res: any) => {
+        console.error(`❌ [DhanService WS] Unexpected upgrade response: ${res.statusCode} ${res.statusMessage}`);
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk: any) => (body += chunk));
+        res.on("end", () => {
+          console.error("❌ [DhanService WS] Upgrade response body:", body);
+        });
+      });
 
       this.ws.on("open", () => {
         console.log("✅ [DhanService WS] Connection established successfully!");
@@ -233,18 +258,19 @@ export class DhanService {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
     }
-
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error(`❌ [DhanService WS] Max reconnect attempts (${this.maxReconnectAttempts}) reached. Auto-reconnection aborted.`);
       return;
     }
 
     this.reconnectAttempts++;
-    console.log(`🔄 [DhanService WS] Reconnect scheduled in ${this.reconnectInterval / 1000}s (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-    
+    // Exponential backoff for reconnects
+    const delay = Math.min(this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1), 600000); // cap 10 minutes
+    console.log(`🔄 [DhanService WS] Reconnect scheduled in ${Math.round(delay / 1000)}s (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+
     this.reconnectTimeout = setTimeout(() => {
       this.connectWebSocket();
-    }, this.reconnectInterval);
+    }, delay);
   }
 
   /**
@@ -295,6 +321,63 @@ export class DhanService {
     }
 
     throw apiError;
+  }
+
+  /**
+   * Generic request helper with retry/backoff for transient Dhan API failures
+   */
+  private async requestWithRetry(method: string, url: string, data?: any, headers?: any) {
+    let attempt = 0;
+    while (attempt < this.maxApiRetries) {
+      attempt++;
+      try {
+        console.debug(`[DhanService] [Attempt ${attempt}] ${method.toUpperCase()} ${url} payload=${data ? JSON.stringify(data) : "-"}`);
+        const resp = await axios.request({
+          method: method as any,
+          url,
+          data,
+          headers,
+          timeout: 10000,
+        });
+
+        // If API returns custom failed status, handle known transient codes
+        if (resp.data && resp.data.status === "failed") {
+          const codeMap = resp.data.data || {};
+          const codes = Object.keys(codeMap);
+          // Common transient codes: 805 (rate limit), 811 (invalid expiry) is not transient
+          if (codes.includes("805") && attempt < this.maxApiRetries) {
+            const delay = this.baseRetryDelay * attempt;
+            console.warn(`[DhanService] Rate-limited (805). Retrying after ${delay}ms...`);
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+          // For other failures, throw to be handled
+          const err: any = new Error("Dhan API returned failed status");
+          err.response = { status: 400, data: resp.data };
+          throw err;
+        }
+
+        return resp.data;
+      } catch (err: any) {
+        // Decide whether to retry
+        const isRetryableStatus = err?.response && (err.response.status === 429 || err.response.status >= 500);
+        const isNetworkError = err?.code === 'ECONNABORTED' || err?.code === 'ECONNREFUSED' || err?.request;
+
+        if ((isRetryableStatus || isNetworkError) && attempt < this.maxApiRetries) {
+          const delay = this.baseRetryDelay * attempt;
+          console.warn(`[DhanService] Request error (attempt ${attempt}): ${err.message}. Retrying in ${delay}ms...`);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+
+        // Exhausted retries or non-retryable error
+        this.handleApiError(url, err);
+      }
+    }
+    // If we somehow exit loop without returning or throwing, throw generic error
+    const e: any = new Error("Dhan API request failed after retries");
+    e.statusCode = 500;
+    throw e;
   }
 }
 

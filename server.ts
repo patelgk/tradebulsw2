@@ -10,7 +10,6 @@ import fs from 'fs';
 import * as dotenv from 'dotenv';
 import WebSocket from 'ws';
 import mongoose from 'mongoose';
-import protobuf from "protobufjs";
 import { v4 as uuidv4 } from 'uuid';
 import nodemailer from 'nodemailer';
 import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction } from './db.js';
@@ -433,6 +432,11 @@ class DhanServerManager {
   }
 
   connect() {
+    if (process.env.DISABLE_DHAN_WS === 'true') {
+      console.log('[Dhan Server] DISABLE_DHAN_WS=true, skipping Dhan WebSocket connection');
+      return;
+    }
+
     const activeProvider = marketSettings.providers.find(p => p.id === 'dhan');
     const clientId = activeProvider?.clientId || process.env.VITE_DHAN_CLIENT_ID || process.env.DHAN_CLIENT_ID || "";
     const accessToken = activeProvider?.accessToken || process.env.VITE_DHAN_ACCESS_TOKEN || process.env.DHAN_ACCESS_TOKEN || "";
@@ -448,9 +452,22 @@ class DhanServerManager {
 
     console.log(`[Dhan Server] Connecting to Dhan WebSocket... (ClientId: ${clientId.substring(0, 4)}***, Token: ${accessToken.substring(0, 4)}***)`);
     const url = "wss://api-feed.dhan.co";
-    
+    const urlWithQuery = `${url}/?api_key=${encodeURIComponent(accessToken)}&client_id=${encodeURIComponent(clientId)}`;
+    const headers = {
+      Origin: "https://api.dhan.co",
+      "User-Agent": "tradebulsw2/1.0 (Node)",
+      "access-token": accessToken,
+      "client-id": clientId,
+      "client_id": clientId,
+      "clientId": clientId,
+      "Client-Id": clientId,
+      "access_token": accessToken,
+      Authorization: `Bearer ${accessToken}`,
+      api_key: accessToken,
+    };
+
     try {
-      this.ws = new WebSocket(url);
+      this.ws = new WebSocket(urlWithQuery, { headers } as any);
 
       this.ws.on('open', () => {
         console.log('✅ [Dhan Server] WebSocket Connected!');
@@ -572,512 +589,6 @@ class DhanServerManager {
   }
 }
 
-// --- Upstox Server Service ---
-class UpstoxServerManager {
-  private ws: WebSocket | null = null;
-  private isConnected = false;
-  private connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'failed' = 'disconnected';
-  private reconnectAttempts = 0;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
-  private protoRoot: protobuf.Root | null = null;
-  private FeedResponse: any = null;
-  private optionInstruments: Record<string, { symbol: string, strike: number, optionType: 'CE' | 'PE' }> = {};
-  private activeSymbolKeys: string[] = [];
-  private lastOptionFetch: Record<string, number> = {};
-  private availableExpiries: Record<string, string[]> = {};
-
-  constructor() {
-    this.initProto();
-  }
-
-  clearCache(displayName: string) {
-    delete this.lastOptionFetch[displayName];
-  }
-
-  getAvailableExpiries(displayName: string) {
-    return this.availableExpiries[displayName] || [];
-  }
-
-  async initProto() {
-    try {
-      const protoPath = path.join(process.cwd(), 'node_modules/upstox-js-sdk/src/feeder/proto/MarketDataFeedV3.proto');
-      this.protoRoot = await protobuf.load(protoPath);
-      this.FeedResponse = this.protoRoot.lookupType("com.upstox.marketdatafeederv3udapi.rpc.proto.FeedResponse");
-      console.log('✅ [Upstox Server] Protobuf initialized');
-    } catch (err) {
-      console.error('❌ [Upstox Server] Protobuf init failed:', err);
-    }
-  }
-
-  isConnectedStatus() {
-    return this.isConnected;
-  }
-
-  getConnectionStatus() {
-    return this.connectionStatus;
-  }
-
-  async getHistory(symbol: string, interval: string) {
-    try {
-      const upstoxKey = SYMBOL_MAP[symbol];
-
-      if (!upstoxKey) {
-        console.warn(`[Upstox Server] No instrument key mapping found for ${symbol}`);
-        return null;
-      }
-
-      const provider = marketSettings.providers.find(p => p.id === 'upstox');
-      if (!provider?.accessToken) {
-        console.warn(`[Upstox Server] Cannot fetch history for ${symbol}: No access token found.`);
-        return null;
-      }
-
-      const upstoxInterval = {
-        '1m': '1minute',
-        '3m': '3minute',
-        '5m': '5minute',
-        '15m': '15minute',
-        '30m': '30minute',
-        '1h': '60minute',
-        '1D': 'day'
-      }[interval] || '5minute';
-
-      const toDate = new Date().toISOString().split('T')[0];
-      const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      console.log(`[Upstox Server] Fetching history for ${symbol} (${upstoxKey})...`);
-      const url = `https://api.upstox.com/v2/historical-candle/${encodeURIComponent(upstoxKey)}/${upstoxInterval}/${toDate}/${fromDate}`;
-      const res = await axios.get(url, {
-        headers: { 'Authorization': `Bearer ${provider.accessToken}`, 'Accept': 'application/json' }
-      });
-
-      if (res.data?.data?.candles) {
-        return res.data.data.candles.map((c: any) => ({
-          time: c[0],
-          open: c[1],
-          high: c[2],
-          low: c[3],
-          close: c[4],
-          volume: c[5]
-        })).reverse(); // Upstox returns newest first
-      }
-      return null;
-    } catch (err: any) {
-      console.error(`[Upstox Server] History fetch failed for ${symbol}:`, err.response?.data || err.message);
-      return null;
-    }
-  }
-
-  async fetchExpiries(displayName: string, accessToken: string) {
-    try {
-      const upstoxKey = SYMBOL_MAP[displayName];
-
-      if (!upstoxKey) {
-        console.error(`[Upstox Server] No instrument key mapping found for ${displayName}`);
-        return [];
-      }
-
-      if (!accessToken) {
-        console.warn(`[Upstox Server] No access token provided for fetchExpiries(${displayName})`);
-        return [];
-      }
-
-      const url = `https://api.upstox.com/v2/market-quote/expiry-dates?instrument_key=${encodeURIComponent(upstoxKey)}`;
-      console.log(`[Upstox Server] Fetching expiries for ${displayName} (${upstoxKey})`);
-      console.log(`[Upstox Server] API Headers: { Authorization: 'Bearer ${accessToken.substring(0, 10)}...', Accept: 'application/json' }`);
-      
-      const res = await axios.get(url, {
-        headers: { 
-          'Authorization': `Bearer ${accessToken}`, 
-          'Accept': 'application/json' 
-        }
-      });
-
-      if (res.data?.data) {
-        this.availableExpiries[displayName] = res.data.data;
-        return res.data.data;
-      }
-      return [];
-    } catch (err: any) {
-      const errorData = err.response?.data;
-      console.error(`[Upstox Server] Failed to fetch expiries for ${displayName}:`, JSON.stringify(errorData || err.message));
-      
-      // If unauthorized, log special warning
-      if (err.response?.status === 401 || errorData?.errors?.[0]?.errorCode === 'UDAPI100012') {
-        console.error(`[Upstox Server] Token invalidated for ${displayName}. User needs to re-authenticate via OAuth.`);
-      }
-      
-      return [];
-    }
-  }
-
-  async fetchOptionChain(displayName: string, accessToken: string) {
-    try {
-      if (!accessToken) {
-        console.warn(`[Upstox Server] No access token provided for fetchOptionChain(${displayName})`);
-        return;
-      }
-
-      const now = Date.now();
-      if (this.lastOptionFetch[displayName] && now - this.lastOptionFetch[displayName] < 300000) {
-        return; 
-      }
-
-      const upstoxKey = SYMBOL_MAP[displayName];
-
-      if (!upstoxKey) {
-        console.error(`[Upstox Server] No instrument key mapping found for ${displayName}`);
-        return;
-      }
-
-      // Ensure we have available expiries
-      if (!this.availableExpiries[displayName] || this.availableExpiries[displayName].length === 0) {
-        await this.fetchExpiries(displayName, accessToken);
-      }
-
-      let expiry = marketData[displayName].expiry;
-      const expiries = this.availableExpiries[displayName] || [];
-      
-      // If our calculated expiry isn't in Upstox list, use their first one
-      if (expiries.length > 0 && !expiries.includes(expiry)) {
-        console.log(`[Upstox Server] Expiry ${expiry} not found for ${displayName}. Using available: ${expiries[0]}`);
-        expiry = expiries[0];
-        marketData[displayName].expiry = expiry;
-      }
-
-      if (!expiry && expiries.length > 0) {
-        expiry = expiries[0];
-        marketData[displayName].expiry = expiry;
-      }
-
-      if (!expiry) {
-        console.warn(`[Upstox Server] No expiry found for ${displayName}, skipping option chain fetch.`);
-        return;
-      }
-
-      const url = `https://api.upstox.com/v2/market-quote/option-chain?instrument_key=${encodeURIComponent(upstoxKey)}&expiry_date=${expiry}`;
-      console.log(`[Upstox Server] Fetching option chain for ${displayName} (${upstoxKey}) with expiry ${expiry}`);
-      
-      const res = await axios.get(url, {
-        headers: { 
-          'Authorization': `Bearer ${accessToken}`, 
-          'Accept': 'application/json' 
-        }
-      });
-
-      if (res.data?.status === 'error') {
-        console.error(`[Upstox Server] API Error fetching option chain for ${displayName}:`, JSON.stringify(res.data));
-        return;
-      }
-
-      if (res.data && res.data.data) {
-        const chain = res.data.data;
-        console.log(`[Upstox Server] Received ${chain.length} strikes for ${displayName}`);
-        const newInstruments: string[] = [];
-        
-        // Clean up old instruments for this display name
-        for (const key in this.optionInstruments) {
-          if (this.optionInstruments[key].symbol === displayName) {
-            delete this.optionInstruments[key];
-          }
-        }
-
-        const updatedOptionChain: any[] = [];
-
-        chain.forEach((item: any) => {
-          const strike = item.strike_price;
-          const callKey = item.call_options?.instrument_key;
-          const putKey = item.put_options?.instrument_key;
-
-          if (callKey) {
-            this.optionInstruments[callKey] = { symbol: displayName, strike, optionType: 'CE' };
-            newInstruments.push(callKey);
-          }
-          if (putKey) {
-            this.optionInstruments[putKey] = { symbol: displayName, strike, optionType: 'PE' };
-            newInstruments.push(putKey);
-          }
-
-          updatedOptionChain.push({
-            strike,
-            ce_ltp: item.call_options?.market_data?.ltp || 0,
-            ce_oi: item.call_options?.market_data?.oi || 0,
-            ce_oi_change: 0, 
-            pe_ltp: item.put_options?.market_data?.ltp || 0,
-            pe_oi: item.put_options?.market_data?.oi || 0,
-            pe_oi_change: 0,
-            ce_key: callKey,
-            pe_key: putKey
-          });
-        });
-
-        marketData[displayName].optionChain = updatedOptionChain.sort((a, b) => a.strike - b.strike);
-        this.lastOptionFetch[displayName] = now;
-        
-        // Re-subscribe to include new options
-        this.subscribeToSymbols();
-      }
-    } catch (err: any) {
-      const errorData = err.response?.data;
-      console.error(`[Upstox Server] Failed to fetch option chain for ${displayName}:`, JSON.stringify(errorData || err.message));
-      
-      if (err.response?.status === 401 || errorData?.errors?.[0]?.errorCode === 'UDAPI100012') {
-        console.error(`[Upstox Server] Token invalidated for ${displayName} during option chain fetch.`);
-      }
-    }
-  }
-
-  private getReconnectDelay() {
-    const baseDelay = 2000; // 2 seconds
-    const maxDelay = 60000; // 60 seconds
-    const delay = Math.min(baseDelay * Math.pow(2, this.reconnectAttempts), maxDelay);
-    const jitter = Math.random() * 2000; // Add up to 2 seconds of jitter
-    return delay + jitter;
-  }
-
-  async connect() {
-    try {
-      this.connectionStatus = 'connecting';
-      
-      // Prioritize environment token if provided, fallback to DB
-      let accessToken = process.env.UPSTOX_ACCESS_TOKEN;
-      
-      if (!accessToken) {
-        const marketDoc = await Setting.findOne({ id: 'market' });
-        const activeProvider = marketDoc?.data?.providers?.find((p: any) => p.id === 'upstox');
-        accessToken = activeProvider?.accessToken;
-      }
-      
-      if (!accessToken) {
-        console.log('[Upstox Server] No access token found in DB or process.env. Skipping connection.');
-        this.connectionStatus = 'failed';
-        return;
-      }
-
-      console.log(`[Upstox Server] Connecting with token: ${accessToken.substring(0, 10)}... (Length: ${accessToken.length})`);
-
-      if (this.ws) {
-        this.ws.terminate();
-      }
-
-      // Fetch initial option chains before connecting WS
-      const symbols = ['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty', 'RELIANCE'];
-      for (const symbol of symbols) {
-        await this.fetchOptionChain(symbol, accessToken);
-      }
-
-      // 1. Authorize to get the WebSocket URL
-      console.log('[Upstox Server] Authorizing to get WebSocket URL...');
-      const authRes = await axios.get('https://api.upstox.com/v2/feed/market-data-feed/authorize', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Accept': 'application/json'
-        },
-        timeout: 10000
-      });
-
-      const wsUrl = authRes.data.data.authorizedRedirectUri;
-      console.log('[Upstox Server] Connecting to Upstox WebSocket:', wsUrl);
-
-      this.ws = new WebSocket(wsUrl);
-
-      this.ws.on('open', () => {
-        console.log('✅ [Upstox Server] WebSocket Connected!');
-        this.isConnected = true;
-        this.connectionStatus = 'connected';
-        this.reconnectAttempts = 0;
-        this.subscribeToSymbols();
-        
-        // Notify all clients about status change
-        io.emit("marketStatus", {
-           provider: 'upstox',
-           status: 'connected'
-        });
-      });
-
-      this.ws.on('message', (data: Buffer) => {
-        this.handleMessage(data);
-      });
-
-      this.ws.on('error', (error) => {
-        console.error("❌ [Upstox Server] WebSocket Error:", error.message);
-        this.connectionStatus = 'failed';
-      });
-
-      this.ws.on('close', () => {
-        this.isConnected = false;
-        this.connectionStatus = 'disconnected';
-        const delay = this.getReconnectDelay();
-        console.log(`🔴 [Upstox Server] WebSocket Closed. Reconnecting in ${Math.round(delay/1000)}s... (Attempt: ${this.reconnectAttempts + 1})`);
-        
-        if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-        this.reconnectTimeout = setTimeout(() => {
-          this.reconnectAttempts++;
-          this.connect();
-        }, delay);
-
-        io.emit("marketStatus", {
-           provider: 'upstox',
-           status: 'disconnected',
-           nextRetryIn: delay
-        });
-      });
-    } catch (err: any) {
-      this.isConnected = false;
-      this.connectionStatus = 'failed';
-      const delay = this.getReconnectDelay();
-      const errorData = err.response?.data;
-      const errorMessage = errorData?.errors?.[0]?.message || errorData?.message || err.message;
-      const errorCode = errorData?.errorCode || err.response?.status;
-      
-      console.error(`[Upstox Server] Connection failed: ${errorMessage} (Code: ${errorCode})`, errorData || '');
-      console.log(`[Upstox Server] Retrying in ${Math.round(delay/1000)}s...`);
-      
-      if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = setTimeout(() => {
-        this.reconnectAttempts++;
-        this.connect();
-      }, delay);
-
-      io.emit("marketStatus", {
-         provider: 'upstox',
-         status: 'failed',
-         error: errorMessage,
-         errorCode: errorCode,
-         nextRetryIn: delay
-      });
-    }
-  }
-
-  private subscribeToSymbols() {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-    const indexSymbols = Object.values(SYMBOL_MAP);
-
-    const optionKeys = Object.keys(this.optionInstruments);
-    
-    // Upstox has a limit of 100 instruments per socket usually.
-    // If we have more, we might need to prioritize ATM strikes or multiple sockets.
-    const keysToSubscribe = [...indexSymbols, ...optionKeys].slice(0, 500);
-
-    const data = {
-      guid: uuidv4(),
-      method: "sub",
-      data: {
-        mode: "full", // Full mode for OI and Greeks
-        instrumentKeys: keysToSubscribe
-      }
-    };
-
-    this.ws.send(JSON.stringify(data));
-    console.log(`[Upstox Server] Sent subscription for ${keysToSubscribe.length} instruments (mode: full)`);
-  }
-
-  private handleMessage(data: Buffer) {
-    if (!this.FeedResponse) return;
-
-    try {
-      const message = this.FeedResponse.decode(data);
-      const feeds = (message as any).feeds;
-      if (!feeds) return;
-
-      const nameMap: Record<string, string> = {};
-      for (const [name, key] of Object.entries(SYMBOL_MAP)) {
-        nameMap[key] = name;
-        nameMap[key.toUpperCase()] = name; // Add uppercase mapping for robustness
-      }
-
-      const socketUpdates: Record<string, any> = {};
-      const feedCount = Object.keys(feeds).length;
-      if (feedCount > 0 && Math.random() < 0.01) { // Log 1% of messages to avoid spam
-        console.log(`[Upstox Server] Received ${feedCount} feeds. Sample key: ${Object.keys(feeds)[0]}`);
-      }
-
-      for (const [key, feed] of Object.entries(feeds)) {
-        // Handle Map-based Update (Indices and Stocks)
-        if (nameMap[key]) {
-          const displayName = nameMap[key];
-          const feedAny = feed as any;
-          const ff = feedAny.fullFeed?.indexFF || feedAny.fullFeed?.marketFF;
-          const ltpData = ff?.ltpc || feedAny.ltpc;
-          
-          if (ltpData && ltpData.ltp) {
-            marketData[displayName].price = ltpData.ltp;
-            marketData[displayName].change = ltpData.ltp - (ltpData.cp || marketData[displayName].price);
-            marketData[displayName].dataSource = 'Upstox';
-            marketData[displayName].timestamp = new Date().toLocaleTimeString('en-IN', { hour12: false });
-            socketUpdates[displayName] = marketData[displayName];
-          }
-        }
-        
-        // Handle Option Update
-        if (this.optionInstruments[key]) {
-          const { symbol, strike, optionType } = this.optionInstruments[key];
-          const ff = (feed as any).fullFeed?.marketFF;
-          
-          if (ff) {
-            const ltp = ff.ltpc?.ltp;
-            const oi = ff.marketOI;
-            
-            if (marketData[symbol] && marketData[symbol].optionChain) {
-              const chainItem = marketData[symbol].optionChain.find(item => item.strike === strike);
-              if (chainItem) {
-                let changed = false;
-                if (optionType === 'CE') {
-                  if (ltp !== undefined && ltp !== 0 && chainItem.ce_ltp !== ltp) {
-                    chainItem.ce_ltp = ltp;
-                    changed = true;
-                  }
-                  if (oi !== undefined && oi !== 0 && chainItem.ce_oi !== oi) {
-                    if (chainItem.ce_oi && chainItem.ce_oi !== oi) {
-                      chainItem.ce_oi_change = (chainItem.ce_oi_change || 0) + (oi - chainItem.ce_oi);
-                    }
-                    chainItem.ce_oi = oi;
-                    changed = true;
-                  }
-                } else {
-                  if (ltp !== undefined && ltp !== 0 && chainItem.pe_ltp !== ltp) {
-                    chainItem.pe_ltp = ltp;
-                    changed = true;
-                  }
-                  if (oi !== undefined && oi !== 0 && chainItem.pe_oi !== oi) {
-                    if (chainItem.pe_oi && chainItem.pe_oi !== oi) {
-                      chainItem.pe_oi_change = (chainItem.pe_oi_change || 0) + (oi - chainItem.pe_oi);
-                    }
-                    chainItem.pe_oi = oi;
-                    changed = true;
-                  }
-                }
-                
-                if (changed) {
-                  socketUpdates[symbol] = marketData[symbol];
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if (Object.keys(socketUpdates).length > 0) {
-        io.emit("marketUpdate", socketUpdates);
-      }
-    } catch (e) {
-      // console.error('[Upstox Server] Error decoding message:', e);
-    }
-  }
-
-  stop() {
-    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    if (this.ws) {
-      this.ws.removeAllListeners();
-      this.ws.terminate();
-      this.ws = null;
-    }
-    this.isConnected = false;
-  }
-}
-
-const upstoxManager = new UpstoxServerManager();
 const dhanManager = new DhanServerManager();
 
 let lastFetchTime = 0;
@@ -1092,7 +603,7 @@ let nseCookies = '';
 interface MarketProvider {
   id: string;
   name: string;
-  type: 'dhan' | 'upstox' | 'custom';
+  type: 'dhan' | 'custom';
   clientId?: string;
   accessToken?: string;
   apiKey?: string;
@@ -1102,67 +613,50 @@ interface MarketProvider {
 }
 
 let marketSettings = {
-  activeProviderId: 'upstox',
+  activeProviderId: 'dhan',
   providers: [
-    { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },
-    { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: process.env.UPSTOX_CLIENT_ID || '2e24fff4-7138-4474-bee8-a8c568a0f491', apiSecret: process.env.UPSTOX_CLIENT_SECRET || 'evlgprx0bk', accessToken: process.env.UPSTOX_ACCESS_TOKEN || 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1RkNKTVoiLCJqdGkiOiI2OWY5YTE1NjJlMzM1ZTRkOTFjMGYzOTkiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3Nzk2NzQ0NiwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzc4MDE4NDAwfQ.NSUGMJBPGfSv-ERNGmBe0RhST7tgsdiwU0NxDjtdAz4' }
+    { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: process.env.VITE_DHAN_CLIENT_ID || '', accessToken: process.env.VITE_DHAN_ACCESS_TOKEN || process.env.DHAN_ACCESS_TOKEN || '' }
   ] as MarketProvider[]
 };
 
-let prevActiveProviderId = 'upstox';
+let prevActiveProviderId = 'dhan';
 
 const updateSettings = async () => {
   try {
     const marketDoc = await Setting.findOne({ id: 'market' });
     if (marketDoc) {
       const data = marketDoc.data;
-      if (data.marketApiProvider && !data.activeProviderId) {
-        marketSettings = {
-          activeProviderId: data.marketApiProvider === 'yahoo' ? 'upstox' : data.marketApiProvider,
-          providers: [
-            { id: 'dhan', name: 'Dhan API', type: 'dhan', clientId: data.dhanClientId || '', accessToken: data.dhanAccessToken || '' },
-            { id: 'upstox', name: 'Upstox API', type: 'upstox', apiKey: process.env.UPSTOX_CLIENT_ID || '', apiSecret: process.env.UPSTOX_CLIENT_SECRET || '', accessToken: data.upstoxAccessToken || process.env.UPSTOX_ACCESS_TOKEN || '' }
-          ]
-        };
-      } else {
-        marketSettings = data;
-      }
+      const dhapi = {
+        id: 'dhan',
+        name: 'Dhan API',
+        type: 'dhan' as const,
+        clientId: data.dhanClientId || process.env.VITE_DHAN_CLIENT_ID || process.env.DHAN_CLIENT_ID || '',
+        accessToken: data.dhanAccessToken || process.env.VITE_DHAN_ACCESS_TOKEN || process.env.DHAN_ACCESS_TOKEN || ''
+      };
 
-      // Automatically manage Dhan & Upstox connection based on settings
+      marketSettings = {
+        activeProviderId: 'dhan',
+        providers: [dhapi]
+      };
+
       if (marketSettings.activeProviderId !== prevActiveProviderId) {
         console.log(`[Market Feed] Active provider changed from ${prevActiveProviderId} to ${marketSettings.activeProviderId}`);
-        
-        // Stop previous
         if (prevActiveProviderId === 'dhan') dhanManager.stop();
-        if (prevActiveProviderId === 'upstox') upstoxManager.stop();
-
-        // Start new or ensure connected
-        if (marketSettings.activeProviderId === 'dhan' && !dhanManager.isConnectedStatus()) {
+        if (!dhanManager.isConnectedStatus() && process.env.DISABLE_DHAN_WS !== 'true') {
           dhanManager.connect();
         }
-        if (marketSettings.activeProviderId === 'upstox' && !upstoxManager.isConnectedStatus() && upstoxManager.getConnectionStatus() !== 'connecting') {
-          upstoxManager.connect();
-        }
-        
         prevActiveProviderId = marketSettings.activeProviderId;
       } else {
-        // Even if providerId hasn't changed, ensure it stays connected if it's the active one
-        if (marketSettings.activeProviderId === 'upstox' && !upstoxManager.isConnectedStatus() && upstoxManager.getConnectionStatus() !== 'connecting') {
-          // Only auto-connect if we have a token
-          const upstoxProv = marketSettings.providers.find(p => p.id === 'upstox');
-          if (upstoxProv?.accessToken) {
-             upstoxManager.connect();
-          }
+        if (!dhanManager.isConnectedStatus() && process.env.DISABLE_DHAN_WS !== 'true') {
+          dhanManager.connect();
         }
       }
     } else {
       console.log('[Market Feed] Settings document not found. Creating defaults...');
       const defaultSettings = {
-        activeProviderId: process.env.VITE_ACTIVE_PROVIDER || 'upstox',
+        activeProviderId: 'dhan',
         providers: [
-          { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },
-          { id: 'upstox', name: 'Upstox API', type: 'upstox' as const, apiKey: process.env.UPSTOX_CLIENT_ID || '2e24fff4-7138-4474-bee8-a8c568a0f491', apiSecret: process.env.UPSTOX_CLIENT_SECRET || 'evlgprx0bk', accessToken: process.env.UPSTOX_ACCESS_TOKEN || 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1RkNKTVoiLCJqdGkiOiI2OWY5YTE1NjJlMzM1ZTRkOTFjMGYzOTkiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3Nzk2NzQ0NiwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzc4MDE4NDAwfQ.NSUGMJBPGfSv-ERNGmBe0RhST7tgsdiwU0NxDjtdAz4' }
-        ]
+          { id: 'dhan', name: 'Dhan API', type: 'dhan' as const, clientId: '', accessToken: '' },        ]
       };
       await Setting.findOneAndUpdate({ id: 'market' }, { data: defaultSettings }, { upsert: true });
     }
@@ -1190,11 +684,6 @@ async function fetchMarketData(force = false) {
       lastFetchTime = now;
       isFetching = true;
 
-      if (activeProvider) {
-        if (activeProvider.id === 'upstox' && activeProvider.apiSecret && activeProvider.apiSecret.length > 50) {
-          console.warn('[Market Feed] Warning: Upstox API Secret looks like a JWT token. Please check your credentials.');
-        }
-      }
     }
 
     const shouldFetchOptionChain = isRealFetchTime && (force || (now - lastOptionChainFetchTime > 60000));
@@ -1215,30 +704,23 @@ async function fetchMarketData(force = false) {
       }
 
       if (isRealFetchTime && shouldFetchOptionChain && !quotes?.[displayName]?.optionChain) {
-        if (activeProvider?.type === 'upstox') {
-          const activeUpstoxProvider = marketSettings.providers.find(p => p.id === 'upstox');
-          if (activeUpstoxProvider?.accessToken) {
-            await upstoxManager.fetchOptionChain(displayName, activeUpstoxProvider.accessToken);
-            optionChain = marketData[displayName].optionChain;
-            expiry = marketData[displayName].expiry;
-            fetched = true;
-          }
-        } else if (activeProvider?.type === 'dhan') {
-          const activeDhanProvider = marketSettings.providers.find(p => p.id === 'dhan');
-          if (activeDhanProvider?.accessToken) {
-            await dhanManager.fetchOptionChain(displayName, activeDhanProvider.accessToken);
-            optionChain = marketData[displayName].optionChain;
-            expiry = marketData[displayName].expiry;
-            fetched = true;
-          }
+        // Allow disabling automatic Dhan option-chain fetches via env for development
+        if (process.env.DISABLE_DHAN_AUTOFETCH === 'true') {
+          console.log('[Market Feed] DISABLE_DHAN_AUTOFETCH=true, skipping automatic option-chain fetch');
+        } else {
+        const activeDhanProvider = marketSettings.providers.find(p => p.id === 'dhan');
+        if (activeDhanProvider?.accessToken) {
+          await dhanManager.fetchOptionChain(displayName, activeDhanProvider.accessToken);
+          optionChain = marketData[displayName].optionChain;
+          expiry = marketData[displayName].expiry;
+          fetched = true;
+        }
         }
       }
 
-      const isUpstox = activeProvider?.type === 'upstox';
-      const isUpstoxConnected = upstoxManager.isConnectedStatus();
       const isDhan = activeProvider?.type === 'dhan';
       const isDhanConnected = dhanManager.isConnectedStatus();
-      const isRealTimeProviderActive = (isUpstox && isUpstoxConnected) || (isDhan && isDhanConnected);
+      const isRealTimeProviderActive = isDhan && isDhanConnected;
 
       if (!fetched && isMarketOpen() && !isRealTimeProviderActive) {
         const tickDelta = (Math.random() - 0.5) * (price * 0.0002);
@@ -1270,7 +752,7 @@ async function fetchMarketData(force = false) {
       if (fetched) {
         currentDataSource = activeProvider?.name || 'API';
       } else if (isRealTimeProviderActive) {
-        currentDataSource = isUpstox ? 'Upstox' : 'Dhan';
+        currentDataSource = 'Dhan';
       } else {
         currentDataSource = 'Simulated';
       }
@@ -1278,8 +760,6 @@ async function fetchMarketData(force = false) {
       let expiries: string[] = [];
       if (activeProvider?.type === 'dhan') {
         expiries = dhanManager.getAvailableExpiries(displayName);
-      } else if (activeProvider?.type === 'upstox') {
-        expiries = upstoxManager.getAvailableExpiries(displayName);
       }
 
       if (!expiries || expiries.length === 0) {
@@ -1368,18 +848,15 @@ app.get("/api/debug/market-status", (req, res) => {
     providers: marketSettings.providers.map(p => ({
       id: p.id,
       name: p.name,
-      hasKey: !!(p.apiKey || p.clientId),
-      hasSecret: !!(p.apiSecret || p.accessToken),
-      secretLength: p.apiSecret?.length || 0,
+      hasKey: !!p.clientId,
+      hasSecret: !!p.accessToken,
       tokenLength: p.accessToken?.length || 0,
       tokenStart: p.accessToken ? p.accessToken.substring(0, 10) + '...' : null
     })),
-    upstoxStatus: upstoxManager.getConnectionStatus(),
-    upstoxConnected: upstoxManager.isConnectedStatus(),
+    dhanConnected: dhanManager.isConnectedStatus(),
     env: {
-      hasUpstoxKey: !!process.env.UPSTOX_CLIENT_ID,
-      hasUpstoxSecret: !!process.env.UPSTOX_CLIENT_SECRET,
-      hasUpstoxToken: !!process.env.UPSTOX_ACCESS_TOKEN
+      hasDhanClientId: !!process.env.VITE_DHAN_CLIENT_ID || !!process.env.DHAN_CLIENT_ID,
+      hasDhanAccessToken: !!process.env.VITE_DHAN_ACCESS_TOKEN || !!process.env.DHAN_ACCESS_TOKEN
     }
   });
 });
@@ -1389,18 +866,8 @@ app.get("/api/market/status", (req, res) => {
     activeProvider: marketSettings.activeProviderId,
     dhan: {
       connected: dhanManager.isConnectedStatus()
-    },
-    upstox: {
-      connected: upstoxManager.isConnectedStatus(),
-      status: upstoxManager.getConnectionStatus()
     }
   });
-});
-
-app.post("/api/market/upstox/connect", async (req, res) => {
-  console.log('[API] Triggering Upstox connection...');
-  upstoxManager.connect();
-  res.json({ status: "Upstox connection triggered on server" });
 });
 
 app.get("/api/market/dhan/status", (req, res) => {
@@ -1719,123 +1186,7 @@ app.post("/api/transactions", async (req, res) => {
   }
 });
 
-// --- Upstox OAuth Routes ---
-app.get("/api/market/upstox/auth-url", (req, res) => {
-  const apiKey = process.env.UPSTOX_CLIENT_ID || process.env.CLIENT_ID;
-  const redirectUri = process.env.UPSTOX_REDIRECT_URI || process.env.REDIRECT_URI || "https://tradebulsw2.onrender.com/api/market/upstox/callback";
-  
-  if (!apiKey) {
-    return res.status(400).json({ error: "UPSTOX_CLIENT_ID not configured" });
-  }
 
-  const authUrl = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${apiKey}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-  console.log(`[Upstox OAuth] Generated Auth URL with Redirect URI: ${redirectUri}`);
-  res.json({ url: authUrl });
-});
-
-app.get("/api/market/upstox/callback", async (req, res) => {
-  const { code } = req.query;
-  const apiKey = process.env.UPSTOX_CLIENT_ID || process.env.CLIENT_ID;
-  const apiSecret = process.env.UPSTOX_CLIENT_SECRET || process.env.CLIENT_SECRET;
-  const redirectUri = process.env.UPSTOX_REDIRECT_URI || process.env.REDIRECT_URI || "https://tradebulsw2.onrender.com/api/market/upstox/callback";
-
-  if (!code || !apiKey || !apiSecret) {
-    console.error("[Upstox OAuth] Missing configuration:", { hasCode: !!code, hasApiKey: !!apiKey, hasApiSecret: !!apiSecret });
-    return res.status(400).send("Missing code or Upstox configuration (CLIENT_ID/CLIENT_SECRET) in environment");
-  }
-
-  try {
-    console.log(`[Upstox OAuth] Exchanging code for token... Code: ${String(code).substring(0, 5)}***`);
-    console.log(`[Upstox OAuth] Using redirect_uri: ${redirectUri}`);
-    
-    const tokenParams = new URLSearchParams({
-      code: code as string,
-      client_id: apiKey!,
-      client_secret: apiSecret!,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code'
-    });
-
-    const response = await axios.post('https://api.upstox.com/v2/login/authorization/token', 
-      tokenParams.toString(),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
-        }
-      }
-    );
-
-    const { access_token } = response.data;
-    console.log(`[Upstox OAuth] Token received successfully. Length: ${access_token?.length}`);
-    
-    // Update settings in MongoDB - More robust handling
-    console.log("[Upstox OAuth] Updating MongoDB settings...");
-    const marketDoc = await Setting.findOne({ id: 'market' });
-    let marketDataObj = marketDoc?.data || { activeProviderId: 'upstox', providers: [] };
-    
-    if (!marketDataObj.providers) marketDataObj.providers = [];
-    
-    let upstoxProvider = marketDataObj.providers.find((p: any) => p.id === 'upstox');
-    if (upstoxProvider) {
-      upstoxProvider.accessToken = access_token;
-      upstoxProvider.apiKey = apiKey;
-      upstoxProvider.apiSecret = apiSecret;
-      console.log("[Upstox OAuth] Updated existing provider record.");
-    } else {
-      marketDataObj.providers.push({
-        id: 'upstox',
-        name: 'Upstox',
-        type: 'upstox',
-        accessToken: access_token,
-        apiKey: apiKey,
-        apiSecret: apiSecret
-      });
-      console.log("[Upstox OAuth] Created new provider record.");
-    }
-    marketDataObj.activeProviderId = 'upstox';
-    
-    await Setting.findOneAndUpdate(
-      { id: 'market' },
-      { $set: { data: marketDataObj } },
-      { upsert: true, new: true }
-    );
-
-    // Stop and re-connect Upstox manager to use the new token
-    upstoxManager.stop();
-    setTimeout(() => {
-       console.log("[Upstox OAuth] Triggering automatic connection with new token...");
-       upstoxManager.connect();
-    }, 1500);
-
-    res.setHeader('Content-Type', 'text/html');
-    res.send(`
-      <html>
-        <head><title>Upstox Auth Success</title></head>
-        <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0f172a; color: white;">
-          <div style="background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-            <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
-            <h1 style="color: #10b981; margin-top: 0;">Authentication Successful!</h1>
-            <p style="color: #94a3b8;">Upstox API has been authorized and the session is being initialized.</p>
-            <p style="color: #64748b; font-size: 0.8rem; margin: 1.5rem 0;">This window will close automatically.</p>
-            <button onclick="window.close()" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; cursor: pointer; font-weight: bold; transition: background 0.2s;">Close Now</button>
-          </div>
-          <script>
-            if (window.opener) {
-              window.opener.postMessage({ type: 'UPSTOX_AUTH_SUCCESS' }, '*');
-            }
-            setTimeout(() => window.close(), 3000);
-          </script>
-        </body>
-      </html>
-    `);
-  } catch (error: any) {
-    const errorData = error.response?.data;
-    const errorMsg = errorData?.errors?.[0]?.message || errorData?.message || error.message;
-    console.error('[Upstox OAuth] Token Exchange failed:', JSON.stringify(errorData || error.message));
-    res.status(500).send("Authentication failed: " + errorMsg);
-  }
-});
 
 app.post("/api/market/dhan/connect", async (req, res) => {
   console.log('[API] Triggering Dhan connection...');
@@ -1868,12 +1219,6 @@ app.post("/api/market/expiry", async (req, res) => {
           dhanManager.clearCache(symbol);
           await dhanManager.fetchOptionChain(symbol, activeDhanProvider.accessToken);
         }
-      } else if (activeProvider?.type === 'upstox') {
-        const activeUpstoxProvider = marketSettings.providers.find(p => p.id === 'upstox');
-        if (activeUpstoxProvider?.accessToken) {
-          upstoxManager.clearCache(symbol);
-          await upstoxManager.fetchOptionChain(symbol, activeUpstoxProvider.accessToken);
-        }
       }
       
       io.emit("marketUpdate", { [symbol]: marketData[symbol] });
@@ -1896,11 +1241,7 @@ app.get("/api/market/history/:symbol", async (req, res) => {
     const activeProvider = marketSettings.providers.find(p => p.id === marketSettings.activeProviderId);
     let candles = null;
 
-    if (activeProvider?.type === 'upstox') {
-      candles = await upstoxManager.getHistory(symbol, interval as string);
-    } else if (activeProvider?.type === 'dhan') {
-      candles = await dhanManager.getHistory(symbol, interval as string);
-    }
+    candles = await dhanManager.getHistory(symbol, interval as string);
 
     if (candles && candles.length > 0) {
       return res.json(candles);
@@ -1994,6 +1335,10 @@ async function startServer() {
     }, 5000); // Fetch every 5s instead of 1s to avoid rate limits
   } catch (error) {
     console.error('[Server] Failed to start server:', (error as Error).message);
+    // Exit so that issues (like DB connectivity) are addressed rather than
+    // allowing the server to run in a degraded state and causing buffered
+    // mongoose operations to timeout later.
+    process.exit(1);
   }
 }
 

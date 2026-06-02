@@ -66,14 +66,18 @@ export const Transaction = mongoose.model('Transaction', transactionSchema);
 export const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
-    console.warn('⚠️ MONGODB_URI is not defined. Some features will not work.');
-    return;
+    console.error('❌ MONGODB_URI is not defined. Set MONGODB_URI in your environment or .env file.');
+    throw new Error('MONGODB_URI is not defined');
   }
+
   try {
-    await mongoose.connect(uri);
+    // Use a short server selection timeout so failures surface quickly instead
+    // of letting mongoose buffer operations for a long time.
+    await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 });
     console.log('✅ Connected to MongoDB');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err);
-    // Log but don't exit to allow the server to start for debug/preview
+    // Re-throw so startup fails fast and callers can handle the failure predictably
+    throw err;
   }
 };

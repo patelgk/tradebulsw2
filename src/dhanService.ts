@@ -1,140 +1,305 @@
-"use client";   // ← Yeh line sabse upar hona chahiye!!
+import axios from "axios";
+import WebSocket from "ws";
+import * as dotenv from "dotenv";
+
+dotenv.config();
 
 export class DhanService {
   private ws: WebSocket | null = null;
   private isConnected = false;
-  public onPriceUpdate: ((symbol: string, price: number) => void) | null = null;
-  public onStatusChange: ((status: 'connected' | 'disconnected' | 'connecting' | 'error') => void) | null = null;
+  private reconnectInterval = 5000; // 5 seconds
+  private maxReconnectAttempts = 10;
+  private reconnectAttempts = 0;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
 
-  private clientId = "";
-  private accessToken = "";
-  private statusInterval: any = null;
-
-  private symbols = {
-    'Nifty 50': '13',
-    'Bank Nifty': '25',
-    'Fin Nifty': '27',
-    'Midcap Nifty': '31',
-  };
+  // Dhan API Endpoints
+  private readonly baseUrl = "https://api.dhan.co/v2";
+  private readonly wsUrl = "wss://api-feed.dhan.co";
 
   constructor() {
-    // Handling both Vite and Render/Next.js environment variables
-    this.clientId = import.meta.env.VITE_DHAN_CLIENT_ID || "";
-    this.accessToken = import.meta.env.VITE_DHAN_ACCESS_TOKEN || "";
-    
-    console.log("DhanService initialized with Client ID:", this.clientId ? "Present" : "Missing");
+    // Get credentials from environment variables
+    const token = process.env.DHAN_ACCESS_TOKEN;
+    const clientId = process.env.DHAN_CLIENT_ID;
+
+    if (!token || !clientId) {
+      console.warn("⚠️ [DhanService] DHAN_ACCESS_TOKEN or DHAN_CLIENT_ID environment variable is missing.");
+    }
   }
 
-  isConfigured() {
-    return !!this.clientId && !!this.accessToken;
-  }
-
-  connect() {
-    // Client-side direct connection disabled to fix WebSocket errors in iframe.
-    // Dhan is now handled server-side to bypass network restrictions and protect keys.
-    console.log("ℹ️ Dhan connection is now handled server-side.");
-    this.onStatusChange?.('connecting');
-    
-    // Check server status periodically
-    const checkStatus = async () => {
-      try {
-        const res = await fetch('/api/market/dhan/status');
-        if (res.ok) {
-          const contentType = res.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const data = await res.json();
-            if (data.wsConnected) {
-              this.isConnected = true;
-              this.onStatusChange?.('connected');
-            } else {
-              this.isConnected = false;
-              this.onStatusChange?.('disconnected');
-            }
-          } else {
-            console.warn('[DhanService] Received non-JSON status response');
-            this.onStatusChange?.('error');
-          }
-        } else {
-          this.onStatusChange?.('error');
-        }
-      } catch (e) {
-        this.onStatusChange?.('error');
-      }
+  /**
+   * Helper to validate if credentials exist
+   */
+  private getCredentials() {
+    return {
+      token: (process.env.VITE_DHAN_ACCESS_TOKEN || process.env.DHAN_ACCESS_TOKEN || "").trim(),
+      clientId: (process.env.VITE_DHAN_CLIENT_ID || process.env.DHAN_CLIENT_ID || "").trim(),
     };
-
-    checkStatus();
-    this.statusInterval = setInterval(checkStatus, 10000);
   }
 
-  private sendAuthentication() {
+  private validateCredentials() {
+    const { token, clientId } = this.getCredentials();
+
+    if (!token || !clientId) {
+      const error: any = new Error("Invalid or missing Dhan API credentials (DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID)");
+      error.statusCode = 401;
+      throw error;
+    }
+    return { token, clientId };
+  }
+
+  /**
+   * Fetch Funds Details from Dhan API
+   * Endpoint: GET /v2/fundlimit
+   */
+  async getFunds() {
+    const { token, clientId } = this.validateCredentials();
+
+    try {
+      console.log("[DhanService] Fetching fund details from Dhan API...");
+      const response = await axios.get(`${this.baseUrl}/fundlimit`, {
+        headers: {
+          "access-token": token,
+          "client-id": clientId,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000, // 10s timeout
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.handleApiError("getFunds", error);
+    }
+  }
+
+  /**
+   * Fetch Option Chain from Dhan API
+   * Endpoint: POST /v2/optionchain
+   */
+  async getOptionChain(payload: { UnderlyingScrip: number; UnderlyingSeg: string; Expiry: string }) {
+    const { token, clientId } = this.validateCredentials();
+
+    try {
+      console.log(`[DhanService] Fetching option chain for UnderlyingScrip: ${payload.UnderlyingScrip}, Expiry: ${payload.Expiry}...`);
+      const response = await axios.post(`${this.baseUrl}/optionchain`, payload, {
+        headers: {
+          "access-token": token,
+          "client-id": clientId,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.handleApiError("getOptionChain", error);
+    }
+  }
+
+  /**
+   * Connect to Dhan Live Feed WebSocket
+   */
+  connectWebSocket() {
+    const { token, clientId } = this.getCredentials();
+
+    if (!token || !clientId) {
+      console.error("❌ [DhanService WS] Cannot connect: DHAN_ACCESS_TOKEN or DHAN_CLIENT_ID is missing.");
+      return;
+    }
+
+    if (this.ws) {
+      console.log("[DhanService WS] Terminating existing connection...");
+      this.ws.terminate();
+      this.ws = null;
+    }
+
+    const params = new URLSearchParams({
+      version: "2",
+      token,
+      clientId,
+      authType: "2",
+    });
+    const url = `${this.wsUrl}?${params.toString()}`;
+    console.log(`[DhanService WS] Connecting to Dhan v2 feed (ClientID: ${clientId.substring(0, 4)}***)`);
+
+    try {
+      this.ws = new WebSocket(url);
+
+      this.ws.on("open", () => {
+        console.log("✅ [DhanService WS] Connection established successfully!");
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+
+        // 1. Send Authentication packet (RequestCode: 11)
+        this.sendAuthentication(clientId, token);
+
+        // 2. Subscribe to Nifty 50 live data (Requirement 7)
+        this.subscribeToNifty();
+      });
+
+      this.ws.on("message", (data: any) => {
+        this.handleMessage(data);
+      });
+
+      this.ws.on("error", (error: any) => {
+        console.error("❌ [DhanService WS] Error detected:", error.message || error);
+      });
+
+      this.ws.on("close", (code, reason) => {
+        this.isConnected = false;
+        console.warn(`🔴 [DhanService WS] Closed (Code: ${code}, Reason: ${reason || "No reason given"}).`);
+        this.scheduleReconnect();
+      });
+    } catch (err: any) {
+      console.error("[DhanService WS] Connection initiation failed:", err.message);
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * Send standard authentication packet
+   */
+  private sendAuthentication(clientId: string, token: string) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
     const authPacket = {
       RequestCode: 11,
-      DhanClientId: this.clientId,
-      AccessToken: this.accessToken
+      DhanClientId: clientId,
+      AccessToken: token,
     };
-    this.ws?.send(JSON.stringify(authPacket));
+
+    console.log("[DhanService WS] Sending authentication packet...");
+    this.ws.send(JSON.stringify(authPacket));
   }
 
-  private subscribeToSymbols() {
-    console.log("📡 Symbols subscribe kar raha hun...");
-    
-    // Dhan API Feed Subscription Packet (Binary)
-    // For Ticker Data (LTP): RequestCode = 15
-    const symbolsToSubscribe = [
-      { ExchangeSegment: 1, SecurityId: '13' }, // Nifty 50
-      { ExchangeSegment: 1, SecurityId: '25' }, // Bank Nifty
-      { ExchangeSegment: 1, SecurityId: '27' }, // Fin Nifty
-      { ExchangeSegment: 1, SecurityId: '31' }, // Midcap Nifty
-    ];
+  /**
+   * Subscribe to Nifty 50 live data (SecurityId '13', ExchangeSegment 1 or 2 as fallback)
+   */
+  private subscribeToNifty() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
+    console.log("[DhanService WS] Subscribing to Nifty 50 live quotes...");
+
+    // Standard Dhan indices subscription:
+    // Nifty 50 has SecurityId: '13', ExchangeSegment: 1 (NSE_EQ) or 2 (NSE_IDX)
+    const instruments = [{ ExchangeSegment: "IDX_I", SecurityId: "13" }];
     const subscribePacket = {
-      RequestCode: 15, // 15 for Ticker
-      InstrumentList: symbolsToSubscribe
+      RequestCode: 15,
+      InstrumentCount: instruments.length,
+      InstrumentList: instruments,
     };
 
-    this.ws?.send(JSON.stringify(subscribePacket));
-    console.log("Subscription bheji gayi (Nifty, BankNifty etc.)");
+    this.ws.send(JSON.stringify(subscribePacket));
+    console.log("📡 [DhanService WS] Nifty 50 subscription packet transmitted successfully.");
   }
 
-  private handlePriceUpdate(data: any) {
-    if (!(data instanceof ArrayBuffer)) return;
-    
-    const view = new DataView(data);
+  /**
+   * Handle incoming WebSocket messages and buffers
+   */
+  private handleMessage(data: any) {
     try {
-      const responseCode = view.getUint8(0);
+      const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
       
-      // Response Code 17 is Ticker Data (LTP)
-      if (responseCode === 17 || responseCode === 2) {
-        const securityId = view.getInt32(1, true).toString();
-        const ltp = view.getFloat32(5, true);
+      // If it is JSON format (connection notifications, auth status, etc.)
+      const textMessage = buffer.toString().trim();
+      if (textMessage.startsWith("{")) {
+        const parsed = JSON.parse(textMessage);
         
-        // Find display name from security ID
-        const displayName = Object.keys(this.symbols).find(
-          key => (this.symbols as any)[key] === securityId
-        );
+        // Log subscription status/authentication responses
+        if (parsed.RequestCode === 11) {
+          console.log(`🔑 [DhanService WS] Auth response received. Status: ${parsed.Status || "N/A"}, Message: ${parsed.Message || ""}`);
+        } else {
+          console.log(`📥 [DhanService WS] Received JSON message:`, parsed);
+        }
+        return;
+      }
 
-        if (displayName && this.onPriceUpdate) {
-          this.onPriceUpdate(displayName, ltp);
+      if (buffer.length >= 12) {
+        const code = buffer.readUInt8(0);
+        if (code === 2 || code === 4 || code === 8 || code === 17) {
+          const securityId = buffer.readUInt32LE(1).toString();
+          const ltp = buffer.readFloatLE(8);
+          if (Number.isFinite(ltp) && ltp > 0) {
+            console.log(`📊 [DhanService WS] Security ${securityId} LTP: ₹${ltp.toFixed(2)}`);
+          }
         }
       }
-    } catch (e) {
-      // Silent fail for malformed packets
+    } catch (e: any) {
+      // Catch silently to keep Websocket client running robustly
+      console.debug("[DhanService WS] Error processing stream frame:", e.message);
     }
   }
 
-  disconnect() {
-    if (this.statusInterval) {
-      clearInterval(this.statusInterval);
-      this.statusInterval = null;
+  /**
+   * Schedule WebSocket auto-reconnection
+   */
+  private scheduleReconnect() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
     }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error(`❌ [DhanService WS] Max reconnect attempts (${this.maxReconnectAttempts}) reached. Auto-reconnection aborted.`);
+      return;
+    }
+
+    this.reconnectAttempts++;
+    console.log(`🔄 [DhanService WS] Reconnect scheduled in ${this.reconnectInterval / 1000}s (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+    
+    this.reconnectTimeout = setTimeout(() => {
+      this.connectWebSocket();
+    }, this.reconnectInterval);
+  }
+
+  /**
+   * Disconnect WebSocket intentionally
+   */
+  disconnect() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
     if (this.ws) {
-      this.ws.onclose = null; // Prevent reconnect on intentional close
-      this.ws.close();
+      console.log("[DhanService WS] Gracefully shutting down WebSocket...");
+      this.ws.removeAllListeners();
+      this.ws.terminate();
       this.ws = null;
     }
     this.isConnected = false;
-    this.onStatusChange?.('disconnected');
+  }
+
+  /**
+   * Common API Error Handler
+   */
+  private handleApiError(method: string, error: any) {
+    console.error(`❌ [DhanService] Error in ${method}:`, error.message);
+
+    const apiError: any = new Error();
+    apiError.statusCode = 500;
+
+    if (error.response) {
+      // Server responded with non-2xx status
+      const status = error.response.status;
+      const responseData = error.response.data;
+
+      console.error(`  ↳ Dhan API Response Error Status: ${status}`, JSON.stringify(responseData));
+
+      apiError.statusCode = status;
+      apiError.message = `Dhan API request failed: ${responseData?.remark || responseData?.message || error.message}`;
+    } else if (error.request) {
+      // Request made but no response
+      console.error("  ↳ No response received from Dhan API Server. Network/CORS Error.");
+      apiError.statusCode = 503;
+      apiError.message = "Dhan API Server is unreachable. Please check your network connection.";
+    } else {
+      // Error in setup
+      apiError.statusCode = error.statusCode || 500;
+      apiError.message = error.message;
+    }
+
+    throw apiError;
   }
 }
 
-export const dhanService = new DhanService();
+// Single instance for global reuse
+export const dhanServiceInstance = new DhanService();

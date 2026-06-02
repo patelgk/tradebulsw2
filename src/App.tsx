@@ -230,9 +230,7 @@ const Header = ({
 }) => {
   const handleReconnect = async (provider: string) => {
     try {
-      if (provider === 'upstox') {
-        await fetch('/api/market/upstox/connect', { method: 'POST' });
-      }
+      // Only Dhan is supported in this application.
     } catch (err) {
       console.error('Manual reconnect failed:', err);
     }
@@ -262,19 +260,8 @@ const Header = ({
           <h1 className="text-xl font-bold tracking-tight leading-none">
             {isSubView ? 'Option Chain' : 'Indo Trader'}
           </h1>
-          {!isSubView && providerStatus?.upstox && (
-            <div className="mt-1">
-              <ConnectionBadge 
-                provider="Upstox" 
-                status={providerStatus.upstox.status} 
-                nextRetryIn={providerStatus.upstox.nextRetryIn} 
-                error={providerStatus.upstox.error}
-                onReconnect={() => handleReconnect('upstox')}
-              />
-            </div>
-          )}
         </div>
-        {!isSubView && activeTab === 'trade' && !providerStatus?.upstox && (
+        {!isSubView && activeTab === 'trade' && (
           <span className="bg-slate-100 dark:bg-white/5 text-[10px] font-bold px-2 py-0.5 rounded-full text-slate-500 flex items-center gap-1">
             <div className="w-1 h-1 rounded-full bg-emerald-500" />
             LIVE
@@ -2103,19 +2090,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'UPSTOX_AUTH_SUCCESS') {
-        showToast('Upstox connected successfully!');
-        // Refresh settings
-        const fetchSettings = async () => {
-          try {
-            const data = await api.getSettings('market');
-            setApiSettings(data);
-          } catch (err) {
-            console.error('Failed to refresh settings:', err);
-          }
-        };
-        fetchSettings();
-      }
+      // No external provider auth callbacks are used in Dhan-only mode.
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
@@ -2570,14 +2545,14 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
 
             {apiSettings?.providers?.map((p: any) => (
               <div key={p.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-4 relative group">
-                {p.id !== 'upstox' && p.id !== 'dhan' && (
+                {p.id !== 'dhan' && (
                   <button 
                     onClick={() => {
                       const newProviders = apiSettings.providers.filter((pr: any) => pr.id !== p.id);
                       handleUpdateApi({ 
                         ...apiSettings, 
                         providers: newProviders,
-                        activeProviderId: apiSettings.activeProviderId === p.id ? 'upstox' : apiSettings.activeProviderId
+                        activeProviderId: apiSettings.activeProviderId === p.id ? 'dhan' : apiSettings.activeProviderId
                       });
                     }}
                     className="absolute top-4 right-4 p-1.5 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -2685,70 +2660,6 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
                   </>
                 )}
 
-                  {p.type === 'upstox' && (
-                    <>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">API Key</label>
-                        <input
-                          type="text"
-                          defaultValue={p.apiKey}
-                          onBlur={(e) => {
-                            const newProviders = apiSettings.providers.map((pr: any) => pr.id === p.id ? { ...pr, apiKey: e.target.value } : pr);
-                            handleUpdateApi({ ...apiSettings, providers: newProviders });
-                          }}
-                          className="w-full px-4 py-2 bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-xl text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">API Secret</label>
-                        <input
-                          type="password"
-                          defaultValue={p.apiSecret}
-                          placeholder="Your Upstox API Secret (Static)"
-                          onBlur={(e) => {
-                            const newProviders = apiSettings.providers.map((pr: any) => pr.id === p.id ? { ...pr, apiSecret: e.target.value } : pr);
-                            handleUpdateApi({ ...apiSettings, providers: newProviders });
-                            if (e.target.value.length > 50) {
-                              showToast('Warning: Secret looks like a token. Use the static secret from Upstox dashboard.', 'error');
-                            }
-                          }}
-                          className="w-full px-4 py-2 bg-slate-50 dark:bg-[#160d08] border border-slate-200 dark:border-white/10 rounded-xl text-xs"
-                        />
-                        <p className="text-[9px] text-slate-400 italic px-2">
-                          Note: This is the <b>API Secret</b> from your Upstox dashboard, NOT an access token.
-                        </p>
-                      </div>
-                      <div className="pt-2 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <button
-                            onClick={async () => {
-                              try {
-                                const response = await fetch('/api/market/upstox/auth-url');
-                                if (!response.ok) {
-                                  const err = await response.json();
-                                  throw new Error(err.error || 'Failed to get auth URL');
-                                }
-                                const { url } = await response.json();
-                                window.open(url, 'upstox_auth', 'width=600,height=700');
-                              } catch (err: any) {
-                                showToast(err.message, 'error');
-                              }
-                            }}
-                            className="px-4 py-2 bg-primary text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-colors"
-                          >
-                            Connect to Upstox
-                          </button>
-                          <div className="flex gap-2 items-center">
-                            <div className={`w-2 h-2 rounded-full ${p.accessToken ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">{p.accessToken ? 'Authorized' : 'Not Authorized'}</span>
-                          </div>
-                        </div>
-                        <p className="text-[9px] text-center text-amber-600 dark:text-amber-400 font-black uppercase tracking-tight bg-amber-500/10 py-1.5 rounded-lg border border-amber-500/20">
-                          ⚠️ Click Connect after updating API Key/Secret to start real-time data
-                        </p>
-                      </div>
-                    </>
-                  )}
 
                   {p.type === 'custom' && (
                     <>
