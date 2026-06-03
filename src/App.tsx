@@ -16,6 +16,9 @@ if (typeof window !== 'undefined') {
 }
 
 import { LandingPage } from './components/LandingPage';
+import LWChart from './components/LWChart';
+import OptionChain from './components/OptionChain';
+import GlobalSearch from './components/GlobalSearch';
 import { 
   CandlestickChart, 
   Briefcase, 
@@ -58,9 +61,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
-import { dhanService } from './dhanService';
 import { api } from './api';
-import { NavItem, Trade, Plan, OptionData, Portfolio, Account, Client, Rule } from './types';
+import { NavItem, Trade, Plan, OptionStrike, Portfolio, Account, Client, Rule, SymbolMarketData, SYMBOLS, LOT_SIZES } from './types';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db.client';
 
@@ -217,6 +219,7 @@ const Header = ({
   darkMode, 
   onToggleDarkMode, 
   onOpenOptionChain,
+  onSearch,
   providerStatus 
 }: { 
   activeTab: string, 
@@ -226,6 +229,7 @@ const Header = ({
   darkMode: boolean,
   onToggleDarkMode: () => void,
   onOpenOptionChain?: () => void,
+  onSearch?: () => void,
   providerStatus?: Record<string, { status: string, nextRetryIn?: number, error?: string }>
 }) => {
   const handleReconnect = async (provider: string) => {
@@ -269,6 +273,14 @@ const Header = ({
         )}
       </div>
       <div className="flex items-center gap-2">
+        {/* Search — Dhan indices only */}
+        <button
+          onClick={onSearch}
+          className="p-2 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
+          title="Search indices (Dhan)"
+        >
+          <Search className="w-5 h-5" />
+        </button>
         <button 
           onClick={onToggleDarkMode}
           className="p-2 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
@@ -1201,10 +1213,11 @@ const TradingViewWidget = memo(({ symbol, interval = "5" }: { symbol: string, in
 
   useEffect(() => {
     const symbolMap: { [key: string]: string } = {
-      'Nifty 50': 'NSE:NIFTY',
-      'Bank Nifty': 'NSE:NIFTYBANK',
-      'Fin Nifty': 'NSE:NIFTY_FIN_SERVICE',
-      'Midcap Nifty': 'NSE:NIFTY_MID_SELECT',
+      'Nifty 50':      'NSE:NIFTY',
+      'Bank Nifty':    'NSE:BANKNIFTY',
+      'Fin Nifty':     'NSE:FINNIFTY',
+      'Midcap Select': 'NSE:NIFTY_MID_SELECT',
+      'SENSEX':        'BSE:SENSEX',
     };
 
     const intervalMap: { [key: string]: string } = {
@@ -1404,7 +1417,7 @@ const TradeView = ({
       <ViewToggle activeView="chart" onToggle={(v) => v === 'chain' && onViewOptionChain()} />
       
       <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-        {['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Nifty', 'RELIANCE'].map((idx) => (
+        {['Nifty 50', 'Bank Nifty', 'Fin Nifty', 'Midcap Select', 'SENSEX'].map((idx) => (
           <button 
             key={idx}
             onClick={() => {
@@ -1488,8 +1501,14 @@ const TradeView = ({
         </div>
       </div>
 
-      {/* Custom Candle Chart */}
-      <CandleChart symbol={selectedSymbol} interval={timeframe} currentPrice={price} />
+      {/* Lightweight Chart — replaces TradingView */}
+      <LWChart
+        symbol={selectedSymbol}
+        interval={timeframe}
+        currentPrice={price}
+        darkMode={darkMode}
+        height={380}
+      />
 
       <button 
         onClick={onViewOptionChain}
@@ -3068,11 +3087,15 @@ function App() {
   const [activeTab, setActiveTab] = useState('trade');
   const [showAuth, setShowAuth] = useState(false);
   const [showOptionChain, setShowOptionChain] = useState(true);
-  const [marketData, setMarketData] = useState<Record<string, { price: number, change: number, optionChain: any[], timestamp: string, expiry: string, expiries?: string[], isMarketOpen?: boolean, dataSource?: string }>>({
-    'Nifty 50': { price: 22453.80, change: 102.45, optionChain: [], timestamp: '--:--:--', expiry: '-- --- ----', isMarketOpen: false, dataSource: 'Live' },
-    'Bank Nifty': { price: 47500.00, change: 250.00, optionChain: [], timestamp: '--:--:--', expiry: '-- --- ----', isMarketOpen: false, dataSource: 'Live' },
-    'Fin Nifty': { price: 21000.00, change: 50.00, optionChain: [], timestamp: '--:--:--', expiry: '-- --- ----', isMarketOpen: false, dataSource: 'Live' },
-    'Midcap Nifty': { price: 10500.00, change: 30.00, optionChain: [], timestamp: '--:--:--', expiry: '-- --- ----', isMarketOpen: false, dataSource: 'Live' },
+  const [showSearch, setShowSearch] = useState(false);
+  const [marketData, setMarketData] = useState<Record<string, any>>({
+    'Nifty 50':       { price: 0, change: 0, changePct: 0, dayOpen: 0, dayHigh: 0, dayLow: 0, volume: 0, optionChain: [], timestamp: '--:--:--', expiry: '', expiries: [], isMarketOpen: false, dataSource: 'Stale' },
+    'Bank Nifty':     { price: 0, change: 0, changePct: 0, dayOpen: 0, dayHigh: 0, dayLow: 0, volume: 0, optionChain: [], timestamp: '--:--:--', expiry: '', expiries: [], isMarketOpen: false, dataSource: 'Stale' },
+    'Fin Nifty':      { price: 0, change: 0, changePct: 0, dayOpen: 0, dayHigh: 0, dayLow: 0, volume: 0, optionChain: [], timestamp: '--:--:--', expiry: '', expiries: [], isMarketOpen: false, dataSource: 'Stale' },
+    'Midcap Select':  { price: 0, change: 0, changePct: 0, dayOpen: 0, dayHigh: 0, dayLow: 0, volume: 0, optionChain: [], timestamp: '--:--:--', expiry: '', expiries: [], isMarketOpen: false, dataSource: 'Stale' },
+    'Nifty Next 50':  { price: 0, change: 0, changePct: 0, dayOpen: 0, dayHigh: 0, dayLow: 0, volume: 0, optionChain: [], timestamp: '--:--:--', expiry: '', expiries: [], isMarketOpen: false, dataSource: 'Stale' },
+    'SENSEX':         { price: 0, change: 0, changePct: 0, dayOpen: 0, dayHigh: 0, dayLow: 0, volume: 0, optionChain: [], timestamp: '--:--:--', expiry: '', expiries: [], isMarketOpen: false, dataSource: 'Stale' },
+    'Bankex':         { price: 0, change: 0, changePct: 0, dayOpen: 0, dayHigh: 0, dayLow: 0, volume: 0, optionChain: [], timestamp: '--:--:--', expiry: '', expiries: [], isMarketOpen: false, dataSource: 'Stale' },
   });
 
   // Use Dexie to observe local market data
@@ -3147,45 +3170,6 @@ function App() {
       }
     };
     fetchPlansAndRules();
-  }, []);
-
-  useEffect(() => {
-    if (dhanService.isConfigured()) {
-      dhanService.onPriceUpdate = (symbol, price) => {
-        setMarketData(prev => ({
-          ...prev,
-          [symbol]: {
-            ...prev[symbol],
-            price: price,
-            dataSource: 'Dhan',
-            timestamp: new Date().toLocaleTimeString()
-          }
-        }));
-        
-        if (symbol === selectedSymbolRef.current) {
-          setIsOptionChainLoading(false);
-        }
-      };
-      
-      dhanService.onStatusChange = (status) => {
-        if (status === 'connected') {
-          setConnectionStatus('connected');
-          setIsSocketConnected(true);
-          showToast('Dhan Market Feed Connected', 'success');
-        } else if (status === 'connecting') {
-          setConnectionStatus('reconnecting');
-        } else if (status === 'error') {
-          setConnectionStatus('disconnected');
-          showToast('Dhan Connection Error', 'error');
-        } else {
-          setConnectionStatus('disconnected');
-          setIsSocketConnected(false);
-        }
-      };
-      
-      dhanService.connect();
-    }
-    return () => dhanService.disconnect();
   }, []);
 
   useEffect(() => {
@@ -3738,53 +3722,29 @@ function App() {
             >
               {activeTab === 'trade' && (
                 showOptionChain ? (
-                  <OptionChainView 
+                  <OptionChain
                     symbol={selectedSymbol}
-                    optionChain={marketData[selectedSymbol].optionChain}
-                    spotPrice={marketData[selectedSymbol].price}
-                    onSelectStrike={(s) => {
-                      setSelectedStrike(s);
-                      setShowOptionChain(false);
-                      showToast(`Selected Strike: ${s}`);
-                    }} 
-                    expiry={marketData[selectedSymbol].expiry}
-                    expiries={marketData[selectedSymbol].expiries || []}
-                    isLoading={isOptionChainLoading}
-                    dataSource={marketData[selectedSymbol].dataSource}
-                    onSymbolChange={(s) => {
-                      setSelectedSymbol(s);
-                      setSelectedStrike(0);
-                      setIsOptionChainLoading(true);
+                    data={marketData[selectedSymbol] as any}
+                    onStrikeSelect={(strike, type, ltp) => {
+                      setSelectedStrike(strike);
+                      showToast(`${type} ${strike} @ ₹${ltp.toFixed(2)}`);
                     }}
-                    onExpiryChange={async (e) => {
+                    onExpiryChange={async (expiry) => {
                       setIsOptionChainLoading(true);
                       try {
-                        const res = await fetch('/api/market/expiry', {
+                        await fetch('/api/market/expiry', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ symbol: selectedSymbol, expiry: e })
+                          body: JSON.stringify({ symbol: selectedSymbol, expiry })
                         });
-                        if (res.ok) {
-                          const data = await res.json();
-                          if (data.success && data.marketData) {
-                            setMarketData(prev => ({
-                              ...prev,
-                              [selectedSymbol]: {
-                                ...prev[selectedSymbol],
-                                ...data.marketData
-                              }
-                            }));
-                            showToast(`Updated Expiry to ${e}`, 'success');
-                          }
-                        }
-                      } catch (err) {
-                        console.error("Failed to update expiry on server:", err);
-                        showToast(`Failed to update expiry`, 'error');
-                      } finally {
-                        setIsOptionChainLoading(false);
-                      }
+                        showToast(`Expiry updated to ${expiry}`, 'success');
+                      } catch { showToast('Failed to update expiry', 'error'); }
+                      finally { setIsOptionChainLoading(false); }
                     }}
-                    onShowChart={() => setShowOptionChain(false)}
+                    onTrade={(strike, type, action, ltp) => {
+                      setSelectedStrike(strike);
+                      setShowOptionChain(false);
+                    }}
                   />
                 ) : (
                   <TradeView 

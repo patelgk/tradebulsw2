@@ -22,12 +22,17 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      // Disable HMR (Hot Module Reload) to prevent connection issues in development
-      hmr: false,
+      port: 5173,
+      host: '0.0.0.0',
+      hmr: {
+        port: 5174,
+        host: 'localhost',
+      },
       proxy: {
         '/api': {
           target: 'http://localhost:3000',
           changeOrigin: true,
+          rewrite: (path) => path,
         },
         '/socket.io': {
           target: 'http://localhost:3000',

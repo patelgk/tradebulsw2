@@ -13,16 +13,21 @@ const userSchema = new mongoose.Schema({
 });
 
 const tradeSchema = new mongoose.Schema({
-  userId: { type: String, required: true }, // refers to uid
+  userId: { type: String, required: true },
   symbol: String,
   type: { type: String, enum: ['BUY', 'SELL'] },
   optionType: { type: String, enum: ['CE', 'PE'] },
   strike: Number,
   price: Number,
   qty: Number,
+  lotSize: { type: Number, default: 50 },
   time: { type: Date, default: Date.now },
+  exitTime: Date,
+  exitPrice: Number,
   status: { type: String, enum: ['Open', 'Closed'], default: 'Open' },
   pnl: { type: Number, default: 0 },
+  charges: { type: Number, default: 0 },
+  margin: { type: Number, default: 0 },
 });
 
 const challengeSchema = new mongoose.Schema({

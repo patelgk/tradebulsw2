@@ -1,56 +1,50 @@
 $ErrorActionPreference = "Stop"
-
 $root = Split-Path -Parent $PSScriptRoot
-$backendScript = Join-Path $root "node_modules\.bin\tsx.cmd"
-$frontendScript = Join-Path $root "node_modules\.bin\vite.cmd"
 
-function Start-DevJob {
-  param(
-    [string]$Name,
-    [scriptblock]$Script
-  )
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  Starting TradeBul Dev Environment" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Backend  -> http://localhost:3000" -ForegroundColor Green
+Write-Host "  Frontend -> http://localhost:5173" -ForegroundColor Green
+Write-Host ""
+Write-Host "Press Ctrl+C to stop both servers." -ForegroundColor Yellow
+Write-Host ""
 
-  Start-Job -Name $Name -ScriptBlock $Script -ArgumentList $root
-}
+# Start backend in a new window
+$backendProcess = Start-Process powershell -ArgumentList @(
+  "-NoExit",
+  "-Command",
+  "Set-Location '$root'; `$env:API_ONLY='true'; `$env:PORT='3000'; Write-Host '[Backend] Starting on http://localhost:3000' -ForegroundColor Green; & '.\node_modules\.bin\tsx.cmd' 'server.ts'"
+) -PassThru
 
-Write-Host "Starting backend on http://localhost:3000"
-$backend = Start-DevJob "backend" {
-  param($root)
-  Set-Location $root
-  $env:API_ONLY = "true"
-  
-  if (-not $env:PORT) { $env:PORT = "3000" }
-  & ".\node_modules\.bin\tsx.cmd" "server.ts" 2>&1
-}
+Write-Host "[Launcher] Backend started (PID: $($backendProcess.Id))" -ForegroundColor Green
 
-Write-Host "Starting frontend on http://localhost:5173"
-$frontend = Start-DevJob "frontend" {
-  param($root)
-  Set-Location $root
-  & ".\node_modules\.bin\vite.cmd" "--host" "0.0.0.0" 2>&1
-}
+# Give backend a moment to start
+Start-Sleep -Seconds 2
 
-$jobs = @($backend, $frontend)
+# Start frontend in a new window
+$frontendProcess = Start-Process powershell -ArgumentList @(
+  "-NoExit",
+  "-Command",
+  "Set-Location '$root'; Write-Host '[Frontend] Starting on http://localhost:5173' -ForegroundColor Green; & '.\node_modules\.bin\vite.cmd' '--host' '0.0.0.0'"
+) -PassThru
+
+Write-Host "[Launcher] Frontend started (PID: $($frontendProcess.Id))" -ForegroundColor Green
+Write-Host ""
+Write-Host "Both servers are running in separate windows." -ForegroundColor Cyan
+Write-Host "Open http://localhost:5173 in your browser." -ForegroundColor Cyan
+Write-Host ""
+Write-Host "This window will wait. Close it or press Ctrl+C to stop both servers." -ForegroundColor Yellow
 
 try {
-  while ($true) {
-    foreach ($job in $jobs) {
-      Receive-Job $job | ForEach-Object {
-        Write-Host "[$($job.Name)] $_"
-      }
-
-      if ($job.State -in @("Failed", "Stopped", "Completed")) {
-        Receive-Job $job | ForEach-Object {
-          Write-Host "[$($job.Name)] $_"
-        }
-        throw "$($job.Name) exited with state $($job.State)"
-      }
-    }
-
-    Start-Sleep -Milliseconds 250
+  # Wait for either process to exit
+  while (-not $backendProcess.HasExited -and -not $frontendProcess.HasExited) {
+    Start-Sleep -Milliseconds 500
   }
-}
-finally {
-  $jobs | Stop-Job -ErrorAction SilentlyContinue
-  $jobs | Remove-Job -Force -ErrorAction SilentlyContinue
+} finally {
+  Write-Host "[Launcher] Stopping servers..." -ForegroundColor Red
+  if (-not $backendProcess.HasExited) { Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue }
+  if (-not $frontendProcess.HasExited) { Stop-Process -Id $frontendProcess.Id -Force -ErrorAction SilentlyContinue }
+  Write-Host "[Launcher] Done." -ForegroundColor Red
 }

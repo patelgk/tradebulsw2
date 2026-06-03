@@ -9,18 +9,21 @@ export interface NavItem {
 export interface Trade {
   _id?: string;
   id: string;
+  userId?: string;
   symbol: string;
   type: 'BUY' | 'SELL';
   optionType: 'CE' | 'PE';
   strike: number;
   price: number;
   qty: number;
+  lotSize: number;
   time: string;
   exitTime?: string;
   exitPrice?: number;
   status: 'Open' | 'Closed';
   pnl: number;
-  charges?: number;
+  charges: number;
+  margin?: number;
 }
 
 export interface Plan {
@@ -44,31 +47,59 @@ export interface Rule {
   description: string;
 }
 
-export interface OptionData {
-  strike: number;
-  ce_oi: number;
+export interface OptionStrike {
+  strike:       number;
+  ce_ltp:       number;
+  ce_oi:        number;
   ce_oi_change: number;
-  ce_ltp: number;
-  pe_ltp: number;
+  ce_iv?:       number;
+  ce_delta?:    number;
+  pe_ltp:       number;
+  pe_oi:        number;
   pe_oi_change: number;
-  pe_oi: number;
+  pe_iv?:       number;
+  pe_delta?:    number;
+}
+
+export interface SymbolMarketData {
+  price:        number;
+  change:       number;
+  changePct:    number;
+  dayOpen:      number;
+  dayHigh:      number;
+  dayLow:       number;
+  prevClose:    number;
+  volume:       number;
+  timestamp:    string;
+  expiry:       string;
+  expiries:     string[];
+  optionChain:  OptionStrike[];
+  isMarketOpen: boolean;
+  dataSource:   'Dhan' | 'Stale';
 }
 
 export interface Portfolio {
-  equity: number;
-  balance: number;
-  unrealizedPnl: number;
-  realizedPnl: number;
+  equity:       number;
+  balance:      number;
+  unrealizedPnl:number;
+  realizedPnl:  number;
+  dayPnl:       number;
   totalCharges: number;
-  drawdown: number;
-  positions: Trade[];
-  stats?: {
-    winRate: number;
+  drawdown:     number;
+  positions:    Trade[];
+  stats: {
+    winRate:      number;
+    lossRate:     number;
     profitFactor: number;
-    avgWin: number;
-    avgLoss: number;
+    avgWin:       number;
+    avgLoss:      number;
+    expectancy:   number;
+    totalTrades:  number;
+    totalWins:    number;
+    totalLosses:  number;
+    maxDrawdown:  number;
   };
-  equityCurve?: { time: string, value: number }[];
+  equityCurve: { time: string; value: number }[];
 }
 
 export interface Account {
@@ -91,3 +122,46 @@ export interface Client {
   unrealizedPnl: number;
   openPositions: number;
 }
+
+export interface TradeCharges {
+  brokerage:       number;
+  stt:             number;
+  transactionCharge: number;
+  gst:             number;
+  sebiCharge:      number;
+  stampDuty:       number;
+  total:           number;
+}
+
+// All supported index symbols
+export const SYMBOLS = [
+  "Nifty 50",
+  "Bank Nifty",
+  "Fin Nifty",
+  "Midcap Select",
+  "Nifty Next 50",
+  "SENSEX",
+  "Bankex",
+] as const;
+
+export type SymbolName = typeof SYMBOLS[number];
+
+export const LOT_SIZES: Record<SymbolName, number> = {
+  "Nifty 50":      50,
+  "Bank Nifty":    15,
+  "Fin Nifty":     40,
+  "Midcap Select": 75,
+  "Nifty Next 50": 25,
+  "SENSEX":        20,
+  "Bankex":        15,
+};
+
+export const STRIKE_STEPS: Record<SymbolName, number> = {
+  "Nifty 50":      50,
+  "Bank Nifty":    100,
+  "Fin Nifty":     50,
+  "Midcap Select": 25,
+  "Nifty Next 50": 50,
+  "SENSEX":        100,
+  "Bankex":        100,
+};

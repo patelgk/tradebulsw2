@@ -1,76 +1,58 @@
 import { Request, Response } from "express";
-import { dhanServiceInstance } from "../services/dhanService.js";
+import axios from "axios";
 
-/**
- * Dhan Controller to handle incoming HTTP REST requests
- */
+const BASE_URL = "https://api.dhan.co/v2";
+
+function getCredentials() {
+  const token    = process.env.VITE_DHAN_ACCESS_TOKEN || process.env.DHAN_ACCESS_TOKEN || "";
+  const clientId = process.env.VITE_DHAN_CLIENT_ID    || process.env.DHAN_CLIENT_ID    || "";
+  if (!token || !clientId) {
+    const e: any = new Error("Missing Dhan API credentials (DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID)");
+    e.statusCode = 401;
+    throw e;
+  }
+  return { token, clientId };
+}
+
 export class DhanController {
-  
-  /**
-   * Simple Test Endpoint
-   * GET /test
-   */
-  getTest(req: Request, res: Response) {
-    console.log("[DhanController] Test endpoint pinged");
-    return res.status(200).send("Server running");
+
+  getTest(_req: Request, res: Response) {
+    res.status(200).send("Server running");
   }
 
-  /**
-   * Fetch Funds Details Handler
-   * GET /funds
-   */
-  async getFunds(req: Request, res: Response) {
+  async getFunds(_req: Request, res: Response) {
     try {
-      console.log("[DhanController] Processing request to fetch funds...");
-      const fundsData = await dhanServiceInstance.getFunds();
-      return res.status(200).json(fundsData);
-    } catch (error: any) {
-      console.error("[DhanController] Exception in getFunds:", error.message);
-      
-      const statusCode = error.statusCode || 500;
-      return res.status(statusCode).json({
-        error: statusCode === 401 ? "Unauthorized" : "API Error",
-        message: error.message || "An unexpected error occurred while fetching funds.",
-        timestamp: new Date().toISOString()
+      const { token, clientId } = getCredentials();
+      const r = await axios.get(`${BASE_URL}/fundlimit`, {
+        headers: { "access-token": token, "client-id": clientId, "Content-Type": "application/json" },
+        timeout: 10000,
       });
+      res.json(r.data);
+    } catch (err: any) {
+      const status = err.statusCode || err.response?.status || 500;
+      res.status(status).json({ error: err.message });
     }
   }
 
-  /**
-   * Fetch Option Chain Handler
-   * POST /option-chain
-   */
   async getOptionChain(req: Request, res: Response) {
     try {
       const { UnderlyingScrip, UnderlyingSeg, Expiry } = req.body;
-
-      console.log(`[DhanController] Processing option chain request...`);
-
-      // Simple payload validation
       if (UnderlyingScrip === undefined || !UnderlyingSeg || !Expiry) {
-        return res.status(400).json({
-          error: "Bad Request",
-          message: "A JSON payload containing 'UnderlyingScrip', 'UnderlyingSeg', and 'Expiry' is required.",
-          receivedPayload: req.body
-        });
+        return res.status(400).json({ error: "UnderlyingScrip, UnderlyingSeg and Expiry are required" });
       }
-
-      const optionChainData = await dhanServiceInstance.getOptionChain({
-        UnderlyingScrip: Number(UnderlyingScrip),
-        UnderlyingSeg,
-        Expiry
-      });
-
-      return res.status(200).json(optionChainData);
-    } catch (error: any) {
-      console.error("[DhanController] Exception in getOptionChain:", error.message);
-
-      const statusCode = error.statusCode || 500;
-      return res.status(statusCode).json({
-        error: statusCode === 401 ? "Unauthorized" : "API Error",
-        message: error.message || "An unexpected error occurred while fetching the option chain.",
-        timestamp: new Date().toISOString()
-      });
+      const { token, clientId } = getCredentials();
+      const r = await axios.post(
+        `${BASE_URL}/optionchain`,
+        { UnderlyingScrip: Number(UnderlyingScrip), UnderlyingSeg, Expiry },
+        {
+          headers: { "access-token": token, "client-id": clientId, "Content-Type": "application/json" },
+          timeout: 10000,
+        }
+      );
+      res.json(r.data);
+    } catch (err: any) {
+      const status = err.statusCode || err.response?.status || 500;
+      res.status(status).json({ error: err.message });
     }
   }
 }

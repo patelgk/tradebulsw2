@@ -124,6 +124,27 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Withdraw
+  async withdraw(data: { userId: string; amount: number; method?: string }) {
+    return safeFetch(`${API_BASE}/withdraw`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Market
+  async getMarketQuotes(minimal = false) {
+    return safeFetch(`${API_BASE}/market/quotes${minimal ? '?minimal=true' : ''}`);
+  },
+  async updateExpiry(symbol: string, expiry: string) {
+    return safeFetch(`${API_BASE}/market/expiry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, expiry }),
+    });
+  },
   
   // Auth
   async login(credentials: any) {
