@@ -432,6 +432,7 @@ class DhanServerManager {
   }
 
   connect() {
+    console.log("DISABLE_DHAN_WS =", process.env.DISABLE_DHAN_WS);
     if (process.env.DISABLE_DHAN_WS === 'true') {
       console.log('[Dhan Server] DISABLE_DHAN_WS=true, skipping Dhan WebSocket connection');
       return;
@@ -449,32 +450,24 @@ class DhanServerManager {
     if (this.ws) {
       this.ws.terminate();
     }
+    console.log("WS_CLIENT_ID =", JSON.stringify(clientId));
+    console.log("WS_TOKEN_LEN =", accessToken.length);
 
     console.log(`[Dhan Server] Connecting to Dhan WebSocket... (ClientId: ${clientId.substring(0, 4)}***, Token: ${accessToken.substring(0, 4)}***)`);
-    const url = "wss://api-feed.dhan.co";
-    const urlWithQuery = `${url}/?api_key=${encodeURIComponent(accessToken)}&client_id=${encodeURIComponent(clientId)}`;
-    const headers = {
-      Origin: "https://api.dhan.co",
-      "User-Agent": "tradebulsw2/1.0 (Node)",
-      "access-token": accessToken,
-      "client-id": clientId,
-      "client_id": clientId,
-      "clientId": clientId,
-      "Client-Id": clientId,
-      "access_token": accessToken,
-      Authorization: `Bearer ${accessToken}`,
-      api_key: accessToken,
-    };
+    const wsUrl = `wss://api-feed.dhan.co?clientId=${clientId}&accessToken=${accessToken}`;
 
-    try {
-      this.ws = new WebSocket(urlWithQuery, { headers } as any);
+    console.log("[Dhan Server] WS URL:", wsUrl.replace(accessToken, "***TOKEN***"));
 
+try {
+  this.ws = new WebSocket(wsUrl);
+
+  
       this.ws.on('open', () => {
         console.log('✅ [Dhan Server] WebSocket Connected!');
-        this.sendAuthentication(clientId, accessToken);
+      //this.sendAuthentication(clientId, accessToken);
       });
 
-      this.ws.on('message', (data: any) => {
+      this.ws.on('message', (data: any) => {console.log("RAW MESSAGE =", data.toString());
         try {
           if (typeof data === 'string' || Buffer.isBuffer(data)) {
             const message = data.toString();
@@ -502,20 +495,23 @@ class DhanServerManager {
         console.log("🔴 [Dhan Server] WebSocket Closed. Reconnecting in 10s...");
         this.isConnected = false;
         if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-        this.reconnectTimeout = setTimeout(() => this.connect(), 10000);
+       // this.reconnectTimeout = setTimeout(() => this.connect(), 10000);
       });
     } catch (err) {
       console.error('[Dhan Server] Connection failed:', (err as Error).message);
     }
   }
+private sendAuthentication(clientId: string, accessToken: string) {
+  const authPacket = {
+    RequestCode: 11,
+    ClientId: clientId,
+    Token: accessToken
+  };
 
-  private sendAuthentication(clientId: string, accessToken: string) {
-    const authPacket = {
-      RequestCode: 11,
-      DhanClientId: clientId,
-      AccessToken: accessToken
-    };
-    this.ws?.send(JSON.stringify(authPacket));
+  console.log("AUTH PACKET =", JSON.stringify(authPacket));
+
+  this.ws?.send(JSON.stringify(authPacket));
+
   }
 
   private subscribeToSymbols() {
@@ -880,6 +876,26 @@ app.get("/api/market/dhan/status", (req, res) => {
 });
 
 // --- MongoDB API Routes ---
+const requireDbConnection: express.RequestHandler = (req, res, next) => {
+  if (mongoose.connection.readyState === 1) {
+    return next();
+  }
+
+  return res.status(503).json({
+    error: "Database unavailable",
+    message: "MongoDB is not connected yet. The UI is available, but this API needs the database.",
+  });
+};
+
+app.use([
+  "/api/users",
+  "/api/auth",
+  "/api/trades",
+  "/api/challenges",
+  "/api/rules",
+  "/api/settings",
+  "/api/transactions",
+], requireDbConnection);
 
 // Users
 app.get("/api/users", async (req, res) => {
@@ -948,8 +964,9 @@ app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password, mobile, phoneNumber } = req.body;
     const finalPhone = mobile || phoneNumber;
-    
-    let query: any = { password };
+
+    // Build query to find user by email or phone
+    let query: any = {};
     if (email) {
       query.email = email;
     } else if (finalPhone) {
@@ -958,11 +975,19 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(400).json({ error: "Email or Mobile is required" });
     }
 
+    // Find user by email or phone
     const user = await User.findOne(query);
     if (!user) {
       console.warn('[Auth] Login failed for:', email || finalPhone);
       return res.status(401).json({ error: "Invalid credentials" });
     }
+
+    // Verify password
+    if (!password || user.password !== password) {
+      console.warn('[Auth] Login failed - invalid password for:', email || finalPhone);
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
     console.log('[Auth] User logged in:', user.email);
     res.json(user);
   } catch (err) {
@@ -1285,16 +1310,43 @@ app.use("/api", (err: any, req: express.Request, res: express.Response, next: ex
 
 const PORT = Number(process.env.PORT) || 3000;
 
-async function startServer() {
+async function initializeDatabase() {
   try {
-    // Ensure MongoDB is connected before starting
     await connectDB();
 
-    if (process.env.NODE_ENV !== "production") {
+    try {
+      Object.keys(marketData).forEach(symbol => { marketData[symbol].expiry = getNextExpiry(symbol); });
+      await updateSettings();
+      await fetchMarketData(true);
+    } catch (err) {
+      console.error('[Server] Initial data fetch failed:', err);
+    }
+
+    setInterval(updateSettings, 30000); // Check settings every 30s
+    setInterval(() => {
+      fetchMarketData().catch(err => console.error('[Server] Market data fetch interval error:', err));
+    }, 5000); // Fetch every 5s instead of 1s to avoid rate limits
+  } catch (error) {
+    console.error('[Server] MongoDB unavailable:', (error as Error).message);
+    console.error('[Server] UI will keep running; DB-backed API routes will return 503 until MongoDB is fixed.');
+  }
+}
+
+async function startServer() {
+  try {
+    if (process.env.API_ONLY === "true") {
+      console.log("[Server] API-only mode enabled; Vite frontend is running separately.");
+    } else if (process.env.NODE_ENV !== "production") {
+      console.log("🔵 [Vite] Initializing Vite dev server...");
       const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+      console.log("🟢 [Vite] Vite dev server ready");
       // Ensure Vite doesn't handle /api requests
       app.use((req, res, next) => {
-        if (req.url.startsWith('/api')) return next();
+        if (req.url.startsWith('/api')) {
+          console.log(`⏭️ [Vite] Skipping Vite for API: ${req.url}`);
+          return next();
+        }
+        console.log(`🔄 [Vite] Handling request: ${req.url}`);
         vite.middlewares(req, res, next);
       });
     } else {
@@ -1314,30 +1366,18 @@ async function startServer() {
 
       // Start Dhan WebSocket connection for real-time market data feed
       try {
-        dhanServiceInstance.connectWebSocket();
+      
+        {
+          console.log("[Server] Dhan WebSocket disabled.");
+        }
       } catch (wsError: any) {
         console.error("❌ [Server] Failed to initialize Dhan WebSocket:", wsError.message);
       }
     });
 
-    try {
-      Object.keys(marketData).forEach(symbol => { marketData[symbol].expiry = getNextExpiry(symbol); });
-      await updateSettings();
-      
-      await fetchMarketData(true);
-    } catch (err) {
-      console.error('[Server] Initial data fetch failed:', err);
-    }
-
-    setInterval(updateSettings, 30000); // Check settings every 30s
-    setInterval(() => {
-      fetchMarketData().catch(err => console.error('[Server] Market data fetch interval error:', err));
-    }, 5000); // Fetch every 5s instead of 1s to avoid rate limits
+    initializeDatabase();
   } catch (error) {
     console.error('[Server] Failed to start server:', (error as Error).message);
-    // Exit so that issues (like DB connectivity) are addressed rather than
-    // allowing the server to run in a degraded state and causing buffered
-    // mongoose operations to timeout later.
     process.exit(1);
   }
 }

@@ -71,9 +71,29 @@ export const connectDB = async () => {
   }
 
   try {
-    // Use a short server selection timeout so failures surface quickly instead
-    // of letting mongoose buffer operations for a long time.
-    await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 });
+    // Optimized connection options for reliable OLTP workload on MongoDB Atlas
+    // These settings ensure proper connection pooling and prevent the 10000ms buffering timeout
+    await mongoose.connect(uri, {
+      // Initial server selection timeout - allow time for Atlas network latency
+      serverSelectionTimeoutMS: 10000,
+      
+      // Connection establishment timeout
+      connectTimeoutMS: 10000,
+      
+      // Socket timeout for long-running operations
+      socketTimeoutMS: 45000,
+      
+      // Connection pool configuration for OLTP workload
+      maxPoolSize: 50,        // Sufficient for typical Express app concurrent requests
+      minPoolSize: 5,         // Keep connections pre-warmed
+      maxIdleTimeMS: 300000,  // 5 minutes - clean up idle connections
+      
+      // Mongoose-specific buffer timeout override (default is 10s)
+      bufferCommands: true,
+      
+      // Fail fast on connection failures for better debugging
+      serverMonitoringMode: 'auto'
+    });
     console.log('✅ Connected to MongoDB');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err);

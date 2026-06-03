@@ -146,10 +146,10 @@ export class DhanService {
         this.reconnectAttempts = 0;
 
         // 1. Send Authentication packet (RequestCode: 11)
-        this.sendAuthentication(clientId, token);
+       //this.endAuthentication(clientId, token);
 
         // 2. Subscribe to Nifty 50 live data (Requirement 7)
-        this.subscribeToNifty();
+      //this.subscribeToNifty();
       });
 
       this.ws.on("message", (data: any) => {
