@@ -219,8 +219,8 @@ const Header = ({
   darkMode, 
   onToggleDarkMode, 
   onOpenOptionChain,
-  onSearch,
-  providerStatus 
+  providerStatus,
+  onSearch
 }: { 
   activeTab: string, 
   onBack?: () => void, 
@@ -229,8 +229,8 @@ const Header = ({
   darkMode: boolean,
   onToggleDarkMode: () => void,
   onOpenOptionChain?: () => void,
-  onSearch?: () => void,
-  providerStatus?: Record<string, { status: string, nextRetryIn?: number, error?: string }>
+  providerStatus?: Record<string, { status: string, nextRetryIn?: number, error?: string }>,
+  onSearch?: () => void
 }) => {
   const handleReconnect = async (provider: string) => {
     try {
@@ -273,11 +273,10 @@ const Header = ({
         )}
       </div>
       <div className="flex items-center gap-2">
-        {/* Search — Dhan indices only */}
-        <button
+        <button 
           onClick={onSearch}
           className="p-2 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
-          title="Search indices (Dhan)"
+          title="Search (Ctrl+K)"
         >
           <Search className="w-5 h-5" />
         </button>
@@ -1316,7 +1315,8 @@ const TradeView = ({
   connectionStatus = 'disconnected',
   expiry = '',
   isMarketOpen = false,
-  dataSource = 'Live'
+  dataSource = 'Live',
+  darkMode = false
 }: { 
   onViewOptionChain: () => void, 
   price: number, 
@@ -1333,7 +1333,8 @@ const TradeView = ({
   connectionStatus?: 'connected' | 'disconnected' | 'reconnecting' | 'polling',
   expiry?: string,
   isMarketOpen?: boolean,
-  dataSource?: string
+  dataSource?: string,
+  darkMode?: boolean
 }) => {
   const [timeframe, setTimeframe] = useState('5m');
 
@@ -3341,6 +3342,18 @@ function App() {
     };
   }, []);
 
+  // Keyboard shortcuts for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useEffect(() => {
     if (!user) {
       setAllTrades([]);
@@ -3628,6 +3641,7 @@ function App() {
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
           providerStatus={providerStatus}
+          onSearch={() => setShowSearch(true)}
         />
       )}
 
@@ -3775,6 +3789,7 @@ function App() {
                     expiry={marketData[selectedSymbol].expiry}
                     isMarketOpen={marketData[selectedSymbol].isMarketOpen}
                     dataSource={marketData[selectedSymbol].dataSource}
+                    darkMode={darkMode}
                   />
                 )
               )}
@@ -3804,6 +3819,25 @@ function App() {
             ))}
           </div>
         </nav>
+      )}
+
+      {/* Global Search Modal */}
+      {showSearch && (
+        <GlobalSearch
+          marketData={marketData}
+          onSelectIndex={(symbol) => {
+            setSelectedSymbol(symbol);
+            setShowSearch(false);
+            setSelectedStrike(0);
+          }}
+          onSelectOption={(symbol, strike, type, ltp) => {
+            setSelectedSymbol(symbol);
+            setSelectedStrike(strike);
+            setShowSearch(false);
+            showToast(`Selected ${type} ${strike}`, 'info');
+          }}
+          onClose={() => setShowSearch(false)}
+        />
       )}
     </div>
   );
