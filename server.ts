@@ -25,6 +25,7 @@ import nodemailer from "nodemailer";
 import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction } from "./db.js";
 import dhanRoutes from "./routes/dhanRoutes.js";
 import { MarketFeedManager } from "./services/marketFeedManager.js";
+import { DevelopmentMarketSimulator } from "./services/developmentMarketSimulator.js";
 
 dotenv.config();
 
@@ -51,26 +52,236 @@ const io = new Server(httpServer, { cors: { origin: "*" } });
 
 // ─── Market Feed Manager (single instance) ────────────────────────────────────
 
-const DHAN_CLIENT_ID    = process.env.VITE_DHAN_CLIENT_ID    || process.env.DHAN_CLIENT_ID    || "";
-const DHAN_ACCESS_TOKEN = process.env.VITE_DHAN_ACCESS_TOKEN || process.env.DHAN_ACCESS_TOKEN || "";
+const DHAN_CLIENT_ID    = process.env.DHAN_CLIENT_ID    || "";
+const DHAN_ACCESS_TOKEN = process.env.DHAN_ACCESS_TOKEN || "";
 
 const marketFeed = new MarketFeedManager(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN, io);
+const marketSimulator = new DevelopmentMarketSimulator(marketFeed);
+
+function isSimulatorAllowed() {
+  return process.env.NODE_ENV !== "production" && (
+    process.env.TEST_MODE === "true" ||
+    process.env.NODE_ENV === "development" ||
+    process.env.ENABLE_MARKET_SIMULATOR === "true"
+  );
+}
+
+function shouldAutoStartSimulator() {
+  return process.env.NODE_ENV !== "production" && (
+    process.env.TEST_MODE === "true" ||
+    process.env.ENABLE_MARKET_SIMULATOR === "true"
+  );
+}
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 
 let connectedClients = 0;
+const socketChartSubscriptions = new Map<string, Set<string>>();
+const chartSubscriptionRefCounts = new Map<string, number>();
+
+const INDEX_SECURITY_MAP: Record<string, { securityId: string; exchangeSegment: "IDX_I" | "NSE_FNO"; instrument: "INDEX" | "OPTIDX" }> = {
+  "Nifty 50":      { securityId: "13",  exchangeSegment: "IDX_I", instrument: "INDEX" },
+  "Bank Nifty":    { securityId: "25",  exchangeSegment: "IDX_I", instrument: "INDEX" },
+  "Fin Nifty":     { securityId: "27",  exchangeSegment: "IDX_I", instrument: "INDEX" },
+  "Midcap Select": { securityId: "442", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  "Nifty Next 50": { securityId: "28",  exchangeSegment: "IDX_I", instrument: "INDEX" },
+  "SENSEX":        { securityId: "51",  exchangeSegment: "IDX_I", instrument: "INDEX" },
+  "Bankex":        { securityId: "10",  exchangeSegment: "IDX_I", instrument: "INDEX" },
+};
+
+function resolveChartHistoryRequest(req: express.Request) {
+  const symbol = (req.query.symbol as string) || req.params.symbol;
+  const securityId = req.query.securityId as string | undefined;
+  const exchangeSegment = ((req.query.exchangeSegment as string | undefined) || (securityId ? "NSE_FNO" : undefined)) as "IDX_I" | "NSE_FNO" | undefined;
+  const instrument = ((req.query.instrument as string | undefined) || (securityId ? "OPTIDX" : undefined)) as "INDEX" | "OPTIDX" | undefined;
+  const timeframe = ((req.query.timeframe as string) || (req.query.interval as string) || "5m") as "1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "1D";
+  const date = (req.query.date as string | undefined) || new Date().toISOString().slice(0, 10);
+  const strike = req.query.strike ? Number(req.query.strike) : undefined;
+  const optionType = (req.query.optionType as "CE" | "PE" | undefined) || undefined;
+
+  if (securityId) {
+    return {
+      instrumentType: "OPTION" as const,
+      securityId,
+      exchangeSegment: exchangeSegment || "NSE_FNO",
+      instrument: instrument || "OPTIDX",
+      timeframe,
+      symbol: symbol || securityId,
+      date,
+      strike,
+      optionType,
+    };
+  }
+
+  if (!symbol) return null;
+  const mapped = INDEX_SECURITY_MAP[symbol];
+  if (!mapped) return null;
+  return {
+    instrumentType: "INDEX" as const,
+    symbol,
+    securityId: mapped.securityId,
+    exchangeSegment: mapped.exchangeSegment,
+    instrument: mapped.instrument,
+    timeframe,
+    date,
+  };
+}
+
+async function fetchChartHistory(params: { symbol: string; securityId: string; exchangeSegment: "IDX_I" | "NSE_FNO"; instrument: "INDEX" | "OPTIDX"; timeframe: string }) {
+  const intervalMap: Record<string, string> = {
+    "1m": "1",
+    "3m": "3",
+    "5m": "5",
+    "15m": "15",
+    "30m": "30",
+    "1h": "60",
+    "1D": "DAY",
+  };
+  const dhanInterval = intervalMap[params.timeframe] || "5";
+  const isIntraday = dhanInterval !== "DAY";
+  const endpoint = isIntraday ? "https://api.dhan.co/v2/charts/intraday" : "https://api.dhan.co/v2/charts/historical";
+
+  const now = new Date();
+  const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+
+  const payload: any = {
+    symbol: params.symbol,
+    securityId: params.securityId,
+    exchangeSegment: params.exchangeSegment,
+    instrument: params.instrument,
+    interval: dhanInterval,
+    fromDate: fmt(from),
+    toDate: fmt(now),
+  };
+
+  if (!isIntraday) {
+    payload.fromDate = new Date(now.getTime() - 120 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    payload.toDate = now.toISOString().split("T")[0];
+  }
+
+  const r = await axios.post(endpoint, payload, {
+    headers: { "access-token": DHAN_ACCESS_TOKEN, "Content-Type": "application/json" },
+    timeout: 10000,
+  });
+  const d = r.data?.data;
+  if (r.data && Array.isArray(r.data.timestamp) && Array.isArray(r.data.open) && Array.isArray(r.data.high) && Array.isArray(r.data.low) && Array.isArray(r.data.close)) {
+    return r.data.timestamp.map((t: number, i: number) => ({
+      time: new Date(t * 1000).toISOString(),
+      open: r.data.open?.[i] || 0,
+      high: r.data.high?.[i] || 0,
+      low: r.data.low?.[i] || 0,
+      close: r.data.close?.[i] || 0,
+      volume: r.data.volume?.[i] || 0,
+    }));
+  }
+  if (d && Array.isArray(d.start_Time)) {
+    return d.start_Time.map((t: number, i: number) => ({
+      time:   new Date(t * 1000).toISOString(),
+      open:   d.open?.[i]   || 0,
+      high:   d.high?.[i]   || 0,
+      low:    d.low?.[i]    || 0,
+      close:  d.close?.[i]  || 0,
+      volume: d.volume?.[i] || 0,
+    }));
+  }
+  if (Array.isArray(d)) {
+    return d.map((c: any) => ({
+      time:   new Date((c.start_Time || c.time || 0) * 1000).toISOString(),
+      open:   c.open, high: c.high, low: c.low, close: c.close,
+      volume: c.volume || 0,
+    }));
+  }
+  throw new Error("Unexpected response format from Dhan history API");
+}
+
+async function handleChartHistory(req: express.Request, res: express.Response) {
+  if (!DHAN_ACCESS_TOKEN) {
+    return res.status(400).json({ error: "No credentials" });
+  }
+
+  const chartReq = resolveChartHistoryRequest(req);
+  if (!chartReq) {
+    return res.status(400).json({ error: "Symbol not supported" });
+  }
+
+  const cached = marketFeed.getChartHistory(chartReq);
+  if (cached.length > 0) {
+    return res.json(cached);
+  }
+
+  try {
+    const candles = await fetchChartHistory(chartReq);
+    marketFeed.seedChartHistory({
+      instrumentType: chartReq.instrumentType,
+      symbol: chartReq.symbol,
+      securityId: chartReq.securityId,
+      exchangeSegment: chartReq.exchangeSegment,
+      timeframe: chartReq.timeframe as any,
+      strike: chartReq.strike,
+      optionType: chartReq.optionType,
+      date: chartReq.date,
+      candles,
+    });
+    return res.json(candles);
+  } catch (err: any) {
+    console.error("[API] History fetch failed:", err.response?.data || err.message);
+    return res.status(502).json({ error: "History fetch failed", message: err.message });
+  }
+}
 
 io.on("connection", (socket) => {
   connectedClients++;
   console.log(`[Socket] Client connected. Total: ${connectedClients}`);
+  socketChartSubscriptions.set(socket.id, new Set<string>());
 
   // Send current state immediately on connect
   const state = marketFeed.getState();
   socket.emit("marketUpdate", state);
 
+  socket.on("chart:subscribe", (payload) => {
+    if (!payload?.chartKey || !payload?.securityId || !payload?.exchangeSegment || !payload?.instrument) return;
+    const socketSubs = socketChartSubscriptions.get(socket.id);
+    if (socketSubs?.has(payload.chartKey)) return;
+    const nextCount = (chartSubscriptionRefCounts.get(payload.chartKey) || 0) + 1;
+    chartSubscriptionRefCounts.set(payload.chartKey, nextCount);
+    if (nextCount === 1) {
+      marketFeed.subscribeChart(payload);
+    }
+    console.log(`[Socket] chart subscribed key=${payload.chartKey} token=${payload.securityId} count=${nextCount}`);
+    socketSubs?.add(payload.chartKey);
+  });
+
+  socket.on("chart:unsubscribe", (payload) => {
+    if (!payload?.chartKey) return;
+    const current = chartSubscriptionRefCounts.get(payload.chartKey) || 0;
+    if (current <= 1) {
+      chartSubscriptionRefCounts.delete(payload.chartKey);
+      marketFeed.unsubscribeChart(payload.chartKey);
+    } else {
+      chartSubscriptionRefCounts.set(payload.chartKey, current - 1);
+    }
+    console.log(`[Socket] chart unsubscribed key=${payload.chartKey} remaining=${chartSubscriptionRefCounts.get(payload.chartKey) || 0}`);
+    socketChartSubscriptions.get(socket.id)?.delete(payload.chartKey);
+  });
+
   socket.on("disconnect", (reason) => {
     connectedClients--;
     console.log(`[Socket] Client disconnected (${reason}). Total: ${connectedClients}`);
+    const subs = socketChartSubscriptions.get(socket.id);
+    if (subs) {
+      for (const chartKey of subs) {
+        const current = chartSubscriptionRefCounts.get(chartKey) || 0;
+        if (current <= 1) {
+          chartSubscriptionRefCounts.delete(chartKey);
+          marketFeed.unsubscribeChart(chartKey);
+        } else {
+          chartSubscriptionRefCounts.set(chartKey, current - 1);
+        }
+      }
+    }
+    socketChartSubscriptions.delete(socket.id);
   });
 });
 
@@ -82,12 +293,14 @@ app.get("/api/health", (_req, res) => {
     time: new Date().toISOString(),
     mongodb: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
     dhanWs: marketFeed.isConnected() ? "connected" : "disconnected",
+    simulator: marketSimulator.status(),
   });
 });
 
 app.get("/api/market/status", (_req, res) => {
   res.json({
     dhan: { connected: marketFeed.isConnected() },
+    simulator: marketSimulator.status(),
     disableWs: process.env.DISABLE_DHAN_WS === "true",
   });
 });
@@ -141,77 +354,96 @@ app.post("/api/market/dhan/reconnect", (_req, res) => {
   res.json({ status: "Dhan WebSocket reconnection triggered." });
 });
 
-// Historical data (Dhan REST charts)
-app.get("/api/market/history/:symbol", async (req, res) => {
-  const { symbol }   = req.params;
-  const interval     = (req.query.interval as string) || "5m";
+app.get("/api/market/simulator/status", (_req, res) => {
+  res.json(marketSimulator.status());
+});
 
-  const SCRIP_MAP: Record<string, string> = {
-    "Nifty 50":      "13",
-    "Bank Nifty":    "25",
-    "Fin Nifty":     "27",
-    "Midcap Select": "442",
-    "SENSEX":        "1",
-    "Nifty Next 50": "28",
-    "Bankex":        "10",
-  };
-  const securityId = SCRIP_MAP[symbol];
-  if (!securityId || !DHAN_ACCESS_TOKEN) {
-    return res.status(400).json({ error: "Symbol not supported or no credentials" });
+app.post("/api/market/simulator/start", (_req, res) => {
+  if (!isSimulatorAllowed()) {
+    return res.status(403).json({
+      error: "Development market simulator is disabled in production.",
+      nodeEnv: process.env.NODE_ENV,
+    });
+  }
+  const started = marketSimulator.start();
+  res.json({ success: started, simulator: marketSimulator.status() });
+});
+
+app.post("/api/market/simulator/stop", (_req, res) => {
+  if (!isSimulatorAllowed()) {
+    return res.status(403).json({
+      error: "Development market simulator is disabled in production.",
+      nodeEnv: process.env.NODE_ENV,
+    });
+  }
+  marketSimulator.stop();
+  res.json({ success: true, simulator: marketSimulator.status() });
+});
+
+app.post("/api/market/simulator/sample-positions", async (req, res) => {
+  if (!isSimulatorAllowed()) {
+    return res.status(403).json({
+      error: "Development market simulator is disabled in production.",
+      nodeEnv: process.env.NODE_ENV,
+    });
   }
 
-  const intervalMap: Record<string, string> = {
-    "1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30", "1h": "60", "1D": "DAY",
-  };
-  const dhanInterval = intervalMap[interval] || "5";
-  const isIntraday   = dhanInterval !== "DAY";
-  const endpoint     = isIntraday
-    ? "https://api.dhan.co/v2/charts/intraday"
-    : "https://api.dhan.co/v2/charts/historical";
+  const { userId } = req.body || {};
+  if (!userId) {
+    return res.status(400).json({ error: "Missing userId" });
+  }
 
-  const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  const toDate   = new Date().toISOString().split("T")[0];
-
-  const payload: any = {
-    symbol, exchangeSegment: "NSE_IDX", instrumentType: "INDEX",
-    fromDate, toDate, securityId,
-  };
-  if (isIntraday) payload.interval = dhanInterval;
-  else payload.expiryCode = 0;
+  const state = marketFeed.getState();
+  const nifty = state["Nifty 50"];
+  const atm = nifty?.optionChain?.find((row) => row.ce_ltp > 0 && row.pe_ltp > 0) || nifty?.optionChain?.[0];
+  if (!atm) {
+    return res.status(400).json({ error: "Simulator option chain is not ready. Start simulator first." });
+  }
 
   try {
-    const r = await axios.post(endpoint, payload, {
-      headers: { "access-token": DHAN_ACCESS_TOKEN, "Content-Type": "application/json" },
-      timeout: 10000,
-    });
-    const d = r.data?.data;
-    if (d && Array.isArray(d.start_Time)) {
-      return res.json(
-        d.start_Time.map((t: number, i: number) => ({
-          time:   new Date(t * 1000).toISOString(),
-          open:   d.open?.[i]   || 0,
-          high:   d.high?.[i]   || 0,
-          low:    d.low?.[i]    || 0,
-          close:  d.close?.[i]  || 0,
-          volume: d.volume?.[i] || 0,
-        }))
-      );
-    }
-    if (Array.isArray(d)) {
-      return res.json(
-        d.map((c: any) => ({
-          time:   new Date((c.start_Time || c.time || 0) * 1000).toISOString(),
-          open:   c.open, high: c.high, low: c.low, close: c.close,
-          volume: c.volume || 0,
-        }))
-      );
-    }
-    throw new Error("Unexpected response format from Dhan history API");
+    const samples = await Trade.insertMany([
+      {
+        id: uuidv4(),
+        userId,
+        symbol: "Nifty 50",
+        type: "BUY",
+        optionType: "CE",
+        strike: atm.strike,
+        qty: 50,
+        price: atm.ce_ltp,
+        status: "Open",
+        pnl: 0,
+        charges: 20,
+        time: new Date().toISOString(),
+      },
+      {
+        id: uuidv4(),
+        userId,
+        symbol: "Nifty 50",
+        type: "BUY",
+        optionType: "PE",
+        strike: atm.strike,
+        qty: 50,
+        price: atm.pe_ltp,
+        status: "Open",
+        pnl: 0,
+        charges: 20,
+        time: new Date().toISOString(),
+      },
+    ]);
+
+    console.log(`[MarketSimulator] sample positions created userId=${userId} count=${samples.length}`);
+    res.json({ success: true, trades: samples });
   } catch (err: any) {
-    console.error("[API] History fetch failed:", err.response?.data || err.message);
-    return res.status(502).json({ error: "History fetch failed", message: err.message });
+    console.error("[MarketSimulator] sample position creation failed:", err.message);
+    res.status(500).json({ error: "Failed to create sample positions", message: err.message });
   }
 });
+
+// Historical data (Dhan REST charts)
+app.get("/api/chart/history", handleChartHistory);
+app.get("/api/market/history/:symbol", handleChartHistory);
+app.get("/api/market/history", handleChartHistory);
 
 // ─── Database Middleware ──────────────────────────────────────────────────────
 
@@ -489,6 +721,11 @@ async function startServer() {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       // Start market feed after server is listening
       marketFeed.start();
+      if (shouldAutoStartSimulator()) {
+        marketSimulator.start();
+      } else if (process.env.NODE_ENV !== "production") {
+        console.log("[MarketSimulator] available in development. Set TEST_MODE=true or ENABLE_MARKET_SIMULATOR=true, or POST /api/market/simulator/start.");
+      }
     });
 
     // Connect to MongoDB (non-blocking — server stays up even if DB is down)

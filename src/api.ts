@@ -30,6 +30,16 @@ async function safeFetch(url: string, options?: RequestInit) {
   }
 }
 
+function toQuery(params: Record<string, string | number | boolean | undefined>) {
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    q.set(key, String(value));
+  }
+  const query = q.toString();
+  return query ? `?${query}` : '';
+}
+
 export const api = {
   // Users
   async getUser(uid: string) {
@@ -144,6 +154,16 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ symbol, expiry }),
     });
+  },
+  async getChartHistory(params: {
+    symbol?: string;
+    securityId?: string;
+    exchangeSegment?: 'IDX_I' | 'NSE_FNO';
+    instrument?: 'INDEX' | 'OPTIDX';
+    timeframe: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '1D';
+    date?: string;
+  }) {
+    return safeFetch(`${API_BASE}/chart/history${toQuery(params)}`);
   },
   
   // Auth

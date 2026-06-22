@@ -20,6 +20,7 @@ interface Props {
   onStrikeSelect?: (strike: number, type: 'CE' | 'PE', ltp: number) => void;
   onExpiryChange?: (expiry: string) => void;
   onTrade?: (strike: number, type: 'CE' | 'PE', action: 'BUY' | 'SELL', ltp: number) => void;
+  onAddToWatchlist?: (strike: number, type: 'CE' | 'PE', ltp: number) => void;
 }
 
 function fmtOI(n: number): string {
@@ -34,11 +35,19 @@ function fmtOIChange(n: number): React.ReactNode {
   return <span className={`text-[9px] font-bold ${cls}`}>{n > 0 ? '+' : ''}{fmtOI(n)}</span>;
 }
 
-const ATM_WINDOW = 10; // strikes above and below ATM to show initially
-const LOAD_MORE  = 5;  // additional strikes to load on scroll edge
+function fmtVol(n?: number): string {
+  if (!n) return '--';
+  if (n >= 1e7) return (n / 1e7).toFixed(1) + 'Cr';
+  if (n >= 1e5) return (n / 1e5).toFixed(1) + 'L';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+}
+
+const ROW_HEIGHT = 74;
+const VIRTUAL_OVERSCAN = 6;
 
 const OptionChainRow = memo(({
-  row, isATM, isSelected, spotPrice, maxCeOI, maxPeOI, onSelect, onTrade,
+  row, isATM, isSelected, spotPrice, maxCeOI, maxPeOI, onSelect, onTrade, onAddToWatchlist,
 }: {
   row: OptionStrike;
   isATM: boolean;
@@ -48,6 +57,7 @@ const OptionChainRow = memo(({
   maxPeOI: number;
   onSelect: (strike: number, type: 'CE' | 'PE', ltp: number) => void;
   onTrade: (strike: number, type: 'CE' | 'PE', action: 'BUY' | 'SELL', ltp: number) => void;
+  onAddToWatchlist: (strike: number, type: 'CE' | 'PE', ltp: number) => void;
 }) => {
   const isITM_CE = row.strike < spotPrice;
   const isITM_PE = row.strike > spotPrice;
@@ -56,6 +66,7 @@ const OptionChainRow = memo(({
 
   return (
     <tr
+      style={{ height: ROW_HEIGHT }}
       className={`
         border-b border-slate-100 dark:border-white/5 transition-colors
         ${isATM ? 'bg-primary/10 dark:bg-primary/10 sticky-atm' : ''}
@@ -84,9 +95,32 @@ const OptionChainRow = memo(({
           <span className="text-[11px] font-bold text-red-600 dark:text-red-400 group-hover:text-primary transition-colors">
             {row.ce_ltp.toFixed(2)}
           </span>
+          <span className="text-[8px] text-slate-400">Vol {fmtVol(row.ce_volume)}</span>
           {row.ce_iv !== undefined && (
             <span className="text-[8px] text-slate-400">{row.ce_iv.toFixed(1)}%</span>
           )}
+          <div className="mt-1 flex justify-end gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddToWatchlist(row.strike, 'CE', row.ce_ltp);
+              }}
+              className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[8px] font-black text-slate-500 shadow-sm hover:border-primary hover:text-primary dark:border-white/10 dark:bg-white/10 dark:text-slate-300"
+            >
+              +WL
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onTrade(row.strike, 'CE', 'BUY', row.ce_ltp);
+              }}
+              className="rounded-md bg-red-500 px-1.5 py-0.5 text-[8px] font-black text-white shadow-sm shadow-red-500/20 hover:bg-red-600"
+            >
+              Buy
+            </button>
+          </div>
         </div>
       </td>
 
@@ -107,9 +141,32 @@ const OptionChainRow = memo(({
           <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:text-primary transition-colors">
             {row.pe_ltp.toFixed(2)}
           </span>
+          <span className="text-[8px] text-slate-400">Vol {fmtVol(row.pe_volume)}</span>
           {row.pe_iv !== undefined && (
             <span className="text-[8px] text-slate-400">{row.pe_iv.toFixed(1)}%</span>
           )}
+          <div className="mt-1 flex justify-start gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddToWatchlist(row.strike, 'PE', row.pe_ltp);
+              }}
+              className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[8px] font-black text-slate-500 shadow-sm hover:border-primary hover:text-primary dark:border-white/10 dark:bg-white/10 dark:text-slate-300"
+            >
+              +WL
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onTrade(row.strike, 'PE', 'BUY', row.pe_ltp);
+              }}
+              className="rounded-md bg-emerald-500 px-1.5 py-0.5 text-[8px] font-black text-white shadow-sm shadow-emerald-500/20 hover:bg-emerald-600"
+            >
+              Buy
+            </button>
+          </div>
         </div>
       </td>
 
@@ -126,15 +183,43 @@ const OptionChainRow = memo(({
       </td>
     </tr>
   );
+}, (prev, next) => {
+  // Return true if props are equal (skip re-render), false if different (re-render)
+  
+  // Quick checks for selection/ATM changes
+  if (prev.isATM !== next.isATM || prev.isSelected !== next.isSelected) return false;
+  if (prev.spotPrice !== next.spotPrice) return false;
+  if (prev.maxCeOI !== next.maxCeOI || prev.maxPeOI !== next.maxPeOI) return false;
+  
+  // Check if row data changed (LTP, OI, volume, change, etc.)
+  const rowDataChanged = 
+    prev.row.strike !== next.row.strike ||
+    prev.row.ce_ltp !== next.row.ce_ltp ||
+    prev.row.ce_oi !== next.row.ce_oi ||
+    prev.row.ce_oi_change !== next.row.ce_oi_change ||
+    prev.row.ce_volume !== next.row.ce_volume ||
+    prev.row.ce_change !== next.row.ce_change ||
+    prev.row.ce_change_pct !== next.row.ce_change_pct ||
+    prev.row.ce_iv !== next.row.ce_iv ||
+    prev.row.pe_ltp !== next.row.pe_ltp ||
+    prev.row.pe_oi !== next.row.pe_oi ||
+    prev.row.pe_oi_change !== next.row.pe_oi_change ||
+    prev.row.pe_volume !== next.row.pe_volume ||
+    prev.row.pe_change !== next.row.pe_change ||
+    prev.row.pe_change_pct !== next.row.pe_change_pct ||
+    prev.row.pe_iv !== next.row.pe_iv;
+  
+  return !rowDataChanged; // Return true if NO changes (skip re-render)
 });
 OptionChainRow.displayName = 'OptionChainRow';
 
-const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrade }: Props) => {
+const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrade, onAddToWatchlist }: Props) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const atmRef    = useRef<HTMLTableRowElement>(null);
   const [selectedStrike, setSelectedStrike] = useState<{ strike: number; type: 'CE' | 'PE' } | null>(null);
-  const [visibleRange, setVisibleRange]     = useState<[number, number]>([0, 0]);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(420);
   const [hasCentered, setHasCentered]       = useState(false);
+  const scrollFrameRef = useRef<number | null>(null);
 
   const spotPrice    = data?.price    ?? 0;
   const optionChain  = data?.optionChain ?? [];
@@ -159,40 +244,61 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     return closest;
   }, [sortedStrikes, spotPrice]);
 
-  // Visible window
   useEffect(() => {
     if (!sortedStrikes.length) return;
-    const lo = Math.max(0, atmIndex - ATM_WINDOW);
-    const hi = Math.min(sortedStrikes.length - 1, atmIndex + ATM_WINDOW);
-    setVisibleRange([lo, hi]);
     setHasCentered(false);
   }, [atmIndex, sortedStrikes.length]);
 
   // Center scroll on ATM after data loads
   useEffect(() => {
-    if (hasCentered || !atmRef.current || !scrollRef.current) return;
-    setTimeout(() => {
-      atmRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (hasCentered || !scrollRef.current || !sortedStrikes.length) return;
+    const timer = window.setTimeout(() => {
+      if (!scrollRef.current) return;
+      const nextTop = Math.max(0, atmIndex * ROW_HEIGHT - scrollRef.current.clientHeight / 2 + ROW_HEIGHT / 2);
+      scrollRef.current.scrollTo({ top: nextTop, behavior: 'smooth' });
+      setScrollTop(nextTop);
       setHasCentered(true);
     }, 100);
-  }, [visibleRange, hasCentered]);
+    return () => window.clearTimeout(timer);
+  }, [atmIndex, hasCentered, sortedStrikes.length]);
 
-  // Load more on scroll edges
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const nearTop    = el.scrollTop < 60;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-    setVisibleRange(([lo, hi]) => {
-      let newLo = lo, newHi = hi;
-      if (nearTop    && lo > 0)                              newLo = Math.max(0, lo - LOAD_MORE);
-      if (nearBottom && hi < sortedStrikes.length - 1)       newHi = Math.min(sortedStrikes.length - 1, hi + LOAD_MORE);
-      if (newLo !== lo || newHi !== hi) return [newLo, newHi];
-      return [lo, hi];
+    if (scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      if (!scrollRef.current) return;
+      setScrollTop(scrollRef.current.scrollTop);
+      setViewportHeight(scrollRef.current.clientHeight || 420);
     });
-  }, [sortedStrikes.length]);
+  }, []);
 
-  const visibleStrikes = sortedStrikes.slice(visibleRange[0], visibleRange[1] + 1);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) setViewportHeight(el.clientHeight || 420);
+    return () => {
+      if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+    };
+  }, []);
+
+  const virtualRange = useMemo(() => {
+    if (!sortedStrikes.length) return { start: 0, end: -1, top: 0, bottom: 0 };
+    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - VIRTUAL_OVERSCAN);
+    const visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
+    const end = Math.min(sortedStrikes.length - 1, start + visibleCount - 1);
+    return {
+      start,
+      end,
+      top: start * ROW_HEIGHT,
+      bottom: Math.max(0, (sortedStrikes.length - end - 1) * ROW_HEIGHT),
+    };
+  }, [scrollTop, sortedStrikes.length, viewportHeight]);
+
+  const visibleStrikes = useMemo(
+    () => sortedStrikes.slice(virtualRange.start, virtualRange.end + 1),
+    [sortedStrikes, virtualRange.end, virtualRange.start]
+  );
 
   // PCR
   const { totalCeOI, totalPeOI, pcr } = useMemo(() => {
@@ -216,25 +322,34 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     onTrade?.(strike, type, action, ltp);
   }, [onTrade]);
 
+  const handleAddToWatchlist = useCallback((strike: number, type: 'CE' | 'PE', ltp: number) => {
+    onAddToWatchlist?.(strike, type, ltp);
+  }, [onAddToWatchlist]);
+
   if (!data) {
     return (
-      <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
-        Loading option chain...
+      <div className="premium-card premium-gradient-line flex h-80 flex-col gap-3 p-4">
+        <div className="h-6 w-40 animate-pulse rounded bg-slate-200/80 dark:bg-white/10" />
+        <div className="grid grid-cols-7 gap-2">
+          {Array.from({ length: 42 }).map((_, index) => (
+            <div key={index} className="h-8 animate-pulse rounded bg-slate-200/70 dark:bg-white/10" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="premium-card premium-gradient-line flex h-full flex-col overflow-hidden">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200/80 bg-slate-50/80 px-3 py-3 dark:border-white/10 dark:bg-white/[0.045]">
         <div className="flex items-center gap-3">
           {/* Expiry selector */}
           {expiries.length > 0 && (
             <select
               value={expiry}
               onChange={e => onExpiryChange?.(e.target.value)}
-              className="text-[11px] font-bold bg-white dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-primary"
+              className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none transition-colors focus:border-primary dark:border-white/20 dark:bg-white/10 dark:text-slate-200"
             >
               {expiries.map(exp => (
                 <option key={exp} value={exp}>{exp}</option>
@@ -259,7 +374,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       </div>
 
       {/* Table header — sticky */}
-      <div className="flex-shrink-0 bg-slate-100 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
+      <div className="flex-shrink-0 border-b border-slate-200/80 bg-slate-100/80 dark:border-white/10 dark:bg-white/[0.045]">
         <table className="w-full text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
           <thead>
             <tr>
@@ -291,20 +406,25 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
         ) : (
           <table className="w-full">
             <tbody>
-              {visibleRange[0] > 0 && (
+              {virtualRange.start > 0 && (
                 <tr>
                   <td colSpan={7} className="text-center py-1 text-[10px] text-slate-400">
-                    ↑ {visibleRange[0]} more strikes above
+                    ↑ {virtualRange.start} more strikes above
                   </td>
                 </tr>
               )}
+              {virtualRange.top > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={7} style={{ height: virtualRange.top, padding: 0 }} />
+                </tr>
+              )}
               {visibleStrikes.map((row, i) => {
-                const globalIndex = visibleRange[0] + i;
+                const globalIndex = virtualRange.start + i;
                 const isATM = globalIndex === atmIndex;
                 const isSelected = selectedStrike?.strike === row.strike;
                 return (
                   <OptionChainRow
-                    key={row.strike}
+                    key={`${expiry}:${row.strike}:CE:${row.ce_security_id || 'na'}:PE:${row.pe_security_id || 'na'}`}
                     row={row}
                     isATM={isATM}
                     isSelected={isSelected}
@@ -313,13 +433,19 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
                     maxPeOI={maxPeOI}
                     onSelect={handleSelect}
                     onTrade={handleTrade}
+                    onAddToWatchlist={handleAddToWatchlist}
                   />
                 );
               })}
-              {visibleRange[1] < sortedStrikes.length - 1 && (
+              {virtualRange.bottom > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={7} style={{ height: virtualRange.bottom, padding: 0 }} />
+                </tr>
+              )}
+              {virtualRange.end < sortedStrikes.length - 1 && (
                 <tr>
                   <td colSpan={7} className="text-center py-1 text-[10px] text-slate-400">
-                    ↓ {sortedStrikes.length - 1 - visibleRange[1]} more strikes below
+                    ↓ {sortedStrikes.length - 1 - virtualRange.end} more strikes below
                   </td>
                 </tr>
               )}
@@ -329,7 +455,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       </div>
 
       {/* Footer: total OI */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 dark:bg-white/5 border-t border-slate-200 dark:border-white/10 flex-shrink-0 text-[9px] text-slate-400">
+      <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200/80 bg-slate-50/80 px-3 py-2 text-[9px] text-slate-400 dark:border-white/10 dark:bg-white/[0.045]">
         <span>Total CE OI: <strong className="text-red-500">{fmtOI(totalCeOI)}</strong></span>
         <span className="text-[10px] text-slate-500 dark:text-slate-400">
           {data.dataSource === 'Dhan' ? '🟢 Live' : '🔴 Stale'}

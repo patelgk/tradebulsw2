@@ -66,6 +66,8 @@ export interface TickerUpdate {
   ltp: number;
   ltt: number; // epoch seconds
   responseCode: number;
+  oi?: number;
+  prevClose?: number;
 }
 
 export interface QuoteUpdate extends TickerUpdate {
@@ -116,6 +118,7 @@ const REQUEST_CODE = {
 const RECONNECT_BASE_MS  = 2000;
 const RECONNECT_MAX_MS   = 60000;
 const RECONNECT_MAX_TRIES = 10;
+const SUBSCRIBE_BATCH_SIZE = Math.max(1, Number(process.env.DHAN_SUBSCRIBE_BATCH_SIZE || 50));
 
 // Disconnect reason codes from Annexure
 const DISCONNECT_REASONS: Record<number, string> = {
@@ -139,11 +142,15 @@ export class DhanMarketFeed {
   private ws: WebSocket | null = null;
   private instruments: DhanInstrument[] = [];
   private subscribeMode: 15 | 17 | 21 = REQUEST_CODE.SUBSCRIBE_QUOTE; // Quote by default
+  private pendingSubscriptions: Array<{ instruments: DhanInstrument[]; mode: 15 | 17 | 21 }> = [];
+  private activeSubscriptions = new Map<string, { instrument: DhanInstrument; mode: 15 | 17 | 21 }>();
+  private subscriptionRefs = new Map<string, number>();
 
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private intentionalDisconnect = false;
   private isConnected = false;
+  private lastDiagnosticLogAt = 0;
 
   private onUpdate: FeedUpdateCallback | null = null;
   private onConnect: ConnectCallback | null = null;
@@ -160,6 +167,52 @@ export class DhanMarketFeed {
   setInstruments(instruments: DhanInstrument[], mode: 15 | 17 | 21 = REQUEST_CODE.SUBSCRIBE_QUOTE) {
     this.instruments = instruments;
     this.subscribeMode = mode;
+    for (const instrument of instruments) {
+      const key = this._subscriptionKey(instrument);
+      this.activeSubscriptions.set(key, { instrument, mode });
+      this.subscriptionRefs.set(key, Math.max(this.subscriptionRefs.get(key) || 0, 1));
+    }
+  }
+
+  subscribeInstruments(instruments: DhanInstrument[], mode: 15 | 17 | 21 = REQUEST_CODE.SUBSCRIBE_QUOTE) {
+    if (!instruments.length) return;
+    const newSubscriptions: DhanInstrument[] = [];
+    for (const instrument of instruments) {
+      const key = this._subscriptionKey(instrument);
+      const currentRefs = this.subscriptionRefs.get(key) || 0;
+      this.subscriptionRefs.set(key, currentRefs + 1);
+      this.activeSubscriptions.set(key, { instrument, mode });
+      if (currentRefs === 0) {
+        newSubscriptions.push(instrument);
+      }
+    }
+    if (!newSubscriptions.length) return;
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this._sendSubscription(newSubscriptions, mode);
+      return;
+    }
+    this.pendingSubscriptions.push({ instruments: newSubscriptions, mode });
+  }
+
+  unsubscribeInstruments(instruments: DhanInstrument[], mode: 16 | 18 | 22 = REQUEST_CODE.UNSUBSCRIBE_QUOTE) {
+    if (!instruments.length) return;
+    const removedSubscriptions: DhanInstrument[] = [];
+    for (const instrument of instruments) {
+      const key = this._subscriptionKey(instrument);
+      const currentRefs = this.subscriptionRefs.get(key) || 0;
+      if (currentRefs > 1) {
+        this.subscriptionRefs.set(key, currentRefs - 1);
+        continue;
+      }
+      this.subscriptionRefs.delete(key);
+      this.activeSubscriptions.delete(key);
+      removedSubscriptions.push(instrument);
+    }
+    if (!removedSubscriptions.length) return;
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this._sendSubscription(removedSubscriptions, mode);
+      return;
+    }
   }
 
   onTickerUpdate(cb: FeedUpdateCallback)    { this.onUpdate     = cb; }
@@ -239,8 +292,8 @@ export class DhanMarketFeed {
     this.reconnectAttempts = 0;
     this.onConnect?.();
 
-    // Subscribe immediately after connection — no auth packet needed
-    this._subscribe();
+    this._resubscribeActiveInstruments();
+    this._flushPendingSubscriptions();
   }
 
   private _subscribe() {
@@ -250,21 +303,53 @@ export class DhanMarketFeed {
     }
 
     // API allows max 100 instruments per message — batch if needed
-    const BATCH = 100;
+    const BATCH = SUBSCRIBE_BATCH_SIZE;
     for (let i = 0; i < this.instruments.length; i += BATCH) {
       const batch = this.instruments.slice(i, i + BATCH);
+      this._sendSubscription(batch, this.subscribeMode);
+    }
+  }
+
+  private _flushPendingSubscriptions() {
+    if (!this.pendingSubscriptions.length) return;
+    const pending = [...this.pendingSubscriptions];
+    this.pendingSubscriptions = [];
+    for (const item of pending) {
+      this._sendSubscription(item.instruments, item.mode);
+    }
+  }
+
+  private _resubscribeActiveInstruments() {
+    if (this.activeSubscriptions.size === 0) return;
+    const grouped = new Map<15 | 17 | 21, DhanInstrument[]>();
+    for (const { instrument, mode } of this.activeSubscriptions.values()) {
+      const list = grouped.get(mode) || [];
+      list.push(instrument);
+      grouped.set(mode, list);
+    }
+    for (const [mode, instruments] of grouped.entries()) {
+      this._sendSubscription(instruments, mode);
+    }
+    console.log(`[DhanFeed] 🔁 Resubscribed active instruments: ${this.activeSubscriptions.size}`);
+  }
+
+  private _subscriptionKey(instrument: DhanInstrument) {
+    return `${instrument.ExchangeSegment}:${instrument.SecurityId}`;
+  }
+
+  private _sendSubscription(instruments: DhanInstrument[], mode: 15 | 17 | 21 | 16 | 18 | 22) {
+    const BATCH = SUBSCRIBE_BATCH_SIZE;
+    for (let i = 0; i < instruments.length; i += BATCH) {
+      const batch = instruments.slice(i, i + BATCH);
       const packet = {
-        RequestCode: this.subscribeMode,
+        RequestCode: mode,
         InstrumentCount: batch.length,
         InstrumentList: batch,
       };
       this._safeSend(JSON.stringify(packet));
       console.log(
-        `[DhanFeed] 📡 Subscribed batch ${Math.floor(i / BATCH) + 1}: ` +
-        `${batch.length} instruments (RequestCode: ${this.subscribeMode})`
-      );
-      batch.forEach(inst =>
-        console.log(`[DhanFeed]    → ${inst.ExchangeSegment}:${inst.SecurityId}`)
+        `[DhanFeed] 📡 ${mode === REQUEST_CODE.SUBSCRIBE_QUOTE ? "Subscribed" : mode === REQUEST_CODE.UNSUBSCRIBE_QUOTE ? "Unsubscribed" : "Updated"} batch ${Math.floor(i / BATCH) + 1}: ` +
+        `${batch.length} instruments (RequestCode: ${mode})`
       );
     }
   }
@@ -309,6 +394,7 @@ export class DhanMarketFeed {
         const ltt = buf.length >= 16 ? buf.readInt32LE(12) : 0;
         const update: TickerUpdate = { securityId, exchangeSegment, ltp, ltt, responseCode };
         this.onUpdate?.(update);
+        this._logDiagnostic(`[DhanFeed] Dhan tick received token=${securityId} code=${responseCode} ltp=${ltp.toFixed(2)}`);
         break;
       }
 
@@ -331,20 +417,25 @@ export class DhanMarketFeed {
           dayLow:       buf.readFloatLE(46),
         };
         this.onUpdate?.(update);
+        this._logDiagnostic(`[DhanFeed] Dhan tick received token=${securityId} code=${responseCode} ltp=${update.ltp.toFixed(2)} vol=${update.volume}`);
         break;
       }
 
       case RESPONSE_CODE.OI: {
         if (buf.length < 12) return;
         const oi = buf.readInt32LE(8);
-        console.log(`[DhanFeed] OI update — Security: ${securityId}, OI: ${oi}`);
+        const update: TickerUpdate = { securityId, exchangeSegment, ltp: 0, ltt: 0, responseCode, oi };
+        this.onUpdate?.(update);
+        this._logDiagnostic(`[DhanFeed] OI tick received token=${securityId}`);
         break;
       }
 
       case RESPONSE_CODE.PREV_CLOSE: {
         if (buf.length < 12) return;
         const prevClose = buf.readFloatLE(8);
-        console.log(`[DhanFeed] Prev Close — Security: ${securityId}, Close: ${prevClose}`);
+        const update: TickerUpdate = { securityId, exchangeSegment, ltp: 0, ltt: 0, responseCode, prevClose };
+        this.onUpdate?.(update);
+        this._logDiagnostic(`[DhanFeed] Prev close tick received token=${securityId}`);
         break;
       }
 
@@ -368,6 +459,7 @@ export class DhanMarketFeed {
           dayLow:       buf.length >= 63 ? buf.readFloatLE(59) : 0,
         };
         this.onUpdate?.(update);
+        this._logDiagnostic(`[DhanFeed] Dhan tick received token=${securityId} code=${responseCode} ltp=${update.ltp.toFixed(2)} vol=${update.volume}`);
         break;
       }
 
@@ -419,6 +511,13 @@ export class DhanMarketFeed {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+  }
+
+  private _logDiagnostic(message: string) {
+    const now = Date.now();
+    if (now - this.lastDiagnosticLogAt < 5000) return;
+    this.lastDiagnosticLogAt = now;
+    console.log(message);
   }
 
   private _safeSend(data: string) {

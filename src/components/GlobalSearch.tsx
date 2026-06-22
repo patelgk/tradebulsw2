@@ -8,7 +8,7 @@
  * Keyboard: Arrow keys to navigate, Enter to select, Escape to close
  */
 
-import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useDeferredValue, useMemo, memo } from 'react';
 import { Search, X, TrendingUp } from 'lucide-react';
 import { SYMBOLS, SymbolName, OptionStrike, SymbolMarketData } from '../types';
 
@@ -71,33 +71,42 @@ function parseOptionQuery(query: string): { symbol: SymbolName; strike: number; 
 
 const GlobalSearch = memo(({ marketData, onSelectIndex, onSelectOption, onClose }: Props) => {
   const [query, setQuery]       = useState('');
-  const [results, setResults]   = useState<SearchResult[]>([]);
   const [highlighted, setHighlighted] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const deferredQuery = useDeferredValue(query);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  useEffect(() => {
-    if (!query.trim()) {
+  const searchSnapshot = useMemo(() => {
+    const snapshot: Record<string, { price: number; optionChain: OptionStrike[] }> = {};
+    for (const sym of SYMBOLS) {
+      snapshot[sym] = {
+        price: marketData[sym]?.price ?? 0,
+        optionChain: marketData[sym]?.optionChain ?? [],
+      };
+    }
+    return snapshot;
+  }, [marketData]);
+
+  const results = useMemo<SearchResult[]>(() => {
+    if (!deferredQuery.trim()) {
       // Show all indices when empty
-      setResults(SYMBOLS.map(sym => ({
+      return SYMBOLS.map(sym => ({
         type: 'index',
         symbol: sym,
         label: sym,
-        subLabel: marketData[sym] ? `₹${marketData[sym].price.toFixed(2)}` : '--',
-      })));
-      setHighlighted(0);
-      return;
+        subLabel: searchSnapshot[sym] ? `₹${searchSnapshot[sym].price.toFixed(2)}` : '--',
+      }));
     }
 
-    const q = query.trim();
+    const q = deferredQuery.trim();
     const items: SearchResult[] = [];
 
     // Try parsing as option: "NIFTY 25000 CE"
     const optParsed = parseOptionQuery(q);
     if (optParsed) {
       const { symbol, strike, type } = optParsed;
-      const chain = marketData[symbol]?.optionChain ?? [];
+      const chain = searchSnapshot[symbol]?.optionChain ?? [];
       const row = chain.find(r => r.strike === strike);
       const ltp = type === 'CE' ? (row?.ce_ltp ?? 0) : (row?.pe_ltp ?? 0);
       items.push({
@@ -119,7 +128,7 @@ const GlobalSearch = memo(({ marketData, onSelectIndex, onSelectOption, onClose 
         items.push({
           type: 'index', symbol: sym,
           label: sym,
-          subLabel: marketData[sym] ? `₹${marketData[sym].price.toFixed(2)}` : '--',
+          subLabel: searchSnapshot[sym] ? `₹${searchSnapshot[sym].price.toFixed(2)}` : '--',
         });
       }
     }
@@ -127,9 +136,9 @@ const GlobalSearch = memo(({ marketData, onSelectIndex, onSelectOption, onClose 
     // Search option chains for nearby strikes
     if (!optParsed) {
       const sym = resolveSymbol(q);
-      if (sym && marketData[sym]?.optionChain.length) {
-        const spot = marketData[sym]?.price ?? 0;
-        const chain = [...(marketData[sym]?.optionChain ?? [])]
+      if (sym && searchSnapshot[sym]?.optionChain.length) {
+        const spot = searchSnapshot[sym]?.price ?? 0;
+        const chain = [...(searchSnapshot[sym]?.optionChain ?? [])]
           .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))
           .slice(0, 6);
         for (const row of chain) {
@@ -149,9 +158,12 @@ const GlobalSearch = memo(({ marketData, onSelectIndex, onSelectOption, onClose 
       }
     }
 
-    setResults(items.slice(0, 12));
+    return items.slice(0, 12);
+  }, [deferredQuery, searchSnapshot]);
+
+  useEffect(() => {
     setHighlighted(0);
-  }, [query, marketData]);
+  }, [deferredQuery, results.length]);
 
   const select = useCallback((result: SearchResult) => {
     if (result.type === 'index') {

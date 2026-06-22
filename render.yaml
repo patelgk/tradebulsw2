@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: tradebul-web
+    env: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ENABLE_MARKET_SIMULATOR
+        value: false
+      - key: TEST_MODE
+        value: false
+      - key: DISABLE_DHAN_WS
+        value: false
+      - key: DISABLE_DHAN_AUTOFETCH
+        value: false
+      - key: MONGODB_URI
+        sync: false
+      - key: DHAN_CLIENT_ID
+        sync: false
+      - key: DHAN_ACCESS_TOKEN
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
