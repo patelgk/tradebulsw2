@@ -19,6 +19,7 @@ const tradeSchema = new mongoose.Schema({
   optionType: { type: String, enum: ['CE', 'PE'] },
   strike: Number,
   price: Number,
+  lots: { type: Number, default: 1 },
   qty: Number,
   lotSize: { type: Number, default: 50 },
   time: { type: Date, default: Date.now },

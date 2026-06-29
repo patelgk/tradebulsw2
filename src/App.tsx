@@ -1318,11 +1318,11 @@ const OrderTicketModal = memo(({
   marketData: Record<string, any>;
   userProfile: any;
   onClose: () => void;
-  onPlaceOrder: (instrument: OrderTicketInstrument, side: 'BUY' | 'SELL', price: number, quantity: number, orderType: 'MARKET' | 'LIMIT') => Promise<boolean>;
+  onPlaceOrder: (instrument: OrderTicketInstrument, side: 'BUY' | 'SELL', price: number, lots: number, orderType: 'MARKET' | 'LIMIT') => Promise<boolean>;
 }) => {
   const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
   const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
-  const [quantity, setQuantity] = useState(instrument.lotSize);
+  const [lots, setLots] = useState(1);
   const [limitPrice, setLimitPrice] = useState(instrument.ltp);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1330,15 +1330,24 @@ const OrderTicketModal = memo(({
   const liveRow = findOptionRow(marketData, instrument.symbol, instrument.strikePrice, instrument.optionType, instrument.securityId);
   const liveLtp = Number(instrument.optionType === 'CE' ? liveRow?.ce_ltp || instrument.ltp : liveRow?.pe_ltp || instrument.ltp);
   const price = orderType === 'MARKET' ? liveLtp : Number(limitPrice || 0);
+  const lotSize = instrument.lotSize || LOT_SIZES[instrument.symbol as SymbolName] || 1;
+  const normalizedLots = Math.max(1, Math.floor(Number(lots) || 1));
+  const quantity = normalizedLots * lotSize;
   const premiumValue = Math.max(0, quantity) * Math.max(0, price);
   const estimatedCharges = 20 + premiumValue * 0.0007;
-  const requiredMargin = side === 'SELL' ? Math.ceil(quantity / instrument.lotSize) * 100000 : premiumValue + estimatedCharges;
-  const isValidQuantity = quantity > 0 && quantity % instrument.lotSize === 0;
-  const canSubmit = Boolean(instrument.securityId) && isValidQuantity && price > 0 && !isSubmitting;
+  const requiredMargin = side === 'SELL' ? normalizedLots * 100000 : 0;
+  const estimatedTotalCost = side === 'SELL' ? requiredMargin + estimatedCharges : premiumValue + estimatedCharges;
+  const canSubmit = Boolean(instrument.securityId) && normalizedLots >= 1 && quantity > 0 && price > 0 && !isSubmitting;
 
   useEffect(() => {
     if (orderType === 'MARKET') setLimitPrice(liveLtp);
   }, [liveLtp, orderType]);
+
+  useEffect(() => {
+    setLots(1);
+    setLimitPrice(instrument.ltp);
+    setIsConfirming(false);
+  }, [instrument]);
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -1348,7 +1357,7 @@ const OrderTicketModal = memo(({
     }
     setIsSubmitting(true);
     try {
-      const placed = await onPlaceOrder(instrument, side, price, quantity, orderType);
+      const placed = await onPlaceOrder(instrument, side, price, normalizedLots, orderType);
       if (placed) onClose();
     } finally {
       setIsSubmitting(false);
@@ -1363,7 +1372,7 @@ const OrderTicketModal = memo(({
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Order Ticket</p>
               <h3 className="mt-1 text-xl font-black tracking-tight">{instrument.displaySymbol}</h3>
-              <p className="mt-1 text-xs font-bold text-slate-500">{instrument.expiry || 'Current expiry'} - Lot {instrument.lotSize}</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">{instrument.expiry || 'Current expiry'} - Lot size {lotSize}</p>
             </div>
             <button onClick={onClose} className="rounded-2xl bg-slate-100 p-2 text-slate-500 hover:text-primary dark:bg-white/10">
               <Plus className="h-5 w-5 rotate-45" />
@@ -1407,37 +1416,60 @@ const OrderTicketModal = memo(({
             </label>
           )}
 
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase text-slate-400">Quantity</span>
-              <span className={`text-[10px] font-bold ${isValidQuantity ? 'text-emerald-500' : 'text-red-500'}`}>Lot multiple: {instrument.lotSize}</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="premium-panel p-4">
+              <p className="text-[10px] font-black uppercase text-slate-400">Symbol</p>
+              <p className="mt-1 text-sm font-black">{instrument.symbol}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setQuantity(Math.max(instrument.lotSize, quantity - instrument.lotSize))} className="rounded-2xl bg-slate-100 p-3 dark:bg-white/10"><Minus className="h-4 w-4" /></button>
-              <input
-                type="number"
-                value={quantity}
-                min={instrument.lotSize}
-                step={instrument.lotSize}
-                onChange={(event) => setQuantity(Number(event.target.value))}
-                className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-black outline-none focus:border-primary dark:border-white/10 dark:bg-white/10"
-              />
-              <button onClick={() => setQuantity(quantity + instrument.lotSize)} className="rounded-2xl bg-slate-100 p-3 dark:bg-white/10"><Plus className="h-4 w-4" /></button>
+            <div className="premium-panel p-4">
+              <p className="text-[10px] font-black uppercase text-slate-400">Strike</p>
+              <p className="mt-1 text-sm font-black">{instrument.strikePrice} {instrument.optionType}</p>
             </div>
           </div>
 
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-400">Lots</span>
+              <span className="text-[10px] font-bold text-emerald-500">Lot size: {lotSize}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setLots((value) => Math.max(1, value - 1))} className="rounded-2xl bg-slate-100 p-3 dark:bg-white/10"><Minus className="h-4 w-4" /></button>
+              <input
+                type="number"
+                value={lots}
+                min={1}
+                step={1}
+                onChange={(event) => setLots(Math.max(1, Math.floor(Number(event.target.value) || 1)))}
+                className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-black outline-none focus:border-primary dark:border-white/10 dark:bg-white/10"
+              />
+              <button onClick={() => setLots((value) => value + 1)} className="rounded-2xl bg-slate-100 p-3 dark:bg-white/10"><Plus className="h-4 w-4" /></button>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-black uppercase text-slate-400">Auto Quantity</span>
+            <input
+              type="number"
+              value={quantity}
+              readOnly
+              className="w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-center text-sm font-black text-slate-600 outline-none dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200"
+            />
+          </label>
+
           <div className="rounded-3xl border border-primary/20 bg-primary/10 p-4">
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div><p className="text-slate-400">Premium Value</p><p className="font-black">Rs {premiumValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-slate-400">LTP / Premium</p><p className="font-black">Rs {price.toFixed(2)}</p></div>
+              <div><p className="text-slate-400">Estimated Premium</p><p className="font-black">Rs {premiumValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p></div>
+              <div><p className="text-slate-400">Estimated Charges</p><p className="font-black">Rs {estimatedCharges.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p></div>
               <div><p className="text-slate-400">Required Margin</p><p className="font-black">Rs {requiredMargin.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p></div>
-              <div><p className="text-slate-400">Estimated Risk</p><p className="font-black">{side === 'BUY' ? 'Premium paid' : 'Margin exposure'}</p></div>
+              <div><p className="text-slate-400">Estimated Total</p><p className="font-black">Rs {estimatedTotalCost.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p></div>
               <div><p className="text-slate-400">Order Type</p><p className="font-black">{orderType}</p></div>
             </div>
           </div>
 
           {isConfirming && (
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs font-bold text-amber-600">
-              Confirm {side} {instrument.displaySymbol}, Qty {quantity}, at Rs {price.toFixed(2)}.
+              Confirm {side} {instrument.displaySymbol}, Lots {normalizedLots}, Qty {quantity}, at Rs {price.toFixed(2)}.
             </div>
           )}
 
@@ -1676,7 +1708,7 @@ const TradeView = memo(({
   onSymbolChange: (symbol: string) => void,
   selectedStrike: number,
   onStrikeChange: (strike: number) => void,
-  onTrade: (type: 'BUY' | 'SELL', strike: number, price: number, optionType: 'CE' | 'PE') => void,
+  onTrade: (type: 'BUY' | 'SELL', strike: number, price: number, optionType: 'CE' | 'PE', options?: { quantity?: number; lots?: number; lotSize?: number }) => void,
   chartSelection: ChartSelection,
   liveChartTick?: ChartTick | null,
   onChartSelectionChange: (selection: ChartSelection) => void,
@@ -1693,6 +1725,7 @@ const TradeView = memo(({
   const [tradeAction, setTradeAction] = useState<'BUY' | 'SELL'>('BUY');
   const [confirmOrder, setConfirmOrder] = useState<{ type: 'CE' | 'PE', price: number } | null>(null);
   const [isOrderPanelOpen, setIsOrderPanelOpen] = useState(false);
+  const [orderLots, setOrderLots] = useState(1);
   const timeframeOptions = ['1m', '3m', '5m', '15m', '30m', '1h', '1D'] as const;
 
   useEffect(() => {
@@ -1743,13 +1776,21 @@ const TradeView = memo(({
 
   const handleIntervalChange = useCallback((next: typeof timeframe) => setTimeframe(next), []);
 
-  const lotSize = selectedSymbol.includes('Bank') ? 15 : 
-                  selectedSymbol.includes('Midcap') ? 75 : 
-                  selectedSymbol.includes('Fin') ? 40 : 50;
+  const lotSize = LOT_SIZES[selectedSymbol as SymbolName] || 1;
+  const normalizedOrderLots = Math.max(1, Math.floor(Number(orderLots) || 1));
+  const orderQuantity = normalizedOrderLots * lotSize;
+
+  useEffect(() => {
+    setOrderLots(1);
+  }, [selectedSymbol, selectedStrike]);
 
   const handleConfirm = () => {
     if (confirmOrder) {
-      onTrade(tradeAction, selectedStrike, confirmOrder.price, confirmOrder.type);
+      onTrade(tradeAction, selectedStrike, confirmOrder.price, confirmOrder.type, {
+        lots: normalizedOrderLots,
+        quantity: orderQuantity,
+        lotSize,
+      });
       setConfirmOrder(null);
       setIsOrderPanelOpen(false);
     }
@@ -1773,16 +1814,40 @@ const TradeView = memo(({
 
             <div className="grid grid-cols-2 gap-4 mb-8">
               <div className="premium-panel p-4">
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Quantity</p>
-                <p className="text-lg font-bold">{lotSize} <span className="text-[10px] text-slate-500 font-medium">(1 Lot)</span></p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Lot Size</p>
+                <p className="text-lg font-bold">{lotSize}</p>
               </div>
               <div className="premium-panel p-4">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Premium</p>
                 <p className="text-lg font-bold">₹{confirmOrder.price.toFixed(2)}</p>
               </div>
+              <div className="col-span-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase text-slate-400">Lots</span>
+                  <span className="text-[10px] font-bold text-emerald-500">Qty: {orderQuantity}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setOrderLots((value) => Math.max(1, value - 1))} className="rounded-2xl bg-slate-100 p-3 dark:bg-white/10"><Minus className="h-4 w-4" /></button>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={orderLots}
+                    onChange={(event) => setOrderLots(Math.max(1, Math.floor(Number(event.target.value) || 1)))}
+                    className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-black outline-none focus:border-primary dark:border-white/10 dark:bg-white/10"
+                  />
+                  <button onClick={() => setOrderLots((value) => value + 1)} className="rounded-2xl bg-slate-100 p-3 dark:bg-white/10"><Plus className="h-4 w-4" /></button>
+                </div>
+                <input
+                  type="number"
+                  value={orderQuantity}
+                  readOnly
+                  className="mt-2 w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-center text-sm font-black text-slate-600 outline-none dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200"
+                />
+              </div>
               <div className="col-span-2 rounded-2xl border border-primary/25 bg-primary/10 p-4 shadow-inner shadow-primary/5">
                 <p className="text-[10px] font-bold text-primary uppercase mb-1">Estimated {tradeAction === 'BUY' ? 'Cost' : 'Credit'}</p>
-                <p className="text-2xl font-black text-primary tracking-tighter">₹{(confirmOrder.price * lotSize).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+                <p className="text-2xl font-black text-primary tracking-tighter">₹{(confirmOrder.price * orderQuantity).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                 {tradeAction === 'SELL' && <p className="text-[8px] text-primary/60 font-medium mt-1">Requires ₹1,00,000 Margin</p>}
               </div>
             </div>
@@ -3965,7 +4030,11 @@ function App() {
       if (!chain.length) return chain;
       return chain.map((row) => {
         const isMatchBySecurity = payload.securityId
-          ? sameToken(row.ce_security_id, payload.securityId) || sameToken(row.pe_security_id, payload.securityId)
+          ? payload.optionType === 'CE'
+            ? sameToken(row.ce_security_id, payload.securityId)
+            : payload.optionType === 'PE'
+              ? sameToken(row.pe_security_id, payload.securityId)
+              : sameToken(row.ce_security_id, payload.securityId) || sameToken(row.pe_security_id, payload.securityId)
           : false;
         const isMatchByStrike = payload.strike !== undefined && Number(row.strike) === Number(payload.strike);
         if (!isMatchBySecurity && !isMatchByStrike) return row;
@@ -4108,7 +4177,11 @@ function App() {
       const symbolKey = normalizeSymbolKey(payload.symbol);
       const isFullChain = Array.isArray(payload.optionChain);
       const previousRow = marketDataRef.current[symbolKey]?.optionChain?.find((row: OptionStrike) =>
-        sameToken(row.ce_security_id, payload.securityId) || sameToken(row.pe_security_id, payload.securityId) || Number(row.strike) === Number(payload.strike)
+        payload.optionType === 'CE'
+          ? sameToken(row.ce_security_id, payload.securityId) || Number(row.strike) === Number(payload.strike)
+          : payload.optionType === 'PE'
+            ? sameToken(row.pe_security_id, payload.securityId) || Number(row.strike) === Number(payload.strike)
+            : sameToken(row.ce_security_id, payload.securityId) || sameToken(row.pe_security_id, payload.securityId) || Number(row.strike) === Number(payload.strike)
       );
       const previousLtp = payload.optionType === 'CE' ? previousRow?.ce_ltp : payload.optionType === 'PE' ? previousRow?.pe_ltp : undefined;
       const nextLtp = payload.optionType === 'CE' ? payload.row?.ce_ltp : payload.optionType === 'PE' ? payload.row?.pe_ltp : undefined;
@@ -4142,16 +4215,19 @@ function App() {
         ...(marketDataRef.current[symbolKey] || {}),
         ...(pendingMarketPatches.get(symbolKey) || {}),
       };
+      const sideRowPatch = payload.row || {};
+      const isCeUpdate = payload.optionType === 'CE';
+      const isPeUpdate = payload.optionType === 'PE';
       const nextChain = isFullChain && payload.source !== 'rest-fallback'
           ? payload.optionChain
           : mergeOptionRow(current.optionChain || [], {
               strike: payload.strike,
               optionType: payload.optionType,
               securityId: payload.securityId,
-              price: payload.row?.ce_ltp ?? payload.row?.pe_ltp,
-              volume: payload.row?.ce_volume ?? payload.row?.pe_volume,
-              oi: payload.row?.ce_oi ?? payload.row?.pe_oi,
-              oiChange: payload.row?.ce_oi_change ?? payload.row?.pe_oi_change,
+              price: payload.price ?? (isCeUpdate ? sideRowPatch.ce_ltp : isPeUpdate ? sideRowPatch.pe_ltp : undefined),
+              volume: payload.volume ?? (isCeUpdate ? sideRowPatch.ce_volume : isPeUpdate ? sideRowPatch.pe_volume : undefined),
+              oi: payload.oi ?? (isCeUpdate ? sideRowPatch.ce_oi : isPeUpdate ? sideRowPatch.pe_oi : undefined),
+              oiChange: payload.oiChange ?? (isCeUpdate ? sideRowPatch.ce_oi_change : isPeUpdate ? sideRowPatch.pe_oi_change : undefined),
               change: payload.change,
               changePct: payload.changePct,
             });
@@ -4470,6 +4546,7 @@ function App() {
     options: {
       symbol?: string;
       quantity?: number;
+      lots?: number;
       lotSize?: number;
       securityId?: string;
       expiry?: string;
@@ -4480,11 +4557,12 @@ function App() {
 
     const tradeSymbol = options.symbol || selectedSymbol;
     const lotSize = options.lotSize || LOT_SIZES[tradeSymbol as SymbolName] || (
-      tradeSymbol.includes('Bank') ? 15 :
-      tradeSymbol.includes('Midcap') ? 75 :
-      tradeSymbol.includes('Fin') ? 40 : 50
+      tradeSymbol.includes('Bank') ? 30 :
+      tradeSymbol.includes('Midcap') ? 120 :
+      tradeSymbol.includes('Fin') ? 60 : 65
     );
-    const quantity = options.quantity || lotSize;
+    const lots = Math.max(1, Math.floor(Number(options.lots ?? (options.quantity ? options.quantity / lotSize : 1)) || 1));
+    const quantity = lots * lotSize;
 
     if (!price || price <= 0 || !Number.isFinite(price)) {
       showToast('Invalid order price', 'error');
@@ -4533,6 +4611,7 @@ function App() {
         type,
         optionType,
         strike,
+        lots,
         qty: quantity,
         lotSize,
         price: price,
@@ -4712,11 +4791,13 @@ function App() {
     instrument: OrderTicketInstrument,
     side: 'BUY' | 'SELL',
     price: number,
-    quantity: number,
+    lots: number,
     orderType: 'MARKET' | 'LIMIT'
   ) => {
+    const quantity = Math.max(1, Math.floor(Number(lots) || 1)) * instrument.lotSize;
     return handleTrade(side, instrument.strikePrice, price, instrument.optionType, {
       symbol: instrument.symbol,
+      lots,
       quantity,
       lotSize: instrument.lotSize,
       securityId: instrument.securityId,
@@ -5000,3 +5081,4 @@ function App() {
     </div>
   );
 }
+

@@ -228,7 +228,9 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
 
   // Sort strikes ascending
   const sortedStrikes = useMemo(() =>
-    [...optionChain].sort((a, b) => a.strike - b.strike),
+    [...optionChain]
+      .filter((row) => Number.isFinite(Number(row.strike)))
+      .sort((a, b) => Number(a.strike) - Number(b.strike)),
     [optionChain]
   );
 
@@ -300,15 +302,15 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     [sortedStrikes, virtualRange.end, virtualRange.start]
   );
 
-  // PCR
+  // PCR and totals must use the complete chain, not only the virtualized rows.
   const { totalCeOI, totalPeOI, pcr } = useMemo(() => {
-    const tce = visibleStrikes.reduce((s, r) => s + r.ce_oi, 0);
-    const tpe = visibleStrikes.reduce((s, r) => s + r.pe_oi, 0);
+    const tce = sortedStrikes.reduce((s, r) => s + Number(r.ce_oi || 0), 0);
+    const tpe = sortedStrikes.reduce((s, r) => s + Number(r.pe_oi || 0), 0);
     return { totalCeOI: tce, totalPeOI: tpe, pcr: tce > 0 ? +(tpe / tce).toFixed(2) : 0 };
-  }, [visibleStrikes]);
+  }, [sortedStrikes]);
 
-  const maxCeOI = useMemo(() => Math.max(...visibleStrikes.map(r => r.ce_oi), 1), [visibleStrikes]);
-  const maxPeOI = useMemo(() => Math.max(...visibleStrikes.map(r => r.pe_oi), 1), [visibleStrikes]);
+  const maxCeOI = useMemo(() => Math.max(...sortedStrikes.map(r => Number(r.ce_oi || 0)), 1), [sortedStrikes]);
+  const maxPeOI = useMemo(() => Math.max(...sortedStrikes.map(r => Number(r.pe_oi || 0)), 1), [sortedStrikes]);
 
   const sentiment = pcr > 1.2 ? 'Bullish' : pcr < 0.8 ? 'Bearish' : 'Neutral';
   const sentimentColor = sentiment === 'Bullish' ? 'text-emerald-500' : sentiment === 'Bearish' ? 'text-red-500' : 'text-amber-500';

@@ -15,6 +15,7 @@ export interface Trade {
   optionType: 'CE' | 'PE';
   strike: number;
   price: number;
+  lots?: number;
   qty: number;
   lotSize: number;
   time: string;
@@ -262,13 +263,13 @@ export const INDEX_SECURITY_IDS: Record<SymbolName, string> = {
 };
 
 export const LOT_SIZES: Record<SymbolName, number> = {
-  "Nifty 50":      50,
-  "Bank Nifty":    15,
-  "Fin Nifty":     40,
-  "Midcap Select": 75,
+  "Nifty 50":      65,
+  "Bank Nifty":    30,
+  "Fin Nifty":     60,
+  "Midcap Select": 120,
   "Nifty Next 50": 25,
   "SENSEX":        20,
-  "Bankex":        15,
+  "Bankex":        30,
 };
 
 export const STRIKE_STEPS: Record<SymbolName, number> = {

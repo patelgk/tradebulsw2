@@ -145,6 +145,7 @@ export interface ExecuteTradeParams {
   type:       'BUY' | 'SELL';
   ltp:        number;
   balance:    number;
+  lots?:      number;
 }
 
 export interface ExecuteTradeResult {
@@ -158,7 +159,8 @@ export interface ExecuteTradeResult {
 export function buildTradeOrder(params: ExecuteTradeParams): ExecuteTradeResult {
   const { userId, symbol, strike, optionType, type, ltp, balance } = params;
   const lotSize = LOT_SIZES[symbol] ?? 50;
-  const qty     = lotSize;
+  const lots    = Math.max(1, Math.floor(Number(params.lots) || 1));
+  const qty     = lots * lotSize;
 
   const entryCharges = calculateCharges(ltp, qty, type);
   const marginNeeded = type === 'SELL' ? Math.max(ltp * qty * 5, 25000) : ltp * qty + entryCharges.total;
@@ -174,6 +176,7 @@ export function buildTradeOrder(params: ExecuteTradeParams): ExecuteTradeResult 
     optionType,
     type,
     price:   ltp,
+    lots,
     qty,
     lotSize,
     status:  'Open',
