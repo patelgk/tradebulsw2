@@ -16,6 +16,7 @@ if (typeof window !== 'undefined') {
 }
 
 import { LandingPage } from './components/LandingPage';
+import BrandLogo, { APP_NAME } from './components/BrandLogo';
 import LWChart from './components/LWChart';
 import OptionChain from './components/OptionChain';
 import GlobalSearch from './components/GlobalSearch';
@@ -286,13 +287,11 @@ const Header = ({
             <Menu className="h-6 w-6 text-primary" />
           </button>
         ) : (
-          <div className="rounded-2xl border border-primary/20 bg-primary/[0.12] p-2 shadow-lg shadow-primary/10">
-            <TrendingUp className="h-5 w-5 text-primary" />
-          </div>
+          <BrandLogo compact iconClassName="h-10 w-10" />
         )}
         <div className="flex flex-col">
           <h1 className="text-xl font-black leading-none tracking-[-0.04em]">
-            {isSubView ? 'Option Chain' : 'Indo Trader'}
+            {isSubView ? 'Option Chain' : APP_NAME}
           </h1>
         </div>
         {!isSubView && activeTab === 'trade' && (
@@ -3568,15 +3567,15 @@ export default function AppWrapper() {
 function App() {
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('theme', 'dark');
-      return true;
+      return localStorage.getItem('theme') !== 'light';
     }
     return true;
   });
 
   useEffect(() => {
-    document.documentElement.classList.add('dark');
-    localStorage.setItem('theme', darkMode ? 'dark' : 'dark-soft');
+    document.documentElement.classList.toggle('dark', darkMode);
+    document.documentElement.style.colorScheme = darkMode ? 'dark' : 'light';
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
   const [user, setUser] = useState<User | null>(null);
@@ -4821,7 +4820,7 @@ function App() {
   }
 
   return (
-    <div className={`app-premium-bg relative mx-auto flex min-h-screen flex-col text-slate-100 shadow-2xl ${user && hasStarted ? 'max-w-md' : 'max-w-none'}`}>
+    <div className={`app-premium-bg relative mx-auto flex min-h-screen flex-col text-slate-900 shadow-2xl dark:text-slate-100 ${user && hasStarted ? 'max-w-md' : 'max-w-none'}`}>
       {user && hasStarted && (
         <Header 
           activeTab={activeTab} 
@@ -4832,7 +4831,7 @@ function App() {
           onOpenOptionChain={() => setShowOptionChain(true)}
           onLogout={user ? handleLogout : undefined}
           darkMode={darkMode}
-          onToggleDarkMode={() => setDarkMode(true)}
+          onToggleDarkMode={() => setDarkMode((value) => !value)}
           providerStatus={providerStatus}
           onSearch={() => setShowSearch(true)}
         />

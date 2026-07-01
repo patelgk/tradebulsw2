@@ -1,4 +1,4 @@
-# TradeBul Trading App
+# Proprupee Trading App
 
 Full-stack trading dashboard with Express, Socket.IO, MongoDB, Dhan market feed, and a Vite/React frontend.
 

@@ -13,51 +13,61 @@
 
 @layer base {
   html {
+    color-scheme: light;
+  }
+
+  html.dark {
     color-scheme: dark;
   }
 
   body {
-    @apply bg-[#070a12] text-slate-100 antialiased;
+    @apply bg-slate-50 text-slate-900 antialiased dark:bg-[#070a12] dark:text-slate-100;
   }
 
   input,
   select,
   textarea {
-    @apply text-slate-100 placeholder:text-slate-500;
+    @apply text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500;
   }
 
   option {
-    @apply bg-[#0b101a] text-slate-100;
+    @apply bg-white text-slate-900 dark:bg-[#0b101a] dark:text-slate-100;
   }
 }
 
 @layer utilities {
   .app-premium-bg {
     background:
+      radial-gradient(circle at 20% -10%, rgba(236, 91, 19, 0.10), transparent 34%),
+      radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.07), transparent 28%),
+      linear-gradient(180deg, #f8fafc 0%, #f1f5f9 48%, #e2e8f0 100%);
+  }
+  .dark .app-premium-bg {
+    background:
       radial-gradient(circle at 20% -10%, rgba(236, 91, 19, 0.16), transparent 34%),
       radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.08), transparent 28%),
       linear-gradient(180deg, #0a0d15 0%, #080a10 42%, #070a12 100%);
   }
   .premium-card {
-    @apply rounded-[1.65rem] border border-white/10 bg-[#101722]/90 text-slate-100 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-xl transition-all duration-300 dark:border-white/10 dark:bg-white/[0.055] dark:shadow-[0_24px_70px_rgba(0,0,0,0.28)];
+    @apply rounded-[1.65rem] border border-slate-200/80 bg-white/95 text-slate-900 shadow-[0_20px_55px_rgba(15,23,42,0.10)] backdrop-blur-xl transition-all duration-300 dark:border-white/10 dark:bg-[#101722]/90 dark:text-slate-100 dark:shadow-[0_24px_70px_rgba(0,0,0,0.32)];
   }
   .premium-card-hover {
-    @apply hover:-translate-y-0.5 hover:border-primary/35 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(236,91,19,0.16)] dark:hover:bg-white/[0.075];
+    @apply hover:-translate-y-0.5 hover:border-primary/35 hover:bg-white hover:shadow-[0_22px_70px_rgba(236,91,19,0.16)] dark:hover:bg-white/[0.075];
   }
   .premium-panel {
-    @apply rounded-[1.35rem] border border-white/10 bg-white/[0.055] text-slate-100 backdrop-blur-sm dark:border-white/10 dark:bg-white/[0.045];
+    @apply rounded-[1.35rem] border border-slate-200/80 bg-slate-50/80 text-slate-900 backdrop-blur-sm dark:border-white/10 dark:bg-white/[0.045] dark:text-slate-100;
   }
   .premium-chip {
-    @apply rounded-2xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-black text-slate-300 shadow-sm transition-all duration-300 active:scale-95 dark:border-white/10 dark:bg-white/[0.055] dark:text-slate-400;
+    @apply rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-2 text-xs font-black text-slate-700 shadow-sm transition-all duration-300 active:scale-95 dark:border-white/10 dark:bg-white/[0.055] dark:text-slate-300;
   }
   .premium-chip-active {
     @apply border-primary/50 bg-primary text-white shadow-lg shadow-primary/25 dark:bg-primary;
   }
   .premium-label {
-    @apply text-[10px] font-black uppercase tracking-[0.18em] text-slate-400;
+    @apply text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400;
   }
   .premium-value {
-    @apply font-black tracking-[-0.03em] text-white dark:text-white;
+    @apply font-black tracking-[-0.03em] text-slate-950 dark:text-white;
   }
   .premium-gradient-line {
     @apply relative overflow-hidden;
@@ -73,7 +83,7 @@
     @apply rounded-2xl font-black transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:active:scale-100;
   }
   .premium-bottom-nav {
-    @apply border-t border-white/10 bg-[#090c14]/90 shadow-[0_-22px_70px_rgba(0,0,0,0.38)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#090c14]/90 dark:shadow-[0_-22px_70px_rgba(0,0,0,0.38)];
+    @apply border-t border-slate-200/80 bg-white/90 shadow-[0_-18px_55px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#090c14]/90 dark:shadow-[0_-22px_70px_rgba(0,0,0,0.38)];
   }
   .hide-scrollbar::-webkit-scrollbar {
     display: none;

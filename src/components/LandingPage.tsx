@@ -26,6 +26,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
+import BrandLogo, { APP_NAME } from './BrandLogo';
 
 interface LandingPageProps {
   onLoginClick: () => void;
@@ -170,7 +171,7 @@ const HeroDashboardMockup = () => (
       <div className="relative rounded-[1.65rem] border border-white/10 bg-slate-950/80 p-4">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-emerald-200/70">TradeBul Terminal</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-emerald-200/70">{APP_NAME} Terminal</p>
             <h3 className="mt-1 text-lg font-black text-white">Challenge Dashboard</h3>
           </div>
           <div className="flex gap-1.5">
@@ -229,13 +230,7 @@ const Header = ({
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#050812]/78 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <button onClick={onLogoClick} className="group flex items-center gap-3 text-left">
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-300 to-cyan-300 text-slate-950 shadow-[0_0_40px_rgba(45,212,191,0.35)] transition-transform duration-300 group-hover:rotate-6">
-            <TrendingUp className="h-6 w-6" />
-          </span>
-          <span>
-            <span className="block text-base font-black uppercase tracking-[-0.04em] text-white">TradeBul</span>
-            <span className="block text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-200/70">Prop Trading</span>
-          </span>
+          <BrandLogo iconClassName="h-11 w-11 transition-transform duration-300 group-hover:rotate-6" textClassName="text-base leading-none" />
         </button>
 
         <nav className="hidden items-center gap-7 md:flex">
@@ -712,11 +707,9 @@ const Footer = ({ onLoginClick }: { onLoginClick: () => void }) => (
   <footer className="border-t border-white/10 bg-[#050812] px-4 py-12 sm:px-6 lg:px-8">
     <div className="mx-auto flex max-w-7xl flex-col gap-8 md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-300 to-cyan-300 text-slate-950">
-          <TrendingUp className="h-6 w-6" />
-        </span>
+        <BrandLogo compact iconClassName="h-11 w-11" />
         <div>
-          <p className="font-black uppercase tracking-[-0.04em] text-white">TradeBul Prop Trading</p>
+          <p className="font-black uppercase tracking-[-0.04em] text-white">{APP_NAME} Prop Trading</p>
           <p className="text-xs text-slate-500">Premium trading challenges and dashboard infrastructure.</p>
         </div>
       </div>
