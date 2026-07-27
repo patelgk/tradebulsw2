@@ -432,8 +432,8 @@ const FundingPlans = ({ onLoginClick }: { onLoginClick: () => void }) => {
       <div className="absolute right-0 top-20 h-96 w-96 rounded-full bg-amber-400/10 blur-[130px]" />
       <motion.div {...sectionMotion} className="relative mx-auto max-w-4xl text-center">
         <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-300">Trading Challenges</p>
-        <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Choose Your Funded Trading Challenge</h2>
-        <p className="mt-5 text-slate-400">Start your funded trading journey with PropRupee. Complete the evaluation, follow disciplined risk management, and unlock a funded trading account.</p>
+        <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Simple challenge plans, fast approval.</h2>
+        <p className="mt-5 text-slate-400">Pick the plan that fits your style, pay with the same gateway, and wait for approval to start trading.</p>
       </motion.div>
 
       <div className="relative mx-auto mt-14 grid max-w-7xl gap-5 lg:grid-cols-2 xl:grid-cols-4">
@@ -488,27 +488,6 @@ const FundingPlans = ({ onLoginClick }: { onLoginClick: () => void }) => {
           </motion.div>
         ))}
       </div>
-
-      <motion.div {...sectionMotion} transition={{ duration: 0.7, delay: 0.16 }} className="relative mx-auto mt-16 max-w-6xl rounded-[2rem] border border-white/10 bg-white/[0.045] p-8 backdrop-blur-2xl">
-        <h3 className="text-2xl font-black text-white">Why Choose PropRupee?</h3>
-        <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[
-            'One-Step Evaluation',
-            'Fast Challenge Activation',
-            'Transparent Rules',
-            'Professional Risk Management',
-            'Performance-Based Profit Sharing',
-            'Secure Payments',
-            'Dedicated Trader Dashboard',
-            'Scale Your Funding Over Time',
-          ].map((item) => (
-            <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-slate-200">
-              <CheckCircle2 className="h-4 w-4 text-amber-300" />
-              <span>{item}</span>
-            </div>
-          ))}
-        </div>
-      </motion.div>
     </section>
   );
 };

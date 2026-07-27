@@ -2577,10 +2577,10 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-24">
-      <div className="rounded-[2rem] border border-amber-300/20 bg-gradient-to-br from-amber-300/10 via-black/5 to-slate-950/80 p-5 shadow-[0_30px_90px_rgba(245,158,11,0.12)]">
+      <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 shadow-lg shadow-black/10">
         <p className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-300">Trading Challenges</p>
-        <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-white">Choose your funded trading challenge</h2>
-        <p className="mt-2 text-sm text-slate-400">Use the same payment gateway flow and complete your purchase after payment confirmation.</p>
+        <h2 className="mt-2 text-3xl font-black tracking-tight text-white">Choose your funded trading challenge</h2>
+        <p className="mt-3 max-w-2xl text-sm text-slate-400">Select a plan, complete payment, and wait for admin approval to unlock your funded account.</p>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         {displayPlans.map((plan, index) => {
@@ -2615,13 +2615,10 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
               </div>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 {[
-                  ['Profit Target', `${resolvedPlan.profit_target}%`],
-                  ['Daily Loss Limit', `${resolvedPlan.daily_dd}%`],
-                  ['Max Drawdown', `${resolvedPlan.max_dd}%`],
-                  ['Profit Split', (resolvedPlan as any).split || 'Up to 80%'],
-                  ['Evaluation', (resolvedPlan as any).evaluation || 'One Step'],
-                  ['Trading Days', (resolvedPlan as any).tradingDays || 'Unlimited'],
-                  ['Payout Cycle', (resolvedPlan as any).payout || '15 Days'],
+                  ['Funding', `₹${resolvedPlan.capital.toLocaleString('en-IN')}`],
+                  ['Target', `${resolvedPlan.profit_target}%`],
+                  ['Max DD', `${resolvedPlan.max_dd}%`],
+                  ['Daily DD', `${resolvedPlan.daily_dd}%`],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3">
                     <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
