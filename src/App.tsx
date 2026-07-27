@@ -4778,10 +4778,15 @@ function App() {
       orderType?: 'MARKET' | 'LIMIT';
     } = {}
   ): Promise<boolean> => {
-    if (!user || !userProfile) return false;
-    if (userProfile.accountStatus !== 'active' || !userProfile.tradingPermission) {
-      showToast('You need an approved challenge and active trading account to place trades.', 'error');
-      return false;
+    if (!user) return false;
+
+    if (!userProfile || userProfile.accountStatus !== 'active' || !userProfile.tradingPermission) {
+      const refreshedProfile = await api.getUser(user.uid).catch(() => null);
+      if (refreshedProfile) setUserProfile(refreshedProfile);
+      if (!refreshedProfile || refreshedProfile.accountStatus !== 'active' || !refreshedProfile.tradingPermission) {
+        showToast('You need an approved challenge and active trading account to place trades.', 'error');
+        return false;
+      }
     }
 
     const tradeSymbol = options.symbol || selectedSymbol;
