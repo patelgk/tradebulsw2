@@ -370,91 +370,145 @@ const Stats = () => {
 const FundingPlans = ({ onLoginClick }: { onLoginClick: () => void }) => {
   const plans = [
     {
-      name: 'Starter',
-      amount: '₹2.5L',
-      type: 'Single-step challenge',
-      target: '8%',
-      drawdown: '6%',
-      dailyLoss: '3%',
-      featured: false,
-    },
-    {
-      name: 'Professional',
-      amount: '₹10L',
-      type: 'Two-step evaluation',
+      name: 'Starter Challenge',
+      amount: '₹50,000',
+      fee: '₹9,999',
       target: '10%',
-      drawdown: '8%',
-      dailyLoss: '4%',
-      featured: true,
+      dailyLoss: '3%',
+      drawdown: '6%',
+      split: 'Up to 80%',
+      evaluation: 'One Step',
+      tradingDays: 'Unlimited',
+      payout: '15 Days',
+      featured: false,
+      badge: null,
     },
     {
-      name: 'Elite',
-      amount: '₹25L',
-      type: 'Scale-up challenge',
-      target: '12%',
-      drawdown: '10%',
-      dailyLoss: '5%',
+      name: 'Professional Challenge',
+      amount: '₹2,00,000',
+      fee: '₹24,999',
+      target: '10%',
+      dailyLoss: '3%',
+      drawdown: '6%',
+      split: 'Up to 80%',
+      evaluation: 'One Step',
+      tradingDays: 'Unlimited',
+      payout: '15 Days',
+      featured: true,
+      badge: 'Most Popular',
+    },
+    {
+      name: 'Elite Challenge',
+      amount: '₹5,00,000',
+      fee: '₹49,999',
+      target: '10%',
+      dailyLoss: '3%',
+      drawdown: '6%',
+      split: 'Up to 85%',
+      evaluation: 'One Step',
+      tradingDays: 'Unlimited',
+      payout: '15 Days',
       featured: false,
+      badge: 'Best Value',
+    },
+    {
+      name: 'Titan Challenge',
+      amount: '₹11,00,000',
+      fee: '₹99,999',
+      target: '10%',
+      dailyLoss: '3%',
+      drawdown: '6%',
+      split: 'Up to 90%',
+      evaluation: 'One Step',
+      tradingDays: 'Unlimited',
+      payout: '15 Days',
+      featured: false,
+      badge: null,
     },
   ];
 
   return (
     <section id="plans" className="relative overflow-hidden bg-[#050812] px-4 py-24 sm:px-6 lg:px-8">
-      <div className="absolute right-0 top-20 h-96 w-96 rounded-full bg-emerald-400/10 blur-[130px]" />
-      <motion.div {...sectionMotion} className="relative mx-auto max-w-3xl text-center">
-        <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">Funding Plans</p>
-        <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Choose a funding plan that fits your trading rhythm.</h2>
-        <p className="mt-5 text-slate-400">Clear rules, transparent targets, and risk controls designed for disciplined traders.</p>
+      <div className="absolute right-0 top-20 h-96 w-96 rounded-full bg-amber-400/10 blur-[130px]" />
+      <motion.div {...sectionMotion} className="relative mx-auto max-w-4xl text-center">
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-300">Trading Challenges</p>
+        <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Choose Your Funded Trading Challenge</h2>
+        <p className="mt-5 text-slate-400">Start your funded trading journey with PropRupee. Complete the evaluation, follow disciplined risk management, and unlock a funded trading account.</p>
       </motion.div>
 
-      <div className="relative mx-auto mt-14 grid max-w-7xl gap-5 lg:grid-cols-3">
+      <div className="relative mx-auto mt-14 grid max-w-7xl gap-5 lg:grid-cols-2 xl:grid-cols-4">
         {plans.map((plan, index) => (
           <motion.div
             key={plan.name}
             {...sectionMotion}
-            transition={{ duration: 0.6, delay: index * 0.08 }}
+            transition={{ duration: 0.6, delay: index * 0.06 }}
             className={cx(
               'relative rounded-[2rem] border p-6 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-2',
               plan.featured
-                ? 'border-emerald-300/45 bg-gradient-to-b from-emerald-300/16 to-white/[0.055] shadow-[0_35px_110px_rgba(16,185,129,0.18)]'
+                ? 'border-amber-300/40 bg-gradient-to-b from-amber-300/16 to-white/[0.055] shadow-[0_35px_110px_rgba(245,158,11,0.18)]'
                 : 'border-white/10 bg-white/[0.045]'
             )}
           >
-            {plan.featured && (
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-emerald-300 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-950">
-                Most Popular
+            {plan.badge && (
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-amber-300 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-950">
+                {plan.badge}
               </div>
             )}
             <div className="mb-8 flex items-start justify-between">
               <div>
-                <h3 className="text-2xl font-black text-white">{plan.name}</h3>
-                <p className="mt-1 text-sm text-slate-400">{plan.type}</p>
+                <h3 className="text-xl font-black text-white">{plan.name}</h3>
+                <p className="mt-1 text-sm text-slate-400">Funding: {plan.amount}</p>
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-emerald-200">
-                <Wallet className="h-6 w-6" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-amber-200">
+                <Trophy className="h-6 w-6" />
               </div>
             </div>
-            <p className="text-5xl font-black tracking-[-0.06em] text-white">{plan.amount}</p>
-            <p className="mt-2 text-xs font-black uppercase tracking-[0.24em] text-slate-500">Funding amount</p>
+            <p className="text-4xl font-black tracking-[-0.06em] text-white">₹{plan.fee}</p>
+            <p className="mt-2 text-xs font-black uppercase tracking-[0.24em] text-slate-500">Challenge Fee</p>
             <div className="my-8 h-px bg-white/10" />
-            <div className="space-y-4">
+            <div className="space-y-3 text-sm">
               {[
-                ['Profit Target', plan.target],
-                ['Max Drawdown', plan.drawdown],
-                ['Daily Loss Limit', plan.dailyLoss],
+                ['Profit Target', `${plan.target}`],
+                ['Daily Loss Limit', `${plan.dailyLoss}`],
+                ['Max Drawdown', `${plan.drawdown}`],
+                ['Profit Split', plan.split],
+                ['Evaluation', plan.evaluation],
+                ['Trading Days', plan.tradingDays],
+                ['Payout Cycle', plan.payout],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-center justify-between rounded-2xl bg-white/[0.045] px-4 py-3">
-                  <span className="text-sm text-slate-400">{label}</span>
+                  <span className="text-slate-400">{label}</span>
                   <span className="font-black text-white">{value}</span>
                 </div>
               ))}
             </div>
             <button onClick={onLoginClick} className={cx(primaryButton, 'mt-8 w-full')}>
-              Start {plan.name}
+              Buy Challenge
             </button>
           </motion.div>
         ))}
       </div>
+
+      <motion.div {...sectionMotion} transition={{ duration: 0.7, delay: 0.16 }} className="relative mx-auto mt-16 max-w-6xl rounded-[2rem] border border-white/10 bg-white/[0.045] p-8 backdrop-blur-2xl">
+        <h3 className="text-2xl font-black text-white">Why Choose PropRupee?</h3>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[
+            'One-Step Evaluation',
+            'Fast Challenge Activation',
+            'Transparent Rules',
+            'Professional Risk Management',
+            'Performance-Based Profit Sharing',
+            'Secure Payments',
+            'Dedicated Trader Dashboard',
+            'Scale Your Funding Over Time',
+          ].map((item) => (
+            <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-slate-200">
+              <CheckCircle2 className="h-4 w-4 text-amber-300" />
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
     </section>
   );
 };
@@ -637,11 +691,12 @@ const Testimonials = () => {
 const FAQ = () => {
   const [openIndex, setOpenIndex] = useState(0);
   const items = [
-    ['How does the challenge work?', 'Choose a plan, trade within the published rules, and track your progress through the dashboard. Access and next steps are handled through the existing account flow.'],
-    ['What markets can I trade?', 'The platform is designed around supported Indian index workflows such as NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, and related option premium charts where live data is available.'],
-    ['How is risk managed?', 'Risk is controlled through daily loss limits, max drawdown, targets, P&L tracking, and visible dashboard metrics that help traders stay disciplined.'],
+    ['How does the challenge work?', 'Complete the evaluation by achieving the profit target while staying within the drawdown rules.'],
+    ['How do I receive a funded account?', 'Once you successfully complete the evaluation and pass the review process, your funded account will be activated.'],
+    ['When do payouts occur?', 'Every 15 days, subject to the platform\'s payout policy.'],
+    ['Can I purchase multiple challenges?', 'Yes.'],
     ['Can I use the platform on mobile?', 'Yes. The landing page and dashboard shell are responsive, with layouts optimized for desktop, tablet, and mobile usage.'],
-    ['When do I get access to dashboard?', 'After login or signup through the existing authentication flow, the app routes you into the dashboard experience without changing existing functionality.'],
+    ['How secure is the platform?', 'The platform is designed for a premium experience with secure account handling and encrypted data flows for wallet and trading actions.'],
   ];
 
   return (

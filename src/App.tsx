@@ -2514,66 +2514,134 @@ const PortfolioView = ({ portfolio, onClosePosition, userId, allTrades }: { port
 };
 
 const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: Plan) => void, plans: Plan[], rules: Rule[] }) => {
+  const premiumPlans = [
+    {
+      name: 'Starter Challenge',
+      price: 9999,
+      capital: 50000,
+      profit_target: 10,
+      max_dd: 6,
+      daily_dd: 3,
+      tag: null,
+      recommended: false,
+      split: 'Up to 80%',
+      evaluation: 'One Step',
+      tradingDays: 'Unlimited',
+      payout: '15 Days',
+    },
+    {
+      name: 'Professional Challenge',
+      price: 24999,
+      capital: 200000,
+      profit_target: 10,
+      max_dd: 6,
+      daily_dd: 3,
+      tag: 'Most Popular',
+      recommended: true,
+      split: 'Up to 80%',
+      evaluation: 'One Step',
+      tradingDays: 'Unlimited',
+      payout: '15 Days',
+    },
+    {
+      name: 'Elite Challenge',
+      price: 49999,
+      capital: 500000,
+      profit_target: 10,
+      max_dd: 6,
+      daily_dd: 3,
+      tag: 'Best Value',
+      recommended: false,
+      split: 'Up to 85%',
+      evaluation: 'One Step',
+      tradingDays: 'Unlimited',
+      payout: '15 Days',
+    },
+    {
+      name: 'Titan Challenge',
+      price: 99999,
+      capital: 1100000,
+      profit_target: 10,
+      max_dd: 6,
+      daily_dd: 3,
+      tag: null,
+      recommended: false,
+      split: 'Up to 90%',
+      evaluation: 'One Step',
+      tradingDays: 'Unlimited',
+      payout: '15 Days',
+    },
+  ];
+
+  const displayPlans = (plans && plans.length > 0 ? plans : premiumPlans) as Plan[];
+
   return (
     <div className="flex flex-col gap-6 p-4 pb-24">
-      <div className="space-y-6">
-        {(plans || []).map(plan => (
-          <div 
-            key={plan._id || plan.id} 
-            className={`premium-card premium-card-hover premium-gradient-line relative p-6 ${
-              plan.recommended 
-                ? 'border-primary/50 bg-primary/6 shadow-xl shadow-primary/10' 
-                : ''
-            }`}
-          >
-            {plan.tag && (
-              <div className="absolute -top-3 right-6 rounded-full bg-primary px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary/25">
-                {plan.tag}
-              </div>
-            )}
-            <div className="mb-6 flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-xl font-black tracking-[-0.03em]">{plan.name}</h3>
-                <p className="text-3xl font-black text-primary">₹{plan.price.toLocaleString('en-IN')}</p>
-              </div>
-              {plan.recommended && (
-                <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-300">
-                  Recommended
-                </span>
-              )}
-            </div>
-            <div className="mb-8 space-y-4">
-              <div className="premium-panel flex items-center justify-between px-4 py-3 text-xs font-bold">
-                <span className="premium-label">Funding Amount</span>
-                <span>₹{plan.capital.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-white/[0.035]">
-                <div className="text-center">
-                  <p className="text-[10px] uppercase text-slate-400 font-bold mb-1">Profit</p>
-                  <p className="font-bold text-accent-neon">{plan.profit_target}%</p>
-                </div>
-                <div className="text-center border-x border-slate-200 dark:border-white/10">
-                  <p className="text-[10px] uppercase text-slate-400 font-bold mb-1">Max DD</p>
-                  <p className="font-bold text-trading-down">{plan.max_dd}%</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] uppercase text-slate-400 font-bold mb-1">Daily DD</p>
-                  <p className="font-bold text-red-400">{plan.daily_dd}%</p>
-                </div>
-              </div>
-            </div>
-            <button 
-              onClick={() => onSelectPlan(plan)}
-              className={`premium-action flex w-full items-center justify-center gap-2 py-4 ${
-                plan.recommended 
-                  ? 'bg-gradient-to-r from-primary to-orange-400 text-white shadow-lg shadow-primary/25' 
-                  : 'bg-primary/[0.12] text-primary hover:bg-primary hover:text-white'
+      <div className="rounded-[2rem] border border-amber-300/20 bg-gradient-to-br from-amber-300/10 via-black/5 to-slate-950/80 p-5 shadow-[0_30px_90px_rgba(245,158,11,0.12)]">
+        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-300">Trading Challenges</p>
+        <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-white">Choose your funded trading challenge</h2>
+        <p className="mt-2 text-sm text-slate-400">Use the same payment gateway flow and complete your purchase after payment confirmation.</p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {displayPlans.map((plan, index) => {
+          const isPremium = Boolean(plan.tag);
+          const resolvedPlan = { ...plan, price: Number(plan.price || 0), capital: Number(plan.capital || 0) };
+          return (
+            <div
+              key={resolvedPlan._id || resolvedPlan.id || `${resolvedPlan.name}-${index}`}
+              className={`premium-card premium-card-hover relative overflow-hidden rounded-[2rem] border p-5 ${
+                isPremium
+                  ? 'border-amber-300/40 bg-gradient-to-br from-amber-300/12 via-white/[0.03] to-transparent shadow-[0_30px_90px_rgba(245,158,11,0.16)]'
+                  : 'border-slate-200/70 bg-white/[0.03] dark:border-white/10'
               }`}
             >
-              Select {plan.name.split(' ')[0]} {plan.recommended ? <Trophy className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            </button>
-          </div>
-        ))}
+              {resolvedPlan.tag && (
+                <div className="absolute -top-3 right-5 rounded-full bg-amber-300 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-950">
+                  {resolvedPlan.tag}
+                </div>
+              )}
+              <div className="mb-5 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-black tracking-[-0.03em] text-white">{resolvedPlan.name}</h3>
+                  <p className="mt-1 text-sm text-slate-400">Funding: ₹{resolvedPlan.capital.toLocaleString('en-IN')}</p>
+                </div>
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-300/10 text-amber-300">
+                  <Trophy className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-3xl font-black text-white">₹{resolvedPlan.price.toLocaleString('en-IN')}</p>
+                <p className="mt-1 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Challenge Fee</p>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {[
+                  ['Profit Target', `${resolvedPlan.profit_target}%`],
+                  ['Daily Loss Limit', `${resolvedPlan.daily_dd}%`],
+                  ['Max Drawdown', `${resolvedPlan.max_dd}%`],
+                  ['Profit Split', (resolvedPlan as any).split || 'Up to 80%'],
+                  ['Evaluation', (resolvedPlan as any).evaluation || 'One Step'],
+                  ['Trading Days', (resolvedPlan as any).tradingDays || 'Unlimited'],
+                  ['Payout Cycle', (resolvedPlan as any).payout || '15 Days'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
+                    <p className="mt-1 font-black text-white">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => onSelectPlan(resolvedPlan)}
+                className={`mt-6 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition-all ${
+                  isPremium
+                    ? 'bg-gradient-to-r from-amber-300 to-orange-400 text-slate-950 shadow-lg shadow-amber-400/20'
+                    : 'bg-primary/[0.12] text-primary hover:bg-primary hover:text-white'
+                }`}
+              >
+                Buy Challenge <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       <div className="space-y-4">
@@ -2600,11 +2668,14 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
   );
 };
 
-const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 'error') => void }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'clients' | 'rules' | 'api' | 'challenges'>('clients');
+const AdminView = ({ showToast, currentUser }: { showToast: (msg: string, type?: 'success' | 'error') => void, currentUser: any }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'clients' | 'rules' | 'api' | 'challenges' | 'payments'>('clients');
   const [clients, setClients] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
   const [challenges, setChallenges] = useState<any[]>([]);
+  const [pendingTransactions, setPendingTransactions] = useState<any[]>([]);
+  const [challengePurchases, setChallengePurchases] = useState<any[]>([]);
+  const [purchaseFilter, setPurchaseFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [apiSettings, setApiSettings] = useState<any>(null);
   const [notificationSettings, setNotificationSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -2623,10 +2694,12 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
       setLoading(true);
       setError(null);
       try {
-        const [clientsData, rulesData, challengesData, marketData, notifData] = await Promise.all([
+        const [clientsData, rulesData, challengesData, pendingTransactionsData, challengePurchaseData, marketData, notifData] = await Promise.all([
           api.getClients(),
           api.getRules(),
           api.getChallenges(),
+          api.getTransactions(undefined, 'pending'),
+          api.getChallengePurchases(),
           api.getSettings('market'),
           api.getSettings('notifications')
         ]);
@@ -2634,6 +2707,8 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
         setClients(clientsData);
         setRules(rulesData);
         setChallenges(challengesData);
+        setPendingTransactions(pendingTransactionsData);
+        setChallengePurchases(challengePurchaseData);
         setApiSettings(marketData);
         setNotificationSettings(notifData);
 
@@ -2658,6 +2733,35 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
       }
     } catch (err) {
       showToast('Failed to update balance', 'error');
+    }
+  };
+
+  const refreshAdminData = async () => {
+    try {
+      const [clientsData, pendingTransactionsData, challengePurchaseData] = await Promise.all([
+        api.getClients(),
+        api.getTransactions(undefined, 'pending'),
+        api.getChallengePurchases()
+      ]);
+      setClients(clientsData);
+      setPendingTransactions(pendingTransactionsData);
+      setChallengePurchases(challengePurchaseData);
+    } catch (err) {
+      console.error('Failed to refresh admin data', err);
+    }
+  };
+
+  const handlePurchaseAction = async (purchaseId: string, approve: boolean, reason?: string) => {
+    try {
+      if (approve) {
+        await api.approvePurchase(purchaseId, currentUser?.uid || 'admin');
+      } else {
+        await api.rejectPurchase(purchaseId, reason, currentUser?.uid || 'admin');
+      }
+      await refreshAdminData();
+      showToast(approve ? 'Challenge approved' : 'Challenge rejected');
+    } catch (err) {
+      showToast('Failed to update purchase status', 'error');
     }
   };
 
@@ -2757,6 +2861,7 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
       <div className="flex gap-2 overflow-x-auto hide-scrollbar">
         {[
           { id: 'clients', label: 'Clients', icon: Users },
+          { id: 'payments', label: 'Payments', icon: ReceiptText },
           { id: 'challenges', label: 'Challenges', icon: Trophy },
           { id: 'rules', label: 'Rules', icon: ShieldCheck },
           { id: 'api', label: 'General Settings', icon: Settings }
@@ -2838,6 +2943,68 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
         </div>
       )}
 
+      {activeSubTab === 'payments' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold">Challenge Purchases</h3>
+            <div className="flex gap-2">
+              {(['pending','approved','rejected','all'] as const).map((filter) => (
+                <button key={filter} onClick={() => setPurchaseFilter(filter)} className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider ${purchaseFilter === filter ? 'bg-primary text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  {filter}
+                </button>
+              ))}
+            </div>
+          </div>
+          {challengePurchases.filter((purchase) => purchaseFilter === 'all' || purchase.status === purchaseFilter).length === 0 ? (
+            <div className="premium-panel border-dashed p-8 text-center font-bold text-slate-400">
+              No purchases found for this filter.
+            </div>
+          ) : (
+            challengePurchases.filter((purchase) => purchaseFilter === 'all' || purchase.status === purchaseFilter).map((purchase) => {
+              const user = clients.find(client => client.uid === purchase.userId);
+              return (
+                <div key={purchase._id || purchase.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-3">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-bold">User</p>
+                      <p className="font-bold">{user?.name || purchase.userEmail || purchase.userId}</p>
+                      <p className="text-[10px] text-slate-500">{user?.email || purchase.userEmail || 'No email available'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-bold">Challenge</p>
+                      <p className="font-bold">{purchase.challengeName || 'Challenge Purchase'}</p>
+                      <p className="text-[10px] text-slate-500">Funding: ₹{(purchase.fundingAmount || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-sm text-slate-600">
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400 font-bold">Fee</p>
+                      <p>₹{(purchase.challengeFee || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400 font-bold">Payment Status</p>
+                      <p className="font-bold uppercase">{purchase.paymentStatus || purchase.status || 'pending'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400 font-bold">Payment ID</p>
+                      <p className="text-xs font-bold">{purchase.transactionId || purchase.invoiceNumber || '—'}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {purchase.status !== 'approved' && (
+                      <button onClick={() => handlePurchaseAction(purchase._id || purchase.id, true)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold">Approve</button>
+                    )}
+                    {purchase.status !== 'rejected' && (
+                      <button onClick={() => handlePurchaseAction(purchase._id || purchase.id, false, 'Rejected by admin')} className="px-4 py-2 bg-red-500 text-white rounded-xl text-xs font-bold">Reject</button>
+                    )}
+                    <button className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold">View Details</button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
       {activeSubTab === 'challenges' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
@@ -2849,6 +3016,9 @@ const AdminView = ({ showToast }: { showToast: (msg: string, type?: 'success' | 
               <Plus className="w-3 h-3" />
               Add Plan
             </button>
+          </div>
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
+            Click a plan to open the SME Pay payment page. After payment, the admin will verify the transaction and approve your wallet balance update.
           </div>
           {challenges.map(plan => (
             <div key={plan._id || plan.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-4">
@@ -3372,6 +3542,8 @@ const WithdrawalModal = ({ isOpen, onClose, userProfile, user, showToast, setUse
 
 const ProfileView = ({ userProfile, user, showToast, setUserProfile }: { userProfile: any, user: any, showToast: (msg: string, type?: 'success' | 'error') => void, setUserProfile: (profile: any) => void }) => {
   const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);
+  const [challengePurchases, setChallengePurchases] = useState<any[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
 
@@ -3380,14 +3552,18 @@ const ProfileView = ({ userProfile, user, showToast, setUserProfile }: { userPro
     let consecutiveErrors = 0;
     const fetchTrades = async () => {
       try {
-        const trades = await api.getTrades(user.uid);
-        // Only get first 10 closed trades for history
+        const [trades, challengePurchaseData, transactions] = await Promise.all([
+          api.getTrades(user.uid),
+          api.getChallengePurchases(),
+          api.getTransactions(user.uid)
+        ]);
         const closed = trades.filter(t => t.status === 'Closed').slice(0, 10);
         setTradeHistory(closed);
+        setChallengePurchases(challengePurchaseData.filter((purchase: any) => purchase.userId === user.uid));
+        setPaymentHistory(transactions.filter((tx: any) => tx.userId === user.uid));
         consecutiveErrors = 0;
       } catch (error) {
         consecutiveErrors++;
-        // Signal server startup or temporary failure quietly
         if (consecutiveErrors % 10 === 1) {
           console.warn("Retrying trade history fetch (server may be starting)...");
         }
@@ -3430,8 +3606,61 @@ const ProfileView = ({ userProfile, user, showToast, setUserProfile }: { userPro
           </button>
         </div>
         <div className="premium-card p-4">
-          <p className="premium-label mb-1">Total Payouts</p>
-          <p className="text-lg font-bold">₹0.00</p>
+          <p className="premium-label mb-1">Trading Capital</p>
+          <p className="text-lg font-bold">₹{(userProfile?.tradingCapital || 0).toLocaleString('en-IN')}</p>
+          <p className="mt-2 text-[10px] uppercase tracking-wider text-slate-500">{userProfile?.challengeStatus === 'active' ? 'Active Challenge' : 'No Active Challenge'}</p>
+        </div>
+      </div>
+
+      <div className="premium-card p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="premium-label mb-1">Current Challenge</p>
+            <p className="text-lg font-black text-white">{userProfile?.currentChallengeName || 'No active funded challenge yet.'}</p>
+          </div>
+          <div className="rounded-full bg-amber-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-amber-300">
+            {userProfile?.challengeStatus || 'none'}
+          </div>
+        </div>
+        <p className="mt-3 text-sm text-slate-400">{userProfile?.accountStatus === 'active' && userProfile?.tradingPermission ? 'Trading is enabled for your approved challenge.' : 'You do not have an active funded challenge yet. Purchase a challenge and wait for admin approval.'}</p>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="premium-card p-4">
+          <p className="premium-label mb-3">Purchase History</p>
+          {challengePurchases.length === 0 ? (
+            <p className="text-sm text-slate-400">No challenge purchases yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {challengePurchases.slice(0, 3).map((purchase: any) => (
+                <div key={purchase._id || purchase.id} className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-white">{purchase.challengeName}</span>
+                    <span className="text-[10px] uppercase text-slate-400">{purchase.status}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">Fee: ₹{(purchase.challengeFee || 0).toLocaleString('en-IN')} · Funding: ₹{(purchase.fundingAmount || 0).toLocaleString('en-IN')}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="premium-card p-4">
+          <p className="premium-label mb-3">Payment History</p>
+          {paymentHistory.length === 0 ? (
+            <p className="text-sm text-slate-400">No payments recorded yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {paymentHistory.slice(0, 3).map((tx: any) => (
+                <div key={tx._id || tx.id} className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-white">{tx.planName || 'Challenge Purchase'}</span>
+                    <span className="text-[10px] uppercase text-slate-400">{tx.status}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">₹{(tx.amount || 0).toLocaleString('en-IN')} · {new Date(tx.time || tx.paymentDate || Date.now()).toLocaleDateString()}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -4553,6 +4782,10 @@ function App() {
     } = {}
   ): Promise<boolean> => {
     if (!user || !userProfile) return false;
+    if (userProfile.accountStatus !== 'active' || !userProfile.tradingPermission) {
+      showToast('You need an approved challenge and active trading account to place trades.', 'error');
+      return false;
+    }
 
     const tradeSymbol = options.symbol || selectedSymbol;
     const lotSize = options.lotSize || LOT_SIZES[tradeSymbol as SymbolName] || (
@@ -4681,7 +4914,9 @@ function App() {
       const newBalance = userProfile.balance + closeCashChange;
       await api.upsertUser({
         uid: user.uid,
-        balance: newBalance
+        balance: newBalance,
+        allowFundingUpdate: true,
+        source: 'trade-engine'
       });
 
       setUserProfile(prev => prev ? { ...prev, balance: newBalance } : null);
@@ -4694,32 +4929,29 @@ function App() {
   };
 
   const handleBuyChallenge = async (plan: Plan) => {
-    if (!user || !userProfile) return;
-    
-    // In a real app, you'd check balance, but here we add capital to balance
-    try {
-      const newBalance = (userProfile.balance || 0) + plan.capital;
-      
-      // Update user balance in MongoDB
-      await api.upsertUser({
-        uid: user.uid,
-        balance: newBalance,
-        initial_balance: newBalance // Also update initial balance for drawdown tracking
-      });
+    if (!user) return;
+    const paymentLink = 'https://page.smepay.in/@gsktrading/transaction/dkyr3dw';
 
-      // Record the transaction
+    try {
       await api.addTransaction({
         userId: user.uid,
         type: 'challenge_purchase',
         amount: plan.price,
+        capital: plan.capital,
         planId: plan.id,
-        planName: plan.name
+        planName: plan.name,
+        challengeName: plan.name,
+        paymentLink,
+        paymentReference: paymentLink,
+        paymentDate: new Date(),
+        invoiceNumber: `INV-${Date.now()}`,
+        status: 'pending'
       });
-
-      showToast(`Successfully purchased ${plan.name}! ₹${plan.capital.toLocaleString()} added to wallet.`);
+      window.open(paymentLink, '_blank');
+      showToast('Payment Successful. Your challenge is under review. Once approved, your funded account will be activated.');
     } catch (error) {
-      console.error('Purchase failed:', error);
-      showToast('Failed to purchase challenge', 'error');
+      console.error('Purchase request failed:', error);
+      showToast('Failed to create purchase request', 'error');
     }
   };
 
@@ -5022,7 +5254,7 @@ function App() {
               {activeTab === 'challenges' && <ChallengesView onSelectPlan={handleBuyChallenge} plans={plans} rules={rules} />}
               {activeTab === 'portfolio' && <PortfolioView portfolio={portfolio} onClosePosition={handleClosePosition} userId={user.uid} allTrades={allTrades} />}
               {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} />}
-              {activeTab === 'admin' && <AdminView showToast={showToast} />}
+              {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} />}
             </motion.div>
           </AnimatePresence>
         )}

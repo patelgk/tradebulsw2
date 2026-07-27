@@ -22,7 +22,7 @@ import * as dotenv from "dotenv";
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
 import nodemailer from "nodemailer";
-import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction } from "./db.js";
+import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction, ChallengePurchase, FundHistory, AdminAction, ChallengeStatus, TradingAccount, Notification } from "./db.js";
 import dhanRoutes from "./routes/dhanRoutes.js";
 import { MarketFeedManager } from "./services/marketFeedManager.js";
 import { DevelopmentMarketSimulator } from "./services/developmentMarketSimulator.js";
@@ -153,7 +153,7 @@ async function fetchChartHistory(params: { symbol: string; securityId: string; e
     instrument: params.instrument,
     interval: dhanInterval,
     fromDate: fmt(from),
-    toDate: fmt(now),
+    toDate: fmt(now), 
   };
 
   if (!isIntraday) {
@@ -495,9 +495,27 @@ app.get("/api/users/:uid", async (req, res) => {
 app.post("/api/users", async (req, res) => {
   try {
     const { uid, ...data } = req.body;
-    const user = await User.findOneAndUpdate({ uid }, { $set: data }, { upsert: true, new: true });
+    if (!uid) return res.status(400).json({ error: "uid is required" });
+
+    const currentUser = await User.findOne({ uid });
+    const isAdmin = currentUser?.role === 'admin' || data.role === 'admin';
+    const sensitiveFields = ['balance', 'initial_balance', 'accountStatus', 'tradingCapital', 'tradingPermission', 'challenge', 'challengeStatus', 'currentChallengeName', 'challengeActivatedAt', 'tradingAccountId', 'role'];
+    const isSensitiveUpdate = sensitiveFields.some((field) => Object.prototype.hasOwnProperty.call(data, field));
+    const allowSensitiveUpdate = isAdmin || data.allowFundingUpdate === true || data.source === 'trade-engine';
+
+    if (isSensitiveUpdate && !allowSensitiveUpdate) {
+      return res.status(403).json({ error: "Only admin can modify funding and challenge account state" });
+    }
+
+    const sanitized = { ...data };
+    delete sanitized.allowFundingUpdate;
+    delete sanitized.source;
+
+    const user = await User.findOneAndUpdate({ uid }, { $set: sanitized }, { upsert: true, new: true });
     res.json(user);
-  } catch { res.status(500).json({ error: "Failed to upsert user" }); }
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to upsert user", message: err.message });
+  }
 });
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -512,7 +530,14 @@ app.post("/api/auth/signup", async (req, res) => {
     if (existing) return res.status(400).json({ error: "User already exists with this email or mobile number" });
     const user = new User({
       uid: uuidv4(), email, password, name,
-      phoneNumber: finalPhone, balance: 100000, initial_balance: 100000,
+      phoneNumber: finalPhone,
+      balance: 0,
+      initial_balance: 0,
+      accountStatus: "inactive",
+      tradingCapital: 0,
+      tradingPermission: false,
+      challenge: null,
+      challengeStatus: "none",
     });
     await user.save();
     res.json(user);
@@ -546,7 +571,10 @@ app.post("/api/auth/admin-login", async (req, res) => {
         user = new User({
           uid: uuidv4(), email: "admin@indotrader.com", password,
           name: "System Admin", role: "admin",
-          balance: 10000000, initial_balance: 10000000, phoneNumber: mobile,
+          balance: 0, initial_balance: 0, phoneNumber: mobile,
+          accountStatus: "active",
+          tradingCapital: 0,
+          tradingPermission: false,
         });
         await user.save();
       } else if (user.role !== "admin") {
@@ -669,16 +697,255 @@ app.post("/api/settings/:id", async (req, res) => {
 
 // ─── Transactions ─────────────────────────────────────────────────────────────
 
+const createNotification = async (userId: string, type: string, title: string, message: string) => {
+  try {
+    await new Notification({ userId, type, title, message }).save();
+  } catch (err) {
+    console.error("[Notification] failed", err);
+  }
+};
+
+const recordAdminAction = async (adminId: string, action: string, targetType: string, targetId: string, details: any) => {
+  try {
+    await new AdminAction({ adminId, action, targetType, targetId, details }).save();
+  } catch (err) {
+    console.error("[AdminAction] failed", err);
+  }
+};
+
+const recordFundHistory = async (userId: string, type: string, amount: number, balanceBefore: number, balanceAfter: number, reason: string, referenceId: string, adminId?: string) => {
+  try {
+    await new FundHistory({ userId, type, amount, balanceBefore, balanceAfter, reason, referenceId, adminId }).save();
+  } catch (err) {
+    console.error("[FundHistory] failed", err);
+  }
+};
+
 app.get("/api/transactions", async (req, res) => {
   try {
-    const filter = req.query.userId ? { userId: req.query.userId as string } : {};
+    const filter: any = {};
+    if (req.query.userId) filter.userId = req.query.userId as string;
+    if (req.query.status) filter.status = req.query.status as string;
+    if (req.query.type) filter.type = req.query.type as string;
     res.json(await Transaction.find(filter).sort({ time: -1 }));
   } catch { res.status(500).json({ error: "Failed to fetch transactions" }); }
 });
 
 app.post("/api/transactions", async (req, res) => {
-  try { res.json(await new Transaction(req.body).save()); }
-  catch { res.status(500).json({ error: "Failed to create transaction" }); }
+  try {
+    const payload = req.body;
+    const transaction = await new Transaction(payload).save();
+    if (payload.type === 'challenge_purchase' && payload.userId) {
+      const user = await User.findOne({ uid: payload.userId });
+      const purchase = await new ChallengePurchase({
+        userId: payload.userId,
+        userEmail: user?.email || '',
+        challengeName: payload.challengeName || payload.planName || 'Challenge',
+        fundingAmount: payload.capital || 0,
+        challengeFee: payload.amount || 0,
+        transactionId: String(transaction._id),
+        paymentReference: payload.paymentReference || payload.paymentLink || '',
+        paymentDate: payload.paymentDate || new Date(),
+        paymentStatus: 'successful',
+        invoiceNumber: payload.invoiceNumber || `INV-${Date.now()}`,
+        status: 'pending',
+      }).save();
+      await createNotification(payload.userId, 'payment_successful', 'Payment Successful', 'Payment Successful. Your challenge is under review. Once approved, your funded account will be activated.');
+      await ChallengeStatus.findOneAndUpdate({ userId: payload.userId }, { $set: { status: 'pending', challengeName: purchase.challengeName, fundingAmount: purchase.fundingAmount, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
+      await TradingAccount.findOneAndUpdate({ userId: payload.userId }, { $set: { status: 'inactive', fundingAmount: purchase.fundingAmount, challengeName: purchase.challengeName, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
+      return res.json({ transaction, purchase });
+    }
+    res.json(transaction);
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to create transaction", message: err.message });
+  }
+});
+
+app.put("/api/transactions/:id", async (req, res) => {
+  try {
+    const tx = await Transaction.findById(req.params.id);
+    if (!tx) return res.status(404).json({ error: "Transaction not found" });
+
+    const updates = req.body;
+    const updatedTx = await Transaction.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+
+    if (updates.status === 'approved' && tx.status !== 'approved' && tx.capital && tx.userId) {
+      const user = await User.findOne({ uid: tx.userId });
+      const before = user?.tradingCapital ?? user?.balance ?? 0;
+      const after = before + tx.capital;
+      await User.findOneAndUpdate({ uid: tx.userId }, {
+        $set: {
+          balance: after,
+          tradingCapital: after,
+          tradingPermission: true,
+          accountStatus: 'active',
+          challengeStatus: 'active',
+          challenge: tx.planName || tx.challengeName || 'Challenge',
+          currentChallengeName: tx.planName || tx.challengeName || 'Challenge',
+          challengeActivatedAt: new Date(),
+        }
+      });
+      await ChallengePurchase.findOneAndUpdate({ transactionId: String(tx._id) }, { $set: { status: 'approved', paymentStatus: 'approved', approvedAt: new Date() } }, { new: true });
+      await ChallengeStatus.findOneAndUpdate({ userId: tx.userId }, { $set: { status: 'active', challengeName: tx.planName || tx.challengeName || 'Challenge', fundingAmount: tx.capital, tradingCapital: tx.capital, activationDate: new Date(), updatedAt: new Date() } }, { upsert: true, new: true });
+      await TradingAccount.findOneAndUpdate({ userId: tx.userId }, { $set: { status: 'active', fundingAmount: tx.capital, challengeName: tx.planName || tx.challengeName || 'Challenge', tradingCapital: tx.capital, activatedAt: new Date(), updatedAt: new Date() } }, { upsert: true, new: true });
+      await recordFundHistory(tx.userId, 'credit', tx.capital, before, after, 'Challenge approved', String(tx._id));
+      await createNotification(tx.userId, 'challenge_approved', 'Challenge Approved', 'Your challenge has been approved and your funded account is now active.');
+    }
+
+    if (updates.status === 'rejected' && tx.status !== 'rejected' && tx.userId) {
+      const user = await User.findOne({ uid: tx.userId });
+      const before = user?.tradingCapital ?? user?.balance ?? 0;
+      await User.findOneAndUpdate({ uid: tx.userId }, { $set: { balance: before, tradingCapital: 0, tradingPermission: false, challengeStatus: 'rejected' } });
+      await ChallengePurchase.findOneAndUpdate({ transactionId: String(tx._id) }, { $set: { status: 'rejected', paymentStatus: 'rejected', reviewReason: updates.reviewReason || 'Rejected by admin' } }, { new: true });
+      await ChallengeStatus.findOneAndUpdate({ userId: tx.userId }, { $set: { status: 'rejected', challengeName: tx.planName || tx.challengeName || 'Challenge', fundingAmount: tx.capital, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
+      await TradingAccount.findOneAndUpdate({ userId: tx.userId }, { $set: { status: 'rejected', fundingAmount: tx.capital, challengeName: tx.planName || tx.challengeName || 'Challenge', tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
+      await createNotification(tx.userId, 'challenge_rejected', 'Challenge Rejected', 'Your challenge purchase was rejected.');
+    }
+
+    res.json(updatedTx);
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to update transaction", message: err.message });
+  }
+});
+
+app.get("/api/challenge-purchases", async (req, res) => {
+  try {
+    const purchases = await ChallengePurchase.find().sort({ createdAt: -1 });
+    res.json(purchases);
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch challenge purchases", message: err.message });
+  }
+});
+
+app.post("/api/challenge-purchases/:id/approve", async (req, res) => {
+  try {
+    const adminId = req.body.adminId || 'admin';
+    const purchase = await ChallengePurchase.findById(req.params.id);
+    if (!purchase) return res.status(404).json({ error: "Purchase not found" });
+    const user = await User.findOne({ uid: purchase.userId });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const before = user.tradingCapital ?? user.balance ?? 0;
+    const after = before + (purchase.fundingAmount || 0);
+    await User.findOneAndUpdate({ uid: purchase.userId }, {
+      $set: {
+        balance: after,
+        tradingCapital: after,
+        tradingPermission: true,
+        accountStatus: 'active',
+        challengeStatus: 'active',
+        challenge: purchase.challengeName,
+        currentChallengeName: purchase.challengeName,
+        challengeActivatedAt: new Date(),
+      }
+    });
+    purchase.status = 'approved';
+    purchase.paymentStatus = 'approved';
+    purchase.approvedAt = new Date();
+    purchase.adminId = adminId;
+    await purchase.save();
+    await ChallengeStatus.findOneAndUpdate({ userId: purchase.userId }, { $set: { status: 'active', challengeName: purchase.challengeName, fundingAmount: purchase.fundingAmount, tradingCapital: purchase.fundingAmount, activationDate: new Date(), updatedAt: new Date() } }, { upsert: true, new: true });
+    await TradingAccount.findOneAndUpdate({ userId: purchase.userId }, { $set: { status: 'active', accountNumber: `TRD-${Date.now()}`, fundingAmount: purchase.fundingAmount, challengeName: purchase.challengeName, tradingCapital: purchase.fundingAmount, activatedAt: new Date(), updatedAt: new Date() } }, { upsert: true, new: true });
+    await recordFundHistory(purchase.userId, 'credit', purchase.fundingAmount || 0, before, after, 'Challenge approved', purchase._id.toString(), adminId);
+    await createNotification(purchase.userId, 'challenge_approved', 'Challenge Approved', 'Your challenge has been approved and your funded account is now active.');
+    await recordAdminAction(adminId, 'approve_challenge', 'ChallengePurchase', purchase._id.toString(), { challengeName: purchase.challengeName });
+    res.json({ success: true, purchase });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to approve purchase", message: err.message });
+  }
+});
+
+app.post("/api/challenge-purchases/:id/reject", async (req, res) => {
+  try {
+    const adminId = req.body.adminId || 'admin';
+    const purchase = await ChallengePurchase.findById(req.params.id);
+    if (!purchase) return res.status(404).json({ error: "Purchase not found" });
+    const user = await User.findOne({ uid: purchase.userId });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    purchase.status = 'rejected';
+    purchase.paymentStatus = 'rejected';
+    purchase.reviewReason = req.body.reason || 'Rejected by admin';
+    purchase.adminId = adminId;
+    await purchase.save();
+    const before = user.tradingCapital ?? user.balance ?? 0;
+    await User.findOneAndUpdate({ uid: purchase.userId }, { $set: { balance: before, tradingCapital: 0, tradingPermission: false, challengeStatus: 'rejected' } });
+    await ChallengeStatus.findOneAndUpdate({ userId: purchase.userId }, { $set: { status: 'rejected', challengeName: purchase.challengeName, fundingAmount: purchase.fundingAmount, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
+    await TradingAccount.findOneAndUpdate({ userId: purchase.userId }, { $set: { status: 'rejected', fundingAmount: purchase.fundingAmount, challengeName: purchase.challengeName, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
+    await createNotification(purchase.userId, 'challenge_rejected', 'Challenge Rejected', 'Your challenge purchase was rejected.');
+    await recordAdminAction(adminId, 'reject_challenge', 'ChallengePurchase', purchase._id.toString(), { reason: purchase.reviewReason });
+    res.json({ success: true, purchase });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to reject purchase", message: err.message });
+  }
+});
+
+app.post("/api/funds/adjust", async (req, res) => {
+  try {
+    const { userId, type, amount, reason, referenceId, adminId } = req.body;
+    const user = await User.findOne({ uid: userId });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const balanceBefore = user.tradingCapital ?? user.balance ?? 0;
+    const balanceAfter = type === 'debit' ? Math.max(0, balanceBefore - (amount || 0)) : balanceBefore + (amount || 0);
+    await User.findOneAndUpdate({ uid: userId }, { $set: { balance: balanceAfter, tradingCapital: balanceAfter } });
+    await recordFundHistory(userId, type, amount || 0, balanceBefore, balanceAfter, reason || 'Fund update', referenceId, adminId);
+    await recordAdminAction(adminId || 'admin', 'fund_update', 'User', userId, { type, amount, reason });
+    await createNotification(userId, 'funds_updated', type === 'debit' ? 'Funds Removed' : 'Funds Added', reason || 'Fund update completed.');
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to update funds", message: err.message });
+  }
+});
+
+app.post("/api/fund-history", async (req, res) => {
+  try {
+    const { userId, type, amount, reason, referenceId, adminId } = req.body;
+    const user = await User.findOne({ uid: userId });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const balanceBefore = user.tradingCapital ?? user.balance ?? 0;
+    const balanceAfter = type === 'debit' ? Math.max(0, balanceBefore - (amount || 0)) : balanceBefore + (amount || 0);
+    await User.findOneAndUpdate({ uid: userId }, { $set: { balance: balanceAfter, tradingCapital: balanceAfter } });
+    await recordFundHistory(userId, type, amount || 0, balanceBefore, balanceAfter, reason || 'Fund update', referenceId, adminId);
+    await recordAdminAction(adminId || 'admin', 'fund_update', 'User', userId, { type, amount, reason });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to update funds", message: err.message });
+  }
+});
+
+app.get("/api/fund-history", async (req, res) => {
+  try {
+    const filter: any = {};
+    if (req.query.userId) filter.userId = req.query.userId as string;
+    res.json(await FundHistory.find(filter).sort({ createdAt: -1 }));
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch fund history", message: err.message });
+  }
+});
+
+app.get("/api/admin-actions", async (_req, res) => {
+  try {
+    res.json(await AdminAction.find().sort({ createdAt: -1 }));
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch admin actions", message: err.message });
+  }
+});
+
+app.get("/api/notifications", async (req, res) => {
+  try {
+    const filter: any = {};
+    if (req.query.userId) filter.userId = req.query.userId as string;
+    res.json(await Notification.find(filter).sort({ createdAt: -1 }));
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch notifications", message: err.message });
+  }
+});
+
+app.post("/api/notifications/:id/read", async (req, res) => {
+  try {
+    const notification = await Notification.findByIdAndUpdate(req.params.id, { $set: { read: true } }, { new: true });
+    res.json(notification);
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to mark notification read", message: err.message });
+  }
 });
 
 // ─── API 404 & Error Handler ─────────────────────────────────────────────────

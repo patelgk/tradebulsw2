@@ -65,6 +65,8 @@ export function calcRealizedPnl(
   return +(gross - (trade.charges ?? 0)).toFixed(2);
 }
 
+
+
 // ─── Portfolio Analytics ──────────────────────────────────────────────────────
 
 export interface PortfolioStats {

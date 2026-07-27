@@ -123,15 +123,62 @@ export const api = {
   },
 
   // Transactions
-  async getTransactions(userId?: string) {
-    const url = userId ? `${API_BASE}/transactions?userId=${userId}` : `${API_BASE}/transactions`;
-    return safeFetch(url);
+  async getTransactions(userId?: string, status?: string) {
+    const params: any = {};
+    if (userId) params.userId = userId;
+    if (status) params.status = status;
+    const query = toQuery(params);
+    return safeFetch(`${API_BASE}/transactions${query}`);
   },
   async addTransaction(data: any) {
     return safeFetch(`${API_BASE}/transactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+    });
+  },
+  async updateTransaction(id: string, data: any) {
+    return safeFetch(`${API_BASE}/transactions/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+  async getChallengePurchases() {
+    return safeFetch(`${API_BASE}/challenge-purchases`);
+  },
+  async approvePurchase(id: string, adminId = 'admin') {
+    return safeFetch(`${API_BASE}/challenge-purchases/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminId }),
+    });
+  },
+  async rejectPurchase(id: string, reason?: string, adminId = 'admin') {
+    return safeFetch(`${API_BASE}/challenge-purchases/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason, adminId }),
+    });
+  },
+  async adjustFunds(data: { userId: string; type: 'credit' | 'debit'; amount: number; reason?: string; referenceId?: string; adminId?: string }) {
+    return safeFetch(`${API_BASE}/funds/adjust`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+  async getFundHistory(userId?: string) {
+    const query = toQuery(userId ? { userId } : {});
+    return safeFetch(`${API_BASE}/fund-history${query}`);
+  },
+  async getNotifications(userId?: string) {
+    const query = toQuery(userId ? { userId } : {});
+    return safeFetch(`${API_BASE}/notifications${query}`);
+  },
+  async markNotificationRead(id: string) {
+    return safeFetch(`${API_BASE}/notifications/${id}/read`, {
+      method: 'POST',
     });
   },
 
