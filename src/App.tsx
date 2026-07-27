@@ -4780,13 +4780,18 @@ function App() {
   ): Promise<boolean> => {
     if (!user) return false;
 
-    if (!userProfile || userProfile.accountStatus !== 'active' || !userProfile.tradingPermission) {
+    let currentProfile = userProfile;
+    if (!currentProfile || currentProfile.accountStatus !== 'active' || !currentProfile.tradingPermission) {
       const refreshedProfile = await api.getUser(user.uid).catch(() => null);
-      if (refreshedProfile) setUserProfile(refreshedProfile);
-      if (!refreshedProfile || refreshedProfile.accountStatus !== 'active' || !refreshedProfile.tradingPermission) {
-        showToast('You need an approved challenge and active trading account to place trades.', 'error');
-        return false;
+      if (refreshedProfile) {
+        setUserProfile(refreshedProfile);
+        currentProfile = refreshedProfile;
       }
+    }
+
+    if (!currentProfile || currentProfile.accountStatus !== 'active' || !currentProfile.tradingPermission) {
+      showToast('You need an approved challenge and active trading account to place trades.', 'error');
+      return false;
     }
 
     const tradeSymbol = options.symbol || selectedSymbol;
@@ -4817,11 +4822,12 @@ function App() {
     
     const cashOutflow = type === 'BUY' ? (price * quantity) + charges : charges;
     const totalRequired = cashOutflow + requiredMargin;
+    const availableBalance = Number(currentProfile?.balance ?? 0);
     
-    if (userProfile.balance < totalRequired) {
+    if (availableBalance < totalRequired) {
       const msg = type === 'BUY' 
-        ? `Insufficient funds. Required: ₹${totalRequired.toFixed(2)} (Incl. Charges), Available: ₹${userProfile.balance.toFixed(2)}`
-        : `Insufficient margin for SELL. Required: ₹${totalRequired.toFixed(2)} (₹1L/Lot Margin), Available: ₹${userProfile.balance.toFixed(2)}`;
+        ? `Insufficient funds. Required: ₹${totalRequired.toFixed(2)} (Incl. Charges), Available: ₹${availableBalance.toFixed(2)}`
+        : `Insufficient margin for SELL. Required: ₹${totalRequired.toFixed(2)} (₹1L/Lot Margin), Available: ₹${availableBalance.toFixed(2)}`;
       showToast(msg, 'error');
       return false;
     }
@@ -4831,13 +4837,16 @@ function App() {
       // BUY: Balance decreases by (Price * Qty + Charges)
       // SELL: Balance increases by (Price * Qty - Charges)
       const balanceChange = type === 'BUY' ? -cashOutflow : (price * quantity) - charges;
-      const newBalance = userProfile.balance + balanceChange;
+      const newBalance = availableBalance + balanceChange;
       
       await api.upsertUser({
         uid: user.uid,
-        balance: newBalance
+        balance: newBalance,
+        tradingCapital: newBalance,
+        allowFundingUpdate: true,
+        source: 'trade-engine',
       });
-      setUserProfile(prev => prev ? { ...prev, balance: newBalance } : null);
+      setUserProfile(prev => prev ? { ...prev, balance: newBalance, tradingCapital: newBalance } : currentProfile ? { ...currentProfile, balance: newBalance, tradingCapital: newBalance } : null);
 
       const newTrade = await api.addTrade({
         userId: user.uid,
