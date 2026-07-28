@@ -27,6 +27,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import BrandLogo, { APP_NAME } from './BrandLogo';
+import { useTheme } from '../theme';
 
 interface LandingPageProps {
   onLoginClick: () => void;
@@ -769,6 +770,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onToggleDarkMode,
   isLoggedIn,
 }) => {
+  const { theme, toggleTheme } = useTheme();
+  const resolvedDarkMode = darkMode ?? theme === 'dark';
+  const resolvedOnToggleDarkMode = onToggleDarkMode ?? toggleTheme;
   const [logoClicks, setLogoClicks] = useState(0);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminCreds, setAdminCreds] = useState({ mobile: '', pass: '' });
@@ -795,7 +799,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#050812] font-sans text-white selection:bg-emerald-300/30">
+    <div className={`min-h-screen overflow-x-hidden font-sans selection:bg-emerald-300/30 ${resolvedDarkMode ? 'bg-[#050812] text-white' : 'bg-slate-50 text-slate-900'}`}>
       <AnimatePresence>
         {showAdminLogin && (
           <motion.div
@@ -852,8 +856,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <Header
         onLoginClick={onLoginClick}
         isLoggedIn={isLoggedIn}
-        darkMode={darkMode}
-        onToggleDarkMode={onToggleDarkMode}
+        darkMode={resolvedDarkMode}
+        onToggleDarkMode={resolvedOnToggleDarkMode}
         onLogoClick={handleLogoClick}
       />
       <main>

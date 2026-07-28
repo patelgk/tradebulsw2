@@ -66,6 +66,7 @@ import { api } from './api';
 import { NavItem, Trade, Plan, OptionStrike, Portfolio, Account, Client, Rule, SymbolMarketData, SYMBOLS, LOT_SIZES, INDEX_SECURITY_IDS, ChartSelection, ChartTick, SymbolName, Watchlist, WatchlistItem, OrderTicketInstrument } from './types';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db.client';
+import { useTheme } from './theme';
 
 type ChartSelectionInput = Omit<ChartSelection, 'chartKey'> & { timeframe?: ChartSelection['timeframe'] };
 const IS_DEV = import.meta.env.DEV;
@@ -3791,18 +3792,8 @@ export default function AppWrapper() {
 }
 
 function App() {
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') !== 'light';
-    }
-    return true;
-  });
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-    document.documentElement.style.colorScheme = darkMode ? 'dark' : 'light';
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
+  const { theme, toggleTheme } = useTheme();
+  const darkMode = theme === 'dark';
 
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -5074,7 +5065,7 @@ function App() {
           onOpenOptionChain={() => setShowOptionChain(true)}
           onLogout={user ? handleLogout : undefined}
           darkMode={darkMode}
-          onToggleDarkMode={() => setDarkMode((value) => !value)}
+          onToggleDarkMode={toggleTheme}
           providerStatus={providerStatus}
           onSearch={() => setShowSearch(true)}
         />
@@ -5122,7 +5113,7 @@ function App() {
                 }
               }}
               darkMode={darkMode}
-              onToggleDarkMode={() => setDarkMode(true)}
+              onToggleDarkMode={toggleTheme}
               isLoggedIn={!!user}
             />
             
@@ -5163,7 +5154,7 @@ function App() {
           <LandingPage 
             onLoginClick={() => setHasStarted(true)} 
             darkMode={darkMode}
-            onToggleDarkMode={() => setDarkMode(true)}
+            onToggleDarkMode={toggleTheme}
             isLoggedIn={!!user}
           />
         ) : (
