@@ -977,7 +977,22 @@ async function startServer() {
       });
     } else {
       const distPath = path.join(process.cwd(), "dist");
-      app.use(express.static(distPath));
+      app.use(express.static(distPath, {
+        index: false,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.xml')) {
+            res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+          } else if (filePath.endsWith('.txt')) {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          }
+        },
+      }));
+      app.get('/sitemap.xml', (_req, res) => {
+        res.sendFile(path.join(distPath, 'sitemap.xml'));
+      });
+      app.get('/robots.txt', (_req, res) => {
+        res.sendFile(path.join(distPath, 'robots.txt'));
+      });
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api")) return res.status(404).json({ error: "Not found" });
         res.sendFile(path.join(distPath, "index.html"));
