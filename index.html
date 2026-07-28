@@ -1,17 +1,78 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#08121A" />
-    <meta name="robots" content="index,follow" />
-    <link rel="icon" type="image/svg+xml" href="/proprupee-icon.svg" />
-    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
-    <title>Proprupee</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<head>
+  <meta charset="UTF-8" />
 
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#08121A" />
+  <meta name="robots" content="index, follow" />
+
+  <!-- SEO -->
+  <title>Proprupee | AI Powered Stock Market Platform</title>
+
+  <meta
+    name="description"
+    content="Proprupee is an AI-powered stock market platform providing real-time market data, option chain analysis, NIFTY & BANKNIFTY insights, trading signals and professional analytics."
+  />
+
+  <meta
+    name="keywords"
+    content="Proprupee, stock market, option chain, AI trading, NIFTY, BANKNIFTY, NSE, BSE, trading signals, live market data, options trading, stock analysis"
+  />
+
+  <meta name="author" content="Proprupee" />
+
+  <link rel="canonical" href="https://proprupee.com/" />
+
+  <!-- Sitemap -->
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/proprupee-icon.svg" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Proprupee" />
+  <meta property="og:title" content="Proprupee | AI Powered Stock Market Platform" />
+  <meta
+    property="og:description"
+    content="AI-powered stock market platform with real-time market data, option chain analysis, trading signals and advanced market insights."
+  />
+  <meta property="og:url" content="https://proprupee.com/" />
+  <meta property="og:image" content="https://proprupee.com/proprupee-icon.svg" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Proprupee | AI Powered Stock Market Platform" />
+  <meta
+    name="twitter:description"
+    content="Real-time stock market data, option chain analysis and AI-powered trading insights."
+  />
+  <meta name="twitter:image" content="https://proprupee.com/proprupee-icon.svg" />
+
+  <!-- JSON-LD Schema -->
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"WebSite",
+    "name":"Proprupee",
+    "url":"https://proprupee.com/",
+    "description":"AI-powered stock market platform providing real-time market data, option chain analysis and trading insights.",
+    "potentialAction":{
+      "@type":"SearchAction",
+      "target":"https://proprupee.com/?q={search_term_string}",
+      "query-input":"required name=search_term_string"
+    }
+  }
+  </script>
+
+</head>
+
+<body>
+
+  <div id="root"></div>
+
+  <script type="module" src="/src/main.tsx"></script>
+
+</body>
+</html>
