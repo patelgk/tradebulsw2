@@ -16,7 +16,7 @@ if (typeof window !== 'undefined') {
 }
 
 import { LandingPage } from './components/LandingPage';
-import BrandLogo, { APP_NAME } from './components/BrandLogo';
+import { APP_NAME } from './components/BrandLogo';
 import LWChart from './components/LWChart';
 import OptionChain from './components/OptionChain';
 import GlobalSearch from './components/GlobalSearch';
@@ -66,7 +66,6 @@ import { api } from './api';
 import { NavItem, Trade, Plan, OptionStrike, Portfolio, Account, Client, Rule, SymbolMarketData, SYMBOLS, LOT_SIZES, INDEX_SECURITY_IDS, ChartSelection, ChartTick, SymbolName, Watchlist, WatchlistItem, OrderTicketInstrument } from './types';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db.client';
-import { useTheme } from './theme';
 
 type ChartSelectionInput = Omit<ChartSelection, 'chartKey'> & { timeframe?: ChartSelection['timeframe'] };
 const IS_DEV = import.meta.env.DEV;
@@ -248,8 +247,6 @@ const Header = ({
   onBack, 
   isSubView, 
   onLogout, 
-  darkMode, 
-  onToggleDarkMode, 
   onOpenOptionChain,
   providerStatus,
   onSearch
@@ -258,8 +255,6 @@ const Header = ({
   onBack?: () => void, 
   isSubView?: boolean, 
   onLogout?: () => void,
-  darkMode: boolean,
-  onToggleDarkMode: () => void,
   onOpenOptionChain?: () => void,
   providerStatus?: Record<string, { status: string, nextRetryIn?: number, error?: string }>,
   onSearch?: () => void
@@ -287,9 +282,7 @@ const Header = ({
           >
             <Menu className="h-6 w-6 text-primary" />
           </button>
-        ) : (
-          <BrandLogo compact iconClassName="h-10 w-10" />
-        )}
+        ) : null}
         <div className="flex flex-col">
           <h1 className="text-xl font-black leading-none tracking-[-0.04em]">
             {isSubView ? 'Option Chain' : APP_NAME}
@@ -309,13 +302,6 @@ const Header = ({
           title="Search (Ctrl+K)"
         >
           <Search className="w-5 h-5" />
-        </button>
-        <button 
-          onClick={onToggleDarkMode}
-          className="rounded-full border border-slate-200/80 bg-slate-100/80 p-2 text-slate-600 transition-colors hover:bg-slate-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-400 dark:hover:bg-white/10"
-          title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-        >
-          {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
         </button>
         {onLogout && (
           <button onClick={onLogout} className="rounded-full border border-slate-200/80 bg-slate-100/80 p-2 text-slate-600 transition-colors hover:bg-slate-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-400 dark:hover:bg-white/10">
@@ -1697,7 +1683,7 @@ const TradeView = memo(({
   expiry = '',
   isMarketOpen = false,
   dataSource = 'Live',
-  darkMode = false
+  darkMode = true
 }: { 
   onViewOptionChain: () => void, 
   price: number, 
@@ -1984,7 +1970,6 @@ const TradeView = memo(({
         interval={timeframe}
         onIntervalChange={handleIntervalChange}
         liveTick={liveChartTick}
-        darkMode={darkMode}
         height={380}
       />
 
@@ -3792,9 +3777,7 @@ export default function AppWrapper() {
 }
 
 function App() {
-  const { theme, toggleTheme } = useTheme();
-  const darkMode = theme === 'dark';
-
+  const darkMode = true;
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -5064,8 +5047,6 @@ function App() {
           }}
           onOpenOptionChain={() => setShowOptionChain(true)}
           onLogout={user ? handleLogout : undefined}
-          darkMode={darkMode}
-          onToggleDarkMode={toggleTheme}
           providerStatus={providerStatus}
           onSearch={() => setShowSearch(true)}
         />
@@ -5112,8 +5093,7 @@ function App() {
                   showToast(err.message || 'Admin login failed', 'error');
                 }
               }}
-              darkMode={darkMode}
-              onToggleDarkMode={toggleTheme}
+              onLogoClick={() => setShowAuthModal(true)}
               isLoggedIn={!!user}
             />
             
@@ -5153,8 +5133,7 @@ function App() {
         ) : !hasStarted ? (
           <LandingPage 
             onLoginClick={() => setHasStarted(true)} 
-            darkMode={darkMode}
-            onToggleDarkMode={toggleTheme}
+            onLogoClick={() => setHasStarted(true)}
             isLoggedIn={!!user}
           />
         ) : (
@@ -5233,7 +5212,6 @@ function App() {
                     expiry={marketData[selectedSymbol].expiry}
                     isMarketOpen={marketData[selectedSymbol].isMarketOpen}
                     dataSource={marketData[selectedSymbol].dataSource}
-                    darkMode={darkMode}
                   />
                 )
               )}

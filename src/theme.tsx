@@ -14,39 +14,26 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = 'theme';
 
 function getInitialTheme(): ThemeMode {
-  if (typeof window === 'undefined') {
-    return 'dark';
-  }
-
-  const storedTheme = window.localStorage.getItem(STORAGE_KEY);
-  if (storedTheme === 'light' || storedTheme === 'dark') {
-    return storedTheme;
-  }
-
-  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
-  }
-
   return 'dark';
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>(getInitialTheme);
+  const [theme] = useState<ThemeMode>(getInitialTheme);
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle('dark', theme === 'dark');
-    root.style.colorScheme = theme;
-    root.setAttribute('data-theme', theme);
-    window.localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme]);
+    root.classList.add('dark');
+    root.style.colorScheme = 'dark';
+    root.setAttribute('data-theme', 'dark');
+    window.localStorage.setItem(STORAGE_KEY, 'dark');
+  }, []);
 
   const toggleTheme = () => {
-    setThemeState((current) => (current === 'dark' ? 'light' : 'dark'));
+    // Dark mode only; no light variant available.
   };
 
-  const setTheme = (nextTheme: ThemeMode) => {
-    setThemeState(nextTheme);
+  const setTheme = (_nextTheme: ThemeMode) => {
+    // Dark mode only; ignore attempts to change.
   };
 
   const value = useMemo<ThemeContextValue>(

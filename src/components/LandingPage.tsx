@@ -14,10 +14,8 @@ import {
   Lock,
   Menu,
   MonitorSmartphone,
-  Moon,
   ShieldCheck,
   Sparkles,
-  Sun,
   Target,
   TrendingUp,
   Trophy,
@@ -26,14 +24,12 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import BrandLogo, { APP_NAME } from './BrandLogo';
-import { useTheme } from '../theme';
+import { APP_NAME } from './BrandLogo';
 
 interface LandingPageProps {
   onLoginClick: () => void;
   onAdminLogin?: (mobile: string, pass: string) => void;
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
+  onLogoClick: () => void;
   isLoggedIn?: boolean;
 }
 
@@ -209,14 +205,10 @@ const HeroDashboardMockup = () => (
 const Header = ({
   onLoginClick,
   isLoggedIn,
-  darkMode,
-  onToggleDarkMode,
   onLogoClick,
 }: {
   onLoginClick: () => void;
   isLoggedIn?: boolean;
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
   onLogoClick: () => void;
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -230,8 +222,8 @@ const Header = ({
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#050812]/78 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <button onClick={onLogoClick} className="group flex items-center gap-3 text-left">
-          <BrandLogo iconClassName="h-11 w-11 transition-transform duration-300 group-hover:rotate-6" textClassName="text-base leading-none" />
+        <button onClick={onLogoClick} className="text-sm font-black uppercase tracking-[0.22em] text-white">
+          {APP_NAME}
         </button>
 
         <nav className="hidden items-center gap-7 md:flex">
@@ -243,14 +235,7 @@ const Header = ({
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <button
-            onClick={onToggleDarkMode}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
-            aria-label="Toggle theme"
-          >
-            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-          <button onClick={onLoginClick} className={secondaryButton}>
+            <button onClick={onLoginClick} className={secondaryButton}>
             {isLoggedIn ? 'Dashboard' : 'Login'}
           </button>
           <button onClick={onLoginClick} className={primaryButton}>
@@ -741,12 +726,9 @@ const FinalCTA = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLo
 const Footer = ({ onLoginClick }: { onLoginClick: () => void }) => (
   <footer className="border-t border-white/10 bg-[#050812] px-4 py-12 sm:px-6 lg:px-8">
     <div className="mx-auto flex max-w-7xl flex-col gap-8 md:flex-row md:items-center md:justify-between">
-      <div className="flex items-center gap-3">
-        <BrandLogo compact iconClassName="h-11 w-11" />
-        <div>
-          <p className="font-black uppercase tracking-[-0.04em] text-white">{APP_NAME} Prop Trading</p>
-          <p className="text-xs text-slate-500">Premium trading challenges and dashboard infrastructure.</p>
-        </div>
+      <div>
+        <p className="font-black uppercase tracking-[-0.04em] text-white">{APP_NAME} Prop Trading</p>
+        <p className="text-xs text-slate-500">Premium trading challenges and dashboard infrastructure.</p>
       </div>
       <div className="flex flex-wrap gap-3">
         <button onClick={onLoginClick} className="rounded-full border border-white/10 px-4 py-2 text-sm font-bold text-slate-300 transition-colors hover:text-white">
@@ -766,13 +748,9 @@ const Footer = ({ onLoginClick }: { onLoginClick: () => void }) => (
 export const LandingPage: React.FC<LandingPageProps> = ({
   onLoginClick,
   onAdminLogin,
-  darkMode,
-  onToggleDarkMode,
+  onLogoClick,
   isLoggedIn,
 }) => {
-  const { theme, toggleTheme } = useTheme();
-  const resolvedDarkMode = darkMode ?? theme === 'dark';
-  const resolvedOnToggleDarkMode = onToggleDarkMode ?? toggleTheme;
   const [logoClicks, setLogoClicks] = useState(0);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminCreds, setAdminCreds] = useState({ mobile: '', pass: '' });
@@ -799,7 +777,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   return (
-    <div className={`min-h-screen overflow-x-hidden font-sans selection:bg-emerald-300/30 ${resolvedDarkMode ? 'bg-[#050812] text-white' : 'bg-slate-50 text-slate-900'}`}>
+    <div className="min-h-screen overflow-x-hidden font-sans selection:bg-emerald-300/30 bg-[#050812] text-white">
       <AnimatePresence>
         {showAdminLogin && (
           <motion.div
@@ -856,8 +834,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <Header
         onLoginClick={onLoginClick}
         isLoggedIn={isLoggedIn}
-        darkMode={resolvedDarkMode}
-        onToggleDarkMode={resolvedOnToggleDarkMode}
         onLogoClick={handleLogoClick}
       />
       <main>
