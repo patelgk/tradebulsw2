@@ -3869,6 +3869,15 @@ function App() {
   }, [chartSelection]);
   useEffect(() => {
     marketDataRef.current = marketData;
+    // Diagnostic: log all symbols in marketData
+    if (IS_DEV) {
+      const symbols = Object.keys(marketData).sort();
+      const statusBySymbol = symbols.map(sym => {
+        const data = marketData[sym];
+        return `${sym}=${data?.price?.toFixed(2) || 'pending'}`;
+      });
+      console.log(`[📊 MARKET STATE] Updated: ${statusBySymbol.join(' | ')}`);
+    }
   }, [marketData]);
   const [isOptionChainLoading, setIsOptionChainLoading] = useState(false);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
@@ -4090,7 +4099,9 @@ function App() {
   }, [user]);
 
   useEffect(() => {
-    const socket = io({
+    // In development, explicitly specify the backend URL
+    const socketUrl = import.meta.env.DEV ? 'http://localhost:3000' : '/';
+    const socket = io(socketUrl, {
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -4112,7 +4123,8 @@ function App() {
       setIsSocketConnected(true);
       setConnectionStatus('connected');
       showToast('Market feed connected', 'success');
-      if (IS_DEV) console.log('[Market] socket connected');
+      const timestamp = new Date().toISOString();
+      console.log(`[📡 SOCKET CONNECTED] socket.id=${socket.id} [${timestamp}]`);
       diagnosticsRef.connectedAt = Date.now();
       if (IS_DEV) console.log('[Market] diagnostics reset');
       if (IS_DEV) console.log('[Market] active chart token', chartSelectionRef.current.chartKey);
@@ -4129,9 +4141,20 @@ function App() {
         socket.connect();
       }
       showToast('Market feed disconnected', 'error');
-      if (IS_DEV) console.log('[Market] socket disconnected:', reason);
+      const timestamp = new Date().toISOString();
+      console.log(`[❌ SOCKET DISCONNECTED] reason=${reason} [${timestamp}]`);
       needsResubscribeRef.current = true;
     });
+
+    // Debug tracking for reception
+    const receptionStats = {
+      'market:indexTick': 0,
+      'market:optionTick': 0,
+      'chartTick': 0,
+      'optionChain:update': 0,
+      'marketUpdate': 0,
+    };
+    const receptionStartTime = Date.now();
 
     const pendingMarketPatches = new Map<string, Partial<any>>();
     const pendingDbRecords = new Map<string, any>();
@@ -4177,20 +4200,45 @@ function App() {
         const nextState = { ...prev };
         for (const [symbol, patch] of patches) {
           const current = nextState[symbol] || {};
+          const prevChainLen = current.optionChain?.length || 0;
+          const nextChainLen = patch.optionChain?.length || prevChainLen;
           const next = {
             ...current,
             ...patch,
             optionChain: patch.optionChain ?? current.optionChain ?? [],
           };
+          if (IS_DEV) {
+            if (patch.price) {
+              console.log(`[State] Updated symbol=${symbol} price=${patch.price} chain_before=${prevChainLen} chain_after=${nextChainLen}`);
+            } else if (patch.optionChain !== undefined) {
+              console.log(`[State] Updated symbol=${symbol} optionChain chain_before=${prevChainLen} chain_after=${nextChainLen}`);
+            }
+          }
           nextState[symbol] = next;
           queueDbRecord(symbol, next);
         }
         marketDataRef.current = nextState;
+        // Diagnostic: log all symbols in marketData
+        if (IS_DEV) {
+          const symbols = Object.keys(nextState).sort();
+          const statusBySymbol = symbols.map(sym => {
+            const data = nextState[sym];
+            return `${sym}=${data?.price?.toFixed(2) || 'pending'}(chain:${data?.optionChain?.length || 0})`;
+          });
+          console.log(`[📊 MARKET STATE] Updated: ${statusBySymbol.join(' | ')}`);
+        }
         return nextState;
       });
     };
 
     const updateMarketSymbol = (symbol: string, patch: Partial<any>) => {
+      if (!symbol) {
+        console.warn('[WARNING] updateMarketSymbol called with empty symbol!', patch);
+        return;
+      }
+      if (IS_DEV) {
+        console.log(`[UPDATE] Queuing patch for symbol="${symbol}" with keys=${Object.keys(patch).join(',')}`);
+      }
       pendingMarketPatches.set(symbol, {
         ...(pendingMarketPatches.get(symbol) || {}),
         ...patch,
@@ -4226,19 +4274,27 @@ function App() {
       change?: number;
       changePct?: number;
     }) => {
-      if (!chain.length) return chain;
-      return chain.map((row) => {
-        const isMatchBySecurity = payload.securityId
-          ? payload.optionType === 'CE'
-            ? sameToken(row.ce_security_id, payload.securityId)
-            : payload.optionType === 'PE'
-              ? sameToken(row.pe_security_id, payload.securityId)
-              : sameToken(row.ce_security_id, payload.securityId) || sameToken(row.pe_security_id, payload.securityId)
-          : false;
+      if (!payload.strike || !payload.optionType || !payload.securityId) {
+        console.warn('[mergeOptionRow] Missing required fields:', { strike: payload.strike, optionType: payload.optionType, securityId: payload.securityId });
+        return chain;
+      }
+
+      // Find existing row by security ID or strike
+      const existingIndex = chain.findIndex((row) => {
+        const isMatchBySecurity = payload.optionType === 'CE'
+          ? sameToken(row.ce_security_id, payload.securityId)
+          : sameToken(row.pe_security_id, payload.securityId);
         const isMatchByStrike = payload.strike !== undefined && Number(row.strike) === Number(payload.strike);
-        if (!isMatchBySecurity && !isMatchByStrike) return row;
+        return isMatchBySecurity || isMatchByStrike;
+      });
+
+      // If row exists, update it
+      if (existingIndex >= 0) {
+        const updatedChain = [...chain];
+        const row = updatedChain[existingIndex];
+        
         if (payload.optionType === 'CE') {
-          return {
+          updatedChain[existingIndex] = {
             ...row,
             ce_ltp: payload.price !== undefined ? payload.price : row.ce_ltp,
             ce_volume: payload.volume !== undefined ? payload.volume : row.ce_volume,
@@ -4249,9 +4305,8 @@ function App() {
             ce_change: payload.change !== undefined ? payload.change : row.ce_change,
             ce_change_pct: payload.changePct !== undefined ? payload.changePct : row.ce_change_pct,
           };
-        }
-        if (payload.optionType === 'PE') {
-          return {
+        } else if (payload.optionType === 'PE') {
+          updatedChain[existingIndex] = {
             ...row,
             pe_ltp: payload.price !== undefined ? payload.price : row.pe_ltp,
             pe_volume: payload.volume !== undefined ? payload.volume : row.pe_volume,
@@ -4263,8 +4318,49 @@ function App() {
             pe_change_pct: payload.changePct !== undefined ? payload.changePct : row.pe_change_pct,
           };
         }
-        return row;
-      });
+        if (IS_DEV) {
+          console.log(`[mergeOptionRow] strike=${payload.strike} type=${payload.optionType} UPDATED row at index=${existingIndex}`);
+        }
+        return updatedChain;
+      }
+
+      // Row doesn't exist - CREATE NEW ROW
+      // This is the critical fix for Fin Nifty, Midcap Select, SENSEX, Bankex, Nifty Next 50
+      if (IS_DEV) {
+        console.log(`[mergeOptionRow] strike=${payload.strike} type=${payload.optionType} NOT FOUND in chain - CREATING NEW ROW (chain length was ${chain.length})`);
+      }
+
+      const newRow: OptionStrike = {
+        strike: payload.strike,
+        ce_ltp: payload.optionType === 'CE' ? (payload.price ?? 0) : 0,
+        ce_oi: payload.optionType === 'CE' ? (payload.oi ?? 0) : 0,
+        ce_oi_change: payload.optionType === 'CE' ? (payload.oiChange ?? 0) : 0,
+        ce_security_id: payload.optionType === 'CE' ? payload.securityId : undefined,
+        ce_volume: payload.optionType === 'CE' ? (payload.volume ?? 0) : 0,
+        ce_bid: payload.optionType === 'CE' ? (payload.bid ?? 0) : 0,
+        ce_ask: payload.optionType === 'CE' ? (payload.ask ?? 0) : 0,
+        ce_change: payload.optionType === 'CE' ? (payload.change ?? 0) : 0,
+        ce_change_pct: payload.optionType === 'CE' ? (payload.changePct ?? 0) : 0,
+        
+        pe_ltp: payload.optionType === 'PE' ? (payload.price ?? 0) : 0,
+        pe_oi: payload.optionType === 'PE' ? (payload.oi ?? 0) : 0,
+        pe_oi_change: payload.optionType === 'PE' ? (payload.oiChange ?? 0) : 0,
+        pe_security_id: payload.optionType === 'PE' ? payload.securityId : undefined,
+        pe_volume: payload.optionType === 'PE' ? (payload.volume ?? 0) : 0,
+        pe_bid: payload.optionType === 'PE' ? (payload.bid ?? 0) : 0,
+        pe_ask: payload.optionType === 'PE' ? (payload.ask ?? 0) : 0,
+        pe_change: payload.optionType === 'PE' ? (payload.change ?? 0) : 0,
+        pe_change_pct: payload.optionType === 'PE' ? (payload.changePct ?? 0) : 0,
+      };
+
+      // Insert in strike order
+      const updatedChain = [...chain, newRow];
+      updatedChain.sort((a, b) => a.strike - b.strike);
+      
+      if (IS_DEV) {
+        console.log(`[mergeOptionRow] CREATED new row for strike=${payload.strike}. Chain length: ${chain.length} → ${updatedChain.length}`);
+      }
+      return updatedChain;
     };
 
     // REMOVE all old listeners to prevent duplicates
@@ -4277,6 +4373,9 @@ function App() {
 
     // ADD NEW LISTENERS
     socket.on('chartTick', (tick: ChartTick) => {
+      const timestamp = new Date().toISOString();
+      receptionStats['chartTick']++;
+      console.log(`[📉 CHART TICK] symbol=${tick.symbol} interval=${(tick as any).interval || 'unknown'} [${timestamp}]`);
       const activeChart = chartSelectionRef.current;
       const tokenMatchesActive = sameToken(tick.securityId, activeChart.securityId);
       if (tick.chartKey === activeChart.chartKey || tokenMatchesActive) {
@@ -4301,7 +4400,17 @@ function App() {
     });
 
     socket.on('market:indexTick', (tick: any) => {
-      updateMarketSymbol(tick.symbol, {
+      const timestamp = new Date().toISOString();
+      receptionStats['market:indexTick']++;
+      
+      // CRITICAL: Normalize symbol before storing
+      const normalizedSymbol = normalizeSymbolKey(tick.symbol);
+      const incomingSymbol = tick.symbol;
+      const existingChainLength = marketDataRef.current[normalizedSymbol]?.optionChain?.length || 0;
+      
+      console.log(`[📊 INDEX TICK] incoming=${incomingSymbol} normalized=${normalizedSymbol} price=${tick.price} latency=${tick.latencyMs}ms existing_chain=${existingChainLength}`);
+      
+      updateMarketSymbol(normalizedSymbol, {
         price: tick.price,
         change: tick.change,
         changePct: tick.changePct,
@@ -4312,45 +4421,44 @@ function App() {
         timestamp: tick.timestamp,
         dataSource: 'Dhan',
       });
-      if (tick.symbol === selectedSymbolRef.current) {
+      if (normalizedSymbol === selectedSymbolRef.current) {
         setIsOptionChainLoading(false);
       }
     });
 
     const handleOptionTick = (tick: any) => {
+      const timestamp = new Date().toISOString();
+      receptionStats['market:optionTick']++;
+      
       const symbolKey = normalizeSymbolKey(tick.symbol);
-      const optionRows = marketDataRef.current[symbolKey]?.optionChain?.length || 0;
-      const previousRow = marketDataRef.current[symbolKey]?.optionChain?.find((row: OptionStrike) =>
+      const existingChain = marketDataRef.current[symbolKey]?.optionChain || [];
+      const existingRow = existingChain.find((row: OptionStrike) =>
         sameToken(row.ce_security_id, tick.securityId) || sameToken(row.pe_security_id, tick.securityId) || Number(row.strike) === Number(tick.strike)
       );
-      const previousLtp = tick.optionType === 'CE' ? previousRow?.ce_ltp : previousRow?.pe_ltp;
-      const frontendReceivedAt = Date.now();
-      const totalLatencyMs = frontendReceivedAt - (tick.tickReceivedAt || tick.emittedAt || 0);
       
-      if (IS_DEV) console.log('[Market] option tick received', {
-        symbol: symbolKey,
-        token: tick.securityId,
-        strike: tick.strike,
-        type: tick.optionType,
-        source: tick.source || 'ws',
-        optionChainSize: optionRows,
-        previousLtp,
-        newLtp: tick.price,
-        wsLatencyMs: tick.latencyMs,
-        totalLatencyMs,
-        allLatencies: {
-          tickReceivedAtBackend: tick.tickReceivedAt,
-          emittedAtBackend: tick.emittedAt,
-          wsLatency: tick.latencyMs,
-          frontendReceivedAt,
-          totalLatency: totalLatencyMs,
-        }
-      });
+      console.log(`[📈 OPTION TICK] symbol=${symbolKey} strike=${tick.strike} type=${tick.optionType} price=${tick.price} securityId=${tick.securityId}`);
+      console.log(`[📈 CHAIN CHECK] symbol=${symbolKey} chain_length=${existingChain.length} row_found=${!!existingRow}`);
+      
+      if (IS_DEV) {
+        console.log('[Market] option tick received', {
+          symbol: symbolKey,
+          token: tick.securityId,
+          strike: tick.strike,
+          type: tick.optionType,
+          source: tick.source || 'ws',
+          optionChainSize: existingChain.length,
+          rowExists: !!existingRow,
+          previousLtp: tick.optionType === 'CE' ? existingRow?.ce_ltp : existingRow?.pe_ltp,
+          newLtp: tick.price,
+          wsLatencyMs: tick.latencyMs,
+        });
+      }
       
       const current = {
         ...(marketDataRef.current[symbolKey] || {}),
         ...(pendingMarketPatches.get(symbolKey) || {}),
       };
+      const chainBefore = (current.optionChain || []).length;
       const nextChain = mergeOptionRow(current.optionChain || [], {
           strike: tick.strike,
           optionType: tick.optionType,
@@ -4362,6 +4470,10 @@ function App() {
           change: tick.change,
           changePct: tick.changePct,
       });
+      const chainAfter = nextChain.length;
+      
+      console.log(`[📈 MERGE RESULT] symbol=${symbolKey} strike=${tick.strike} chain: ${chainBefore} → ${chainAfter}`);
+      
       updateMarketSymbol(symbolKey, {
         timestamp: tick.timestamp,
         dataSource: 'Dhan',
@@ -4559,6 +4671,15 @@ function App() {
     }, 5000); // Increased interval to 5s to be less aggressive
 
     return () => { 
+      // Print final statistics before cleanup
+      const elapsedMs = Date.now() - receptionStartTime;
+      const elapsedSec = elapsedMs / 1000;
+      console.log(`\n[📊 FRONTEND RECEPTION STATS] (${elapsedSec.toFixed(1)}s elapsed)`);
+      console.log(`[📊] market:indexTick: ${receptionStats['market:indexTick']} received (${(receptionStats['market:indexTick']/elapsedSec).toFixed(2)}/sec)`);
+      console.log(`[📊] market:optionTick: ${receptionStats['market:optionTick']} received (${(receptionStats['market:optionTick']/elapsedSec).toFixed(2)}/sec)`);
+      console.log(`[📊] chartTick: ${receptionStats['chartTick']} received (${(receptionStats['chartTick']/elapsedSec).toFixed(2)}/sec)`);
+      console.log(`[📊] optionChain:update: ${receptionStats['optionChain:update']} received\n`);
+      
       socket.off('market:optionTick', handleOptionTick);
       socket.off('optionChain:update', handleOptionChainUpdate);
       socket.emit('chart:unsubscribe', { chartKey: chartSelectionRef.current.chartKey });

@@ -200,6 +200,17 @@ export class MarketFeedManager {
   private readonly EXPIRY_CACHE_MS  = 60 * 60 * 1000; // 1 hour
   private inFlightFetch: Set<string> = new Set();
 
+  // Debug tracking
+  private emissionStats = {
+    'market:indexTick': 0,
+    'market:optionTick': 0,
+    'chartTick': 0,
+    'market:candleUpdate': 0,
+    'optionChain:update': 0,
+    'marketUpdate': 0,
+  };
+  private emissionStartTime = Date.now();
+
   constructor(
     private readonly clientId: string,
     private readonly accessToken: string,
@@ -673,7 +684,7 @@ export class MarketFeedManager {
       this._logTick(`[MarketFeed] OI tick token=${securityId} symbol=${symbol} strike=${optionMeta.strike} type=${optionMeta.optionType} oi=${update.oi}`);
       
       // EMIT IMMEDIATELY
-      this.io.emit("market:optionTick", {
+      this._emitWithDebug("market:optionTick", {
         symbol,
         strike: optionMeta.strike,
         optionType: optionMeta.optionType,
@@ -685,9 +696,9 @@ export class MarketFeedManager {
         responseCode: update.responseCode,
         source: "ws",
         latencyMs,
-      });
+      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType });
       
-      this.io.emit("optionChain:update", {
+      this._emitWithDebug("optionChain:update", {
         symbol,
         strike: optionMeta.strike,
         optionType: optionMeta.optionType,
@@ -698,7 +709,7 @@ export class MarketFeedManager {
         row: targetRow || null,
         source: "ws",
         latencyMs,
-      });
+      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType });
       
       // DEFER DB write to next tick (no await)
       setImmediate(() => {
@@ -745,7 +756,7 @@ export class MarketFeedManager {
       }
 
       // EMIT IMMEDIATELY - Do not await
-      this.io.emit("market:optionTick", {
+      this._emitWithDebug("market:optionTick", {
         symbol,
         strike: optionMeta.strike,
         optionType: optionMeta.optionType,
@@ -756,9 +767,9 @@ export class MarketFeedManager {
         volume,
         source: "ws",
         latencyMs,
-      });
+      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType });
       
-      this.io.emit("optionChain:update", {
+      this._emitWithDebug("optionChain:update", {
         symbol,
         strike: optionMeta.strike,
         optionType: optionMeta.optionType,
@@ -811,7 +822,7 @@ export class MarketFeedManager {
             };
             const cacheKey = this._chartCacheKey({ ...chartMetaBase, timeframe: tf }, this._tradingDateKey(tickTimeMs));
             const candle = this._upsertChartCandle(cacheKey, tickTimeMs, optionPrice, volume, tf);
-            this.io.emit("market:candleUpdate", {
+            this._emitWithDebug("market:candleUpdate", {
               chartKey,
               cacheKey,
               timeframe: tf,
@@ -855,7 +866,7 @@ export class MarketFeedManager {
 
     // EMIT INDEX TICK IMMEDIATELY
     this._logTick(`[MarketFeed] tick token=${securityId} symbol=${symbol} price=${s.price}`);
-    this.io.emit("market:indexTick", {
+    this._emitWithDebug("market:indexTick", {
       symbol,
       securityId,
       price: s.price,
@@ -868,7 +879,7 @@ export class MarketFeedManager {
       timestamp: s.timestamp,
       source: "ws",
       latencyMs,
-    });
+    }, { symbol });
 
     // EMIT CHART TICK IMMEDIATELY if subscribed
     const chartKeys = this.chartSubscribersBySecurity.get(securityId);
@@ -877,7 +888,7 @@ export class MarketFeedManager {
         const sub = this.chartSubscriptions.get(chartKey);
         if (!sub) continue;
         
-        this.io.emit("chartTick", {
+        this._emitWithDebug("chartTick", {
           chartKey: sub.chartKey,
           symbol: sub.symbol,
           securityId: sub.securityId,
@@ -906,7 +917,7 @@ export class MarketFeedManager {
           };
           const cacheKey = this._chartCacheKey({ ...chartMetaBase, timeframe: tf }, this._tradingDateKey(tickTimeMs));
           const candle = this._upsertChartCandle(cacheKey, tickTimeMs, s.price, volume, tf);
-          this.io.emit("market:candleUpdate", {
+          this._emitWithDebug("market:candleUpdate", {
             chartKey,
             cacheKey,
             timeframe: tf,
@@ -1180,7 +1191,7 @@ export class MarketFeedManager {
     const changePct = oldPrice > 0 ? +((change / oldPrice) * 100).toFixed(2) : 0;
     const oiChange = oldOi !== undefined ? oi - oldOi : (optionType === "CE" ? row.ce_oi_change : row.pe_oi_change);
 
-    this.io.emit("market:optionTick", {
+    this._emitWithDebug("market:optionTick", {
       symbol,
       strike: row.strike,
       optionType,
@@ -1194,8 +1205,8 @@ export class MarketFeedManager {
       timestamp,
       responseCode: 4,
       source: "rest-fallback",
-    });
-    this.io.emit("optionChain:update", {
+    }, { symbol, strike: String(row.strike), type: optionType });
+    this._emitWithDebug("optionChain:update", {
       symbol,
       strike: row.strike,
       optionType,
@@ -1225,7 +1236,7 @@ export class MarketFeedManager {
           optionType: sub.optionType,
         }, this._tradingDateKey(tickTimeMs));
         const candle = this._upsertChartCandle(cacheKey, tickTimeMs, price, volume, tf);
-        this.io.emit("market:candleUpdate", {
+        this._emitWithDebug("market:candleUpdate", {
           chartKey,
           cacheKey,
           timeframe: tf,
@@ -1238,7 +1249,7 @@ export class MarketFeedManager {
           timestamp,
           source: "rest-fallback",
         });
-        this.io.emit("chartTick", {
+        this._emitWithDebug("chartTick", {
           chartKey: sub.chartKey,
           symbol: sub.symbol,
           securityId: sub.securityId,
@@ -1263,6 +1274,34 @@ export class MarketFeedManager {
     const day  = ist.getUTCDay();
     const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
     return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
+  }
+
+  private _emitWithDebug(eventName: string, payload: any, meta?: {symbol?: string; strike?: string; type?: string}) {
+    const timestamp = new Date().toISOString();
+    const connectedCount = (this.io as any).engine?.clientsCount || 0;
+    const payloadSize = JSON.stringify(payload).length;
+    const eventKey = eventName as keyof typeof this.emissionStats;
+    if (eventKey in this.emissionStats) {
+      this.emissionStats[eventKey]++;
+    }
+    
+    console.log(`[🚀 EMIT] ${eventName} | clients=${connectedCount} | size=${payloadSize}B | ${meta?.symbol ? `symbol=${meta.symbol}` : ''} ${meta?.strike ? `strike=${meta.strike}` : ''} | [${timestamp}]`);
+    this.io.emit(eventName, payload);
+  }
+
+  getEmissionStats() {
+    const elapsedMs = Date.now() - this.emissionStartTime;
+    const elapsedSec = elapsedMs / 1000;
+    return {
+      elapsedMs,
+      elapsedSec,
+      stats: this.emissionStats,
+      perSecond: {
+        'market:indexTick': (this.emissionStats['market:indexTick'] / elapsedSec).toFixed(2),
+        'market:optionTick': (this.emissionStats['market:optionTick'] / elapsedSec).toFixed(2),
+        'chartTick': (this.emissionStats['chartTick'] / elapsedSec).toFixed(2),
+      }
+    };
   }
 
   private _logTick(message: string) {

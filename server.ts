@@ -233,7 +233,9 @@ async function handleChartHistory(req: express.Request, res: express.Response) {
 
 io.on("connection", (socket) => {
   connectedClients++;
-  console.log(`[Socket] Client connected. Total: ${connectedClients}`);
+  const timestamp = new Date().toISOString();
+  console.log(`[Socket] ✅ Client connected. Total: ${connectedClients} [${timestamp}]`);
+  console.log(`[Socket] socket.id=${socket.id} namespace=${socket.nsp.name}`);
   socketChartSubscriptions.set(socket.id, new Set<string>());
 
   // Send current state immediately on connect
@@ -268,7 +270,9 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", (reason) => {
     connectedClients--;
-    console.log(`[Socket] Client disconnected (${reason}). Total: ${connectedClients}`);
+    const timestamp = new Date().toISOString();
+    console.log(`[Socket] ❌ Client disconnected [${timestamp}]`);
+    console.log(`[Socket] socket.id=${socket.id} reason=${reason} total=${connectedClients}`);
     const subs = socketChartSubscriptions.get(socket.id);
     if (subs) {
       for (const chartKey of subs) {

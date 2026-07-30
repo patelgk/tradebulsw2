@@ -346,7 +346,18 @@ export class DhanMarketFeed {
         InstrumentCount: batch.length,
         InstrumentList: batch,
       };
-      this._safeSend(JSON.stringify(packet));
+
+      console.log("========== DHAN SUBSCRIPTION ==========");
+
+batch.forEach((inst) => {
+  console.log(
+    `SecurityId=${inst.SecurityId}, Exchange=${inst.ExchangeSegment}`
+  );
+});
+
+    console.log("=======================================");
+      
+    this._safeSend(JSON.stringify(packet));
       console.log(
         `[DhanFeed] 📡 ${mode === REQUEST_CODE.SUBSCRIBE_QUOTE ? "Subscribed" : mode === REQUEST_CODE.UNSUBSCRIBE_QUOTE ? "Unsubscribed" : "Updated"} batch ${Math.floor(i / BATCH) + 1}: ` +
         `${batch.length} instruments (RequestCode: ${mode})`
