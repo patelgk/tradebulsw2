@@ -1,5 +1,5 @@
 import React from 'react';
-import { trackWhatsAppClick } from '../analytics';
+
 
 interface WhatsAppButtonProps {
   label: string;
@@ -11,7 +11,7 @@ const WHATSAPP_LINK = 'https://api.whatsapp.com/send/?phone=919303259841&text=Hi
 
 export const WhatsAppButton: React.FC<WhatsAppButtonProps> = ({ label, location, className = '' }) => {
   const handleClick = () => {
-    trackWhatsAppClick(location);
+    console.log("WhatsApp Click:", location);
     window.open(WHATSAPP_LINK, '_blank', 'noopener,noreferrer');
   };
   return (
