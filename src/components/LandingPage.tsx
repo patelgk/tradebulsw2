@@ -25,7 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { APP_NAME } from './BrandLogo';
-import FloatingWhatsApp from './FloatingWhatsApp';
+
 
 interface LandingPageProps {
   onLoginClick: () => void;
@@ -779,7 +779,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   return (
     <div className="min-h-screen overflow-x-hidden font-sans selection:bg-emerald-300/30 bg-[#050812] text-white">
-        <FloatingWhatsApp />
+        
       <AnimatePresence>
         {showAdminLogin && (
           <motion.div
