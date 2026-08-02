@@ -292,12 +292,42 @@ io.on("connection", (socket) => {
 // ─── Health & Status Routes ──────────────────────────────────────────────────
 
 app.get("/api/health", (_req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const dbReadyStates: Record<number, string> = {
+    0: "disconnected",
+    1: "connected",
+    2: "connecting",
+    3: "disconnecting"
+  };
+  
   res.json({
     status: "ok",
     time: new Date().toISOString(),
-    mongodb: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+    mongodb: {
+      status: dbReadyStates[dbState] || "unknown",
+      readyState: dbState,
+      host: mongoose.connection.host || "N/A",
+      db: mongoose.connection.name || "N/A",
+    },
     dhanWs: marketFeed.isConnected() ? "connected" : "disconnected",
     simulator: marketSimulator.status(),
+  });
+});
+
+app.get("/api/health/db", (_req, res) => {
+  const dbState = mongoose.connection.readyState;
+  if (dbState === 1) {
+    return res.json({
+      status: "ok",
+      message: "MongoDB is connected",
+      readyState: dbState,
+    });
+  }
+  res.status(503).json({
+    status: "error",
+    message: "MongoDB is not connected",
+    readyState: dbState,
+    hint: "Check MONGODB_URI in .env and verify MongoDB Atlas IP whitelist includes deployment IP",
   });
 });
 
