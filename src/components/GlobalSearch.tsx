@@ -182,11 +182,11 @@ const GlobalSearch = memo(({ marketData, onSelectIndex, onSelectOption, onClose 
   }, [results, highlighted, select, onClose]);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start justify-center pt-16 px-4"
+    <div className="fixed inset-0 z-[200] flex items-start justify-center pt-16 px-3 sm:px-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-white/10">
+      <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md md:max-w-lg overflow-hidden border border-slate-200 dark:border-white/10">
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-white/10">
+        <div className="flex items-center gap-3 px-3 sm:px-4 py-3 border-b border-slate-200 dark:border-white/10">
           <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
           <input
             ref={inputRef}
@@ -194,24 +194,24 @@ const GlobalSearch = memo(({ marketData, onSelectIndex, onSelectOption, onClose 
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey}
             placeholder="Search: NIFTY, BANKNIFTY 57000 CE..."
-            className="flex-1 bg-transparent text-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
+            className="flex-1 bg-transparent text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
           />
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors flex-shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Results */}
-        <div className="max-h-80 overflow-y-auto">
+        <div className="max-h-[50vh] overflow-y-auto">
           {results.length === 0 ? (
-            <div className="py-8 text-center text-sm text-slate-400">No results found</div>
+            <div className="py-8 text-center text-xs sm:text-sm text-slate-400">No results found</div>
           ) : (
             results.map((r, i) => (
               <button
                 key={`${r.label}-${i}`}
                 onClick={() => select(r)}
                 onMouseEnter={() => setHighlighted(i)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                className={`w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 text-left transition-colors ${
                   i === highlighted
                     ? 'bg-primary/10 dark:bg-primary/20'
                     : 'hover:bg-slate-50 dark:hover:bg-white/5'
@@ -230,7 +230,7 @@ const GlobalSearch = memo(({ marketData, onSelectIndex, onSelectOption, onClose 
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{r.label}</p>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{r.label}</p>
                   {r.subLabel && <p className="text-[10px] text-slate-400">{r.subLabel}</p>}
                 </div>
                 {i === highlighted && (
@@ -241,7 +241,7 @@ const GlobalSearch = memo(({ marketData, onSelectIndex, onSelectOption, onClose 
           )}
         </div>
 
-        <div className="px-4 py-2 border-t border-slate-100 dark:border-white/5 flex items-center gap-4 text-[9px] text-slate-400">
+        <div className="px-3 sm:px-4 py-2 border-t border-slate-100 dark:border-white/5 flex items-center gap-2 sm:gap-4 text-[8px] sm:text-[9px] text-slate-400 flex-wrap">
           <span>↑↓ Navigate</span>
           <span>↵ Select</span>
           <span>Esc Close</span>

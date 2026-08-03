@@ -584,20 +584,20 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
 
   return (
     <div className="premium-card premium-gradient-line flex w-full flex-col overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50/80 px-4 py-4 dark:border-white/10 dark:bg-white/[0.045]">
+      <div className="flex flex-col gap-2 sm:gap-3 border-b border-slate-200/80 bg-slate-50/80 px-3 sm:px-4 md:px-6 py-3 sm:py-4 dark:border-white/10 dark:bg-white/[0.045]">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="premium-label tracking-[0.32em]">Lightweight Charts</p>
-            <h3 className="truncate text-base font-black tracking-[-0.03em] text-slate-900 dark:text-white">{title}</h3>
+            <p className="premium-label tracking-[0.32em] text-[9px] sm:text-[10px]">Lightweight Charts</p>
+            <h3 className="truncate text-sm sm:text-base font-black tracking-[-0.03em] text-slate-900 dark:text-white">{title}</h3>
           </div>
-          <span className="rounded-full border border-slate-200/80 bg-white/70 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:border-white/10 dark:bg-white/[0.06]">{selection.kind === 'index' ? 'Index' : 'Option Premium'}</span>
+          <span className="rounded-full border border-slate-200/80 bg-white/70 px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:border-white/10 dark:bg-white/[0.06] flex-shrink-0">{selection.kind === 'index' ? 'Index' : 'Option Premium'}</span>
         </div>
         <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf}
               onClick={() => onIntervalChange?.(tf)}
-              className={`rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+              className={`rounded-xl px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 flex-shrink-0 ${
                 tf === interval ? 'bg-primary text-white shadow-lg shadow-primary/25' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-white/[0.055] dark:text-slate-400 dark:hover:bg-white/10'
               }`}
             >
@@ -611,7 +611,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
         <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
         {(loading || isEmpty) && (
           <div className="absolute inset-0 flex items-center justify-center bg-transparent pointer-events-none">
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-3 text-center shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-[#0c1118]/80">
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-3 sm:px-4 py-2 sm:py-3 text-center shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-[#0c1118]/80">
               <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{message}</p>
             </div>
           </div>

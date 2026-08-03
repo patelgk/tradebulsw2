@@ -44,6 +44,7 @@ function fmtVol(n?: number): string {
 }
 
 const ROW_HEIGHT = 74;
+const ROW_HEIGHT_MOBILE = 48;
 const VIRTUAL_OVERSCAN = 6;
 
 const OptionChainRow = memo(({
@@ -213,12 +214,137 @@ const OptionChainRow = memo(({
 });
 OptionChainRow.displayName = 'OptionChainRow';
 
+// Mobile card layout component
+const OptionChainRowMobile = memo(({
+  row, isATM, isSelected, spotPrice, maxCeOI, maxPeOI, onSelect, onTrade, onAddToWatchlist,
+}: {
+  row: OptionStrike;
+  isATM: boolean;
+  isSelected: boolean;
+  spotPrice: number;
+  maxCeOI: number;
+  maxPeOI: number;
+  onSelect: (strike: number, type: 'CE' | 'PE', ltp: number) => void;
+  onTrade: (strike: number, type: 'CE' | 'PE', action: 'BUY' | 'SELL', ltp: number) => void;
+  onAddToWatchlist: (strike: number, type: 'CE' | 'PE', ltp: number) => void;
+}) => {
+  const isITM_CE = row.strike < spotPrice;
+  const isITM_PE = row.strike > spotPrice;
+  const ceBarW = maxCeOI > 0 ? Math.round((row.ce_oi / maxCeOI) * 100) : 0;
+  const peBarW = maxPeOI > 0 ? Math.round((row.pe_oi / maxPeOI) * 100) : 0;
+
+  return (
+    <tr
+      style={{ height: ROW_HEIGHT_MOBILE }}
+      className={`
+        border-b border-slate-100 dark:border-white/5 transition-colors
+        ${isATM ? 'bg-primary/10 dark:bg-primary/10' : ''}
+        ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
+        ${!isATM && !isSelected ? 'hover:bg-slate-50 dark:hover:bg-white/5' : ''}
+      `}
+    >
+      <td colSpan={7} className="px-3 py-2">
+        <div className="flex items-center justify-between gap-2 h-full">
+          {/* CE LTP - Left side */}
+          <div
+            className="flex flex-col items-start flex-1 min-w-0 cursor-pointer"
+            onClick={() => onSelect(row.strike, 'CE', row.ce_ltp)}
+          >
+            <span className={`text-[10px] font-bold text-red-600 dark:text-red-400 ${isITM_CE ? 'opacity-50' : ''}`}>
+              {row.ce_ltp.toFixed(2)}
+            </span>
+            <span className="text-[8px] text-slate-400">CE</span>
+            <div className="flex gap-1 mt-0.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToWatchlist(row.strike, 'CE', row.ce_ltp);
+                }}
+                className="rounded px-1.5 py-1 text-[7px] font-black text-slate-500 bg-slate-200 dark:bg-white/10 hover:bg-primary hover:text-white transition-colors min-h-[32px]"
+              >
+                +WL
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTrade(row.strike, 'CE', 'BUY', row.ce_ltp);
+                }}
+                className="rounded px-1.5 py-1 text-[7px] font-black text-white bg-red-500 hover:bg-red-600 transition-colors min-h-[32px]"
+              >
+                Buy
+              </button>
+            </div>
+          </div>
+
+          {/* Strike - Center (larger) */}
+          <div className="flex flex-col items-center flex-shrink-0">
+            <span className={`text-[12px] font-black ${isATM ? 'text-primary' : 'text-slate-600 dark:text-slate-300'}`}>
+              {row.strike}
+            </span>
+            {isATM && <span className="text-[7px] text-primary font-black uppercase tracking-wider">ATM</span>}
+          </div>
+
+          {/* PE LTP - Right side */}
+          <div
+            className="flex flex-col items-end flex-1 min-w-0 cursor-pointer"
+            onClick={() => onSelect(row.strike, 'PE', row.pe_ltp)}
+          >
+            <span className={`text-[10px] font-bold text-emerald-600 dark:text-emerald-400 ${isITM_PE ? 'opacity-50' : ''}`}>
+              {row.pe_ltp.toFixed(2)}
+            </span>
+            <span className="text-[8px] text-slate-400">PE</span>
+            <div className="flex gap-1 mt-0.5 flex-row-reverse">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToWatchlist(row.strike, 'PE', row.pe_ltp);
+                }}
+                className="rounded px-1.5 py-1 text-[7px] font-black text-slate-500 bg-slate-200 dark:bg-white/10 hover:bg-primary hover:text-white transition-colors min-h-[32px]"
+              >
+                +WL
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTrade(row.strike, 'PE', 'BUY', row.pe_ltp);
+                }}
+                className="rounded px-1.5 py-1 text-[7px] font-black text-white bg-emerald-500 hover:bg-emerald-600 transition-colors min-h-[32px]"
+              >
+                Buy
+              </button>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}, (prev, next) => {
+  if (prev.isATM !== next.isATM || prev.isSelected !== next.isSelected) return false;
+  if (prev.spotPrice !== next.spotPrice) return false;
+  if (prev.maxCeOI !== next.maxCeOI || prev.maxPeOI !== next.maxPeOI) return false;
+  
+  const rowDataChanged = 
+    prev.row.strike !== next.row.strike ||
+    prev.row.ce_ltp !== next.row.ce_ltp ||
+    prev.row.pe_ltp !== next.row.pe_ltp ||
+    prev.row.ce_oi !== next.row.ce_oi ||
+    prev.row.pe_oi !== next.row.pe_oi;
+  
+  return !rowDataChanged;
+});
+OptionChainRowMobile.displayName = 'OptionChainRowMobile';
+
 const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrade, onAddToWatchlist }: Props) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selectedStrike, setSelectedStrike] = useState<{ strike: number; type: 'CE' | 'PE' } | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(420);
   const [hasCentered, setHasCentered]       = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const scrollFrameRef = useRef<number | null>(null);
 
   const spotPrice    = data?.price    ?? 0;
@@ -284,18 +410,27 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     };
   }, []);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const virtualRange = useMemo(() => {
     if (!sortedStrikes.length) return { start: 0, end: -1, top: 0, bottom: 0 };
-    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - VIRTUAL_OVERSCAN);
-    const visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
+    const rowHeight = isMobile ? ROW_HEIGHT_MOBILE : ROW_HEIGHT;
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - VIRTUAL_OVERSCAN);
+    const visibleCount = Math.ceil(viewportHeight / rowHeight) + VIRTUAL_OVERSCAN * 2;
     const end = Math.min(sortedStrikes.length - 1, start + visibleCount - 1);
     return {
       start,
       end,
-      top: start * ROW_HEIGHT,
-      bottom: Math.max(0, (sortedStrikes.length - end - 1) * ROW_HEIGHT),
+      top: start * rowHeight,
+      bottom: Math.max(0, (sortedStrikes.length - end - 1) * rowHeight),
     };
-  }, [scrollTop, sortedStrikes.length, viewportHeight]);
+  }, [scrollTop, sortedStrikes.length, viewportHeight, isMobile]);
 
   const visibleStrikes = useMemo(
     () => sortedStrikes.slice(virtualRange.start, virtualRange.end + 1),
@@ -344,8 +479,8 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
   return (
     <div className="premium-card premium-gradient-line flex h-full flex-col overflow-hidden">
       {/* Header bar */}
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200/80 bg-slate-50/80 px-3 py-3 dark:border-white/10 dark:bg-white/[0.045]">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200/80 bg-slate-50/80 px-3 sm:px-4 md:px-6 py-3 dark:border-white/10 dark:bg-white/[0.045]">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Expiry selector */}
           {expiries.length > 0 && (
             <select
@@ -376,7 +511,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       </div>
 
       {/* Table header — sticky */}
-      <div className="flex-shrink-0 border-b border-slate-200/80 bg-slate-100/80 dark:border-white/10 dark:bg-white/[0.045]">
+      <div className="hidden lg:flex flex-shrink-0 border-b border-slate-200/80 bg-slate-100/80 dark:border-white/10 dark:bg-white/[0.045]">
         <table className="w-full text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
           <thead>
             <tr>
@@ -424,7 +559,21 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
                 const globalIndex = virtualRange.start + i;
                 const isATM = globalIndex === atmIndex;
                 const isSelected = selectedStrike?.strike === row.strike;
-                return (
+                
+                return isMobile ? (
+                  <OptionChainRowMobile
+                    key={`${expiry}:${row.strike}:CE:${row.ce_security_id || 'na'}:PE:${row.pe_security_id || 'na'}`}
+                    row={row}
+                    isATM={isATM}
+                    isSelected={isSelected}
+                    spotPrice={spotPrice}
+                    maxCeOI={maxCeOI}
+                    maxPeOI={maxPeOI}
+                    onSelect={handleSelect}
+                    onTrade={handleTrade}
+                    onAddToWatchlist={handleAddToWatchlist}
+                  />
+                ) : (
                   <OptionChainRow
                     key={`${expiry}:${row.strike}:CE:${row.ce_security_id || 'na'}:PE:${row.pe_security_id || 'na'}`}
                     row={row}
@@ -457,7 +606,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       </div>
 
       {/* Footer: total OI */}
-      <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200/80 bg-slate-50/80 px-3 py-2 text-[9px] text-slate-400 dark:border-white/10 dark:bg-white/[0.045]">
+      <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200/80 bg-slate-50/80 px-3 sm:px-4 md:px-6 py-2 text-[9px] text-slate-400 dark:border-white/10 dark:bg-white/[0.045]">
         <span>Total CE OI: <strong className="text-red-500">{fmtOI(totalCeOI)}</strong></span>
         <span className="text-[10px] text-slate-500 dark:text-slate-400">
           {data.dataSource === 'Dhan' ? '🟢 Live' : '🔴 Stale'}

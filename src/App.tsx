@@ -39,6 +39,7 @@ import {
   LayoutDashboard,
   Wallet,
   Menu,
+  X,
   ShieldCheck,
   Users,
   BarChart3,
@@ -268,7 +269,7 @@ const Header = ({
   };
 
   return (
-    <header className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-200/80 bg-white/[0.85] px-4 py-3 shadow-[0_12px_36px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#090c14]/[0.86]">
+    <header className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-200/80 bg-white/[0.85] px-3 sm:px-4 md:px-6 py-3 shadow-[0_12px_36px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#090c14]/[0.86]">
       <div className="flex items-center gap-2">
         {isSubView ? (
           <button onClick={onBack} className="-ml-1 rounded-full p-2 transition-colors hover:bg-slate-100 dark:hover:bg-white/[0.08]">
@@ -284,7 +285,7 @@ const Header = ({
           </button>
         ) : null}
         <div className="flex flex-col">
-          <h1 className="text-xl font-black leading-none tracking-[-0.04em]">
+          <h1 className="text-lg sm:text-xl font-black leading-none tracking-[-0.04em]">
             {isSubView ? 'Option Chain' : APP_NAME}
           </h1>
         </div>
@@ -295,7 +296,7 @@ const Header = ({
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <button 
           onClick={onSearch}
           className="rounded-full border border-slate-200/80 bg-slate-100/80 p-2 text-slate-600 transition-colors hover:bg-slate-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-400 dark:hover:bg-white/10"
@@ -2295,8 +2296,8 @@ const OptionChainView = ({
 
 
 
-      <div className="overflow-x-auto -mx-4 px-4">
-        <table className="w-full text-[10px] border-collapse min-w-[400px]">
+      <div className="overflow-x-auto sm:overflow-x-hidden -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6">
+        <table className="w-full text-[10px] border-collapse min-w-[400px] sm:min-w-0">
           <thead>
             <tr className="bg-slate-100 dark:bg-white/5 text-slate-400 uppercase font-bold">
               <th className="p-2 text-left border-b border-slate-200 dark:border-white/10">OI Chg</th>
@@ -3717,17 +3718,17 @@ const ProfileView = ({ userProfile, user, showToast, setUserProfile }: { userPro
 
       <div className="space-y-4">
         <h3 className="text-lg font-black tracking-[-0.03em]">Recent Trade History</h3>
-        <div className="overflow-x-auto -mx-4 px-4">
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto sm:overflow-x-hidden -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6">
+          <table className="w-full text-left border-collapse min-w-[500px] sm:min-w-0">
             <thead>
               <tr className="border-b border-slate-200 dark:border-white/10">
-                <th className="py-3 text-[10px] font-bold text-slate-400 uppercase">Symbol</th>
-                <th className="py-3 text-[10px] font-bold text-slate-400 uppercase">Type</th>
-                <th className="py-3 text-[10px] font-bold text-slate-400 uppercase">Strike</th>
-                <th className="py-3 text-[10px] font-bold text-slate-400 uppercase">LTP</th>
-                <th className="py-3 text-[10px] font-bold text-slate-400 uppercase">Qty</th>
-                <th className="py-3 text-[10px] font-bold text-slate-400 uppercase">Time</th>
-                <th className="py-3 text-[10px] font-bold text-slate-400 uppercase text-right">PnL</th>
+                <th className="py-3 px-2 text-[10px] font-bold text-slate-400 uppercase">Symbol</th>
+                <th className="py-3 px-2 text-[10px] font-bold text-slate-400 uppercase">Type</th>
+                <th className="py-3 px-2 text-[10px] font-bold text-slate-400 uppercase">Strike</th>
+                <th className="py-3 px-2 text-[10px] font-bold text-slate-400 uppercase">LTP</th>
+                <th className="py-3 px-2 text-[10px] font-bold text-slate-400 uppercase">Qty</th>
+                <th className="py-3 px-2 text-[10px] font-bold text-slate-400 uppercase">Time</th>
+                <th className="py-3 px-2 text-[10px] font-bold text-slate-400 uppercase text-right">PnL</th>
               </tr>
             </thead>
             <tbody>
