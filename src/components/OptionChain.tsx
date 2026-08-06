@@ -463,6 +463,20 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     onAddToWatchlist?.(strike, type, ltp);
   }, [onAddToWatchlist]);
 
+  // Debug logging
+  if (typeof window !== 'undefined' && import.meta.env.DEV) {
+    console.log('[OptionChain] Received data:', {
+      symbol,
+      hasData: !!data,
+      dataSource: data?.dataSource,
+      optionChainLength: data?.optionChain?.length || 0,
+      spotPrice,
+      expiry,
+      expiriesCount: expiries.length,
+      sortedStrikesLength: sortedStrikes.length,
+    });
+  }
+
   if (!data) {
     return (
       <div className="premium-card premium-gradient-line flex h-80 flex-col gap-3 p-4">
