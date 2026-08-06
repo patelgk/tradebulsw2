@@ -463,19 +463,18 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     onAddToWatchlist?.(strike, type, ltp);
   }, [onAddToWatchlist]);
 
-  // Debug logging
-  if (typeof window !== 'undefined' && import.meta.env.DEV) {
-    console.log('[OptionChain] Received data:', {
+  // Debug logging - always log to help diagnose issues
+  useEffect(() => {
+    console.log('[OptionChain] Data received:', {
       symbol,
       hasData: !!data,
       dataSource: data?.dataSource,
+      price: data?.price,
       optionChainLength: data?.optionChain?.length || 0,
-      spotPrice,
-      expiry,
-      expiriesCount: expiries.length,
-      sortedStrikesLength: sortedStrikes.length,
+      expiry: data?.expiry,
+      expiriesCount: (data?.expiries || []).length,
     });
-  }
+  }, [data, symbol]);
 
   if (!data) {
     return (
@@ -485,6 +484,26 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
           {Array.from({ length: 42 }).map((_, index) => (
             <div key={index} className="h-8 animate-pulse rounded bg-slate-200/70 dark:bg-white/10" />
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!data.optionChain || data.optionChain.length === 0) {
+    return (
+      <div className="premium-card premium-gradient-line flex h-80 flex-col items-center justify-center p-4">
+        <div className="text-center">
+          <div className="text-lg font-bold mb-2">
+            {data?.dataSource === 'Stale' || !data?.dataSource
+              ? '⏳ Waiting for Market Data'
+              : '📊 Option Chain Loading...'}
+          </div>
+          <div className="text-sm text-slate-400 mb-2">
+            {symbol} {data?.price ? `@ ₹${data.price.toFixed(2)}` : ''}
+          </div>
+          <div className="text-xs text-slate-500">
+            {data?.dataSource === 'Dhan' ? '🟢 Live Feed Connected' : '🔴 No Data Yet'}
+          </div>
         </div>
       </div>
     );
