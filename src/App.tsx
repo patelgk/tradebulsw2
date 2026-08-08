@@ -2501,66 +2501,9 @@ const PortfolioView = ({ portfolio, onClosePosition, userId, allTrades }: { port
 };
 
 const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: Plan) => void, plans: Plan[], rules: Rule[] }) => {
-  const premiumPlans = [
-    {
-      name: 'Starter Challenge',
-      price: 9999,
-      capital: 50000,
-      profit_target: 10,
-      max_dd: 6,
-      daily_dd: 3,
-      tag: null,
-      recommended: false,
-      split: 'Up to 80%',
-      evaluation: 'One Step',
-      tradingDays: 'Unlimited',
-      payout: '15 Days',
-    },
-    {
-      name: 'Professional Challenge',
-      price: 24999,
-      capital: 200000,
-      profit_target: 10,
-      max_dd: 6,
-      daily_dd: 3,
-      tag: 'Most Popular',
-      recommended: true,
-      split: 'Up to 80%',
-      evaluation: 'One Step',
-      tradingDays: 'Unlimited',
-      payout: '15 Days',
-    },
-    {
-      name: 'Elite Challenge',
-      price: 49999,
-      capital: 500000,
-      profit_target: 10,
-      max_dd: 6,
-      daily_dd: 3,
-      tag: 'Best Value',
-      recommended: false,
-      split: 'Up to 85%',
-      evaluation: 'One Step',
-      tradingDays: 'Unlimited',
-      payout: '15 Days',
-    },
-    {
-      name: 'Titan Challenge',
-      price: 99999,
-      capital: 1100000,
-      profit_target: 10,
-      max_dd: 6,
-      daily_dd: 3,
-      tag: null,
-      recommended: false,
-      split: 'Up to 90%',
-      evaluation: 'One Step',
-      tradingDays: 'Unlimited',
-      payout: '15 Days',
-    },
-  ];
-
-  const displayPlans = (plans && plans.length > 0 ? plans : premiumPlans) as Plan[];
+  // Always use API data from database - no hardcoded fallback
+  // This ensures real-time sync when admin updates challenges
+  const displayPlans = (plans && plans.length > 0 ? plans : []) as Plan[];
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-24">
@@ -2569,7 +2512,16 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
         <h2 className="mt-2 text-3xl font-black tracking-tight text-white">Choose your funded trading challenge</h2>
         <p className="mt-3 max-w-2xl text-sm text-slate-400">Select a plan, complete payment, and wait for admin approval to unlock your funded account.</p>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+
+      {displayPlans.length === 0 ? (
+        <div className="flex items-center justify-center h-48 text-slate-400">
+          <div className="text-center">
+            <p className="font-bold">Loading challenges...</p>
+            <p className="text-sm mt-2">Please wait while we fetch the latest challenge plans.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
         {displayPlans.map((plan, index) => {
           const isPremium = Boolean(plan.tag);
           const resolvedPlan = { ...plan, price: Number(plan.price || 0), capital: Number(plan.capital || 0) };
@@ -2626,7 +2578,8 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       <div className="space-y-4">
         <h2 className="text-lg font-bold flex items-center gap-2">
@@ -2652,7 +2605,7 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
   );
 };
 
-const AdminView = ({ showToast, currentUser }: { showToast: (msg: string, type?: 'success' | 'error') => void, currentUser: any }) => {
+const AdminView = ({ showToast, currentUser, setPlans }: { showToast: (msg: string, type?: 'success' | 'error') => void, currentUser: any, setPlans: (plans: any) => void }) => {
   const [activeSubTab, setActiveSubTab] = useState<'clients' | 'rules' | 'api' | 'challenges' | 'payments'>('clients');
   const [clients, setClients] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
@@ -2782,7 +2735,10 @@ const AdminView = ({ showToast, currentUser }: { showToast: (msg: string, type?:
   const handleUpdateChallenge = async (challengeId: string, updates: any) => {
     try {
       await api.upsertChallenge({ _id: challengeId, ...updates });
+      // Update local state
       setChallenges(prev => prev.map(c => (c._id || c.id) === challengeId ? { ...c, ...updates } : c));
+      // Also update the main plans state to sync with Landing Page
+      setPlans(prev => prev.map(p => (p._id || p.id) === challengeId ? { ...p, ...updates } : p));
       showToast('Challenge updated');
     } catch (err) {
       showToast('Failed to update challenge', 'error');
@@ -2803,6 +2759,8 @@ const AdminView = ({ showToast, currentUser }: { showToast: (msg: string, type?:
     try {
       const created = await api.upsertChallenge(newChallenge);
       setChallenges(prev => [...prev, created]);
+      // Also add to main plans to sync with Landing Page
+      setPlans(prev => [...prev, created]);
       showToast('New challenge created');
     } catch (err) {
       showToast('Failed to create challenge', 'error');
@@ -2810,11 +2768,11 @@ const AdminView = ({ showToast, currentUser }: { showToast: (msg: string, type?:
   };
 
   const handleDeleteChallenge = async (challengeId: string) => {
-    // For simplicity in this demo, we'll just delete without confirm, 
-    // or you could implement a custom modal.
     try {
       await api.deleteChallenge(challengeId);
       setChallenges(prev => prev.filter(c => (c._id || c.id) !== challengeId));
+      // Also remove from main plans to sync with Landing Page
+      setPlans(prev => prev.filter(p => (p._id || p.id) !== challengeId));
       showToast('Challenge deleted');
     } catch (err) {
       showToast('Failed to delete challenge', 'error');
@@ -5217,6 +5175,7 @@ function App() {
               }}
               onLogoClick={() => setShowAuthModal(true)}
               isLoggedIn={!!user}
+              plans={plans}
             />
             
             <AnimatePresence>
@@ -5257,6 +5216,7 @@ function App() {
             onLoginClick={() => setHasStarted(true)} 
             onLogoClick={() => setHasStarted(true)}
             isLoggedIn={!!user}
+            plans={plans}
           />
         ) : (
           <AnimatePresence mode="wait">
@@ -5356,7 +5316,7 @@ function App() {
               {activeTab === 'challenges' && <ChallengesView onSelectPlan={handleBuyChallenge} plans={plans} rules={rules} />}
               {activeTab === 'portfolio' && <PortfolioView portfolio={portfolio} onClosePosition={handleClosePosition} userId={user.uid} allTrades={allTrades} />}
               {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} />}
-              {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} />}
+              {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} setPlans={setPlans} />}
             </motion.div>
           </AnimatePresence>
         )}

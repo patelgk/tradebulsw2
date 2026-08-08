@@ -32,6 +32,7 @@ interface LandingPageProps {
   onAdminLogin?: (mobile: string, pass: string) => void;
   onLogoClick: () => void;
   isLoggedIn?: boolean;
+  plans?: any[];
 }
 
 const fadeUp = {
@@ -354,8 +355,24 @@ const Stats = () => {
   );
 };
 
-const FundingPlans = ({ onLoginClick }: { onLoginClick: () => void }) => {
-  const plans = [
+const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () => void, plans?: any[] }) => {
+  // Transform database plans to display format
+  const transformedPlans = dbPlans.length > 0 ? dbPlans.map((plan, index) => ({
+    name: plan.name || 'Challenge',
+    amount: `₹${(plan.capital || 0).toLocaleString('en-IN')}`,
+    fee: `₹${(plan.price || 0).toLocaleString('en-IN')}`,
+    target: `${plan.profit_target || 10}%`,
+    dailyLoss: `${plan.daily_dd || 3}%`,
+    drawdown: `${plan.max_dd || 6}%`,
+    split: 'Up to 80%',
+    evaluation: 'One Step',
+    tradingDays: 'Unlimited',
+    payout: '15 Days',
+    featured: index === 1 || plan.recommended === true, // Second plan is featured, or if marked recommended
+    badge: plan.recommended ? 'Most Popular' : index === 2 ? 'Best Value' : null,
+    _id: plan._id || plan.id, // Store the ID for reference
+  })) : [
+    // Fallback hardcoded plans if no database plans available
     {
       name: 'Starter Challenge',
       amount: '₹50,000',
@@ -413,6 +430,8 @@ const FundingPlans = ({ onLoginClick }: { onLoginClick: () => void }) => {
       badge: null,
     },
   ];
+
+  const plans = transformedPlans;
 
   return (
     <section id="plans" className="relative overflow-hidden bg-[#050812] px-4 py-24 sm:px-6 lg:px-8">
@@ -751,6 +770,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onAdminLogin,
   onLogoClick,
   isLoggedIn,
+  plans = [],
 }) => {
   const [logoClicks, setLogoClicks] = useState(0);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -841,7 +861,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <main>
         <Hero onLoginClick={onLoginClick} isLoggedIn={isLoggedIn} />
         <Stats />
-        <FundingPlans onLoginClick={onLoginClick} />
+        <FundingPlans onLoginClick={onLoginClick} plans={plans} />
         <PlatformPreview />
         <Features />
         <HowItWorks />
