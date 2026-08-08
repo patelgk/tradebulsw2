@@ -1582,7 +1582,7 @@ const WatchlistView = ({
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 pb-28">
+    <div className="flex flex-col gap-4 p-4 pb-28 lg:pb-4 lg:max-w-none">
       <div className="premium-card premium-gradient-line p-5">
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">TradingView-style Watchlists</p>
         <h2 className="mt-1 text-2xl font-black tracking-tight">Live Watchlist</h2>
@@ -1784,7 +1784,7 @@ const TradeView = memo(({
   };
 
   return (
-    <div className="relative flex flex-col gap-4 p-4 pb-32 sm:gap-5">
+    <div className="relative flex flex-col gap-4 p-4 pb-32 sm:gap-5 lg:pb-4 lg:pr-0 lg:max-w-none lg:mx-auto lg:w-full">
       {/* Order Confirmation Overlay */}
       {confirmOrder && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -2016,7 +2016,7 @@ const TradeView = memo(({
         </div>
       </div>
 
-      <div className="fixed bottom-[86px] left-0 right-0 z-40 mx-auto max-w-md px-4">
+      <div className="fixed bottom-[86px] left-0 right-0 z-40 mx-auto max-w-md px-4 lg:static lg:max-w-none lg:px-0 lg:pb-0">
         {!isOrderPanelOpen && (
           <button
             type="button"
@@ -2185,7 +2185,7 @@ const OptionChainView = ({
   
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-4 p-4 pb-24 animate-pulse">
+      <div className="flex flex-col gap-4 p-4 pb-24 animate-pulse lg:pb-4 lg:max-w-none">
         <ViewToggle activeView="chain" onToggle={(v) => v === 'chart' && onShowChart?.()} />
         <div className="flex items-center justify-between bg-slate-50 dark:bg-white/5 p-4 rounded-2xl border border-slate-200 dark:border-white/10 h-16">
           <div className="w-24 h-4 bg-slate-200 dark:bg-white/10 rounded" />
@@ -2216,7 +2216,7 @@ const OptionChainView = ({
     : 0;
 
   return (
-    <div className="flex flex-col gap-4 p-4 pb-24">
+    <div className="flex flex-col gap-4 p-4 pb-24 lg:pb-4 lg:max-w-none">
       <ViewToggle activeView="chain" onToggle={(v) => v === 'chart' && onShowChart?.()} />
       
       {/* Symbol Switcher */}
@@ -2363,7 +2363,7 @@ const PortfolioView = ({ portfolio, onClosePosition, userId, allTrades }: { port
   if (!portfolio) return <div className="p-8 text-center text-slate-400 font-bold">Loading Portfolio...</div>;
 
   return (
-    <div className="flex flex-col gap-6 p-4 pb-28">
+    <div className="flex flex-col gap-6 p-4 pb-28 lg:pb-4 lg:max-w-none">
       <div className="premium-card premium-gradient-line p-6">
         <p className="premium-label mb-2">Current Equity</p>
         <div className="flex items-baseline gap-3 mb-6">
@@ -2506,7 +2506,7 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
   const displayPlans = (plans && plans.length > 0 ? plans : []) as Plan[];
 
   return (
-    <div className="flex flex-col gap-6 p-4 pb-24">
+    <div className="flex flex-col gap-6 p-4 pb-24 lg:pb-4 lg:max-w-none">
       <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 shadow-lg shadow-black/10">
         <p className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-300">Trading Challenges</p>
         <h2 className="mt-2 text-3xl font-black tracking-tight text-white">Choose your funded trading challenge</h2>
@@ -2799,7 +2799,7 @@ const AdminView = ({ showToast, currentUser, setPlans }: { showToast: (msg: stri
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 pb-24">
+    <div className="flex flex-col gap-6 p-4 pb-24 lg:pb-4 lg:max-w-none">
       <div className="flex gap-2 overflow-x-auto hide-scrollbar">
         {[
           { id: 'clients', label: 'Clients', icon: Users },
@@ -3519,7 +3519,7 @@ const ProfileView = ({ userProfile, user, showToast, setUserProfile }: { userPro
   }, [user?.uid]);
 
   return (
-    <div className="flex flex-col gap-6 p-4 pb-28">
+    <div className="flex flex-col gap-6 p-4 pb-28 lg:pb-4 lg:max-w-none">
       <div className="premium-card premium-gradient-line flex flex-col items-center gap-4 p-8 text-center">
         <div className="flex h-28 w-28 items-center justify-center rounded-[2rem] border border-primary/25 bg-gradient-to-br from-primary/20 to-orange-400/5 shadow-2xl shadow-primary/10">
           <User className="h-14 w-14 text-primary" />
@@ -5117,41 +5117,43 @@ function App() {
   }
 
   return (
-    <div className={`app-premium-bg relative mx-auto flex min-h-screen flex-col text-slate-900 shadow-2xl dark:text-slate-100 ${user && hasStarted ? 'max-w-md' : 'max-w-none'}`}>
-      {user && hasStarted && (
-        <Header 
-          activeTab={activeTab} 
-          isSubView={(activeTab === 'trade' && showOptionChain)}
-          onBack={() => {
-            if (showOptionChain) setShowOptionChain(false);
-          }}
-          onOpenOptionChain={() => setShowOptionChain(true)}
-          onLogout={user ? handleLogout : undefined}
-          providerStatus={providerStatus}
-          onSearch={() => setShowSearch(true)}
-        />
-      )}
-
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className={`fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl font-bold text-sm whitespace-nowrap ${
-              toast.type === 'success'
-                ? 'bg-emerald-500 text-white'
-                : toast.type === 'info'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-red-500 text-white'
-            }`}
-          >
-            {toast.message}
-          </motion.div>
+    <>
+      {/* MOBILE LAYOUT (< 768px) */}
+      <div className="md:hidden flex flex-col min-h-screen bg-white dark:bg-[#050505]">
+        {user && hasStarted && (
+          <Header 
+            activeTab={activeTab} 
+            isSubView={(activeTab === 'trade' && showOptionChain)}
+            onBack={() => {
+              if (showOptionChain) setShowOptionChain(false);
+            }}
+            onOpenOptionChain={() => setShowOptionChain(true)}
+            onLogout={user ? handleLogout : undefined}
+            providerStatus={providerStatus}
+            onSearch={() => setShowSearch(true)}
+          />
         )}
-      </AnimatePresence>
-      
-      <main className="flex-1 overflow-y-auto">
+
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className={`fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl font-bold text-sm whitespace-nowrap ${
+                toast.type === 'success'
+                  ? 'bg-emerald-500 text-white'
+                  : toast.type === 'info'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-red-500 text-white'
+              }`}
+            >
+              {toast.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        <main className="flex-1 overflow-y-auto max-w-md mx-auto w-full">
         {!isAuthReady ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -5219,14 +5221,16 @@ function App() {
             plans={plans}
           />
         ) : (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab + (showOptionChain ? '-oc' : '')}
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2 }}
-            >
+          <div className="flex-1 w-full lg:overflow-y-auto">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab + (showOptionChain ? '-oc' : '')}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="w-full"
+              >
               {activeTab === 'trade' && (
                 showOptionChain ? (
                   <OptionChain
@@ -5318,29 +5322,263 @@ function App() {
               {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} />}
               {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} setPlans={setPlans} />}
             </motion.div>
-          </AnimatePresence>
-        )}
-      </main>
-
-      {user && hasStarted && (
-        <nav className="premium-bottom-nav fixed bottom-0 z-50 w-full max-w-md px-3 pb-5 pt-3">
-          <div className="flex items-center justify-around gap-1">
-            {navItems.map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`flex min-w-[64px] flex-col items-center gap-1.5 rounded-2xl px-2 py-2 transition-all duration-300 active:scale-95 ${
-                  activeTab === item.id ? 'bg-primary/[0.12] text-primary shadow-lg shadow-primary/10' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06]'
-                }`}
-              >
-                <item.icon className={`h-5 w-5 ${activeTab === item.id ? 'fill-primary/20' : ''}`} />
-                <span className="text-[9px] font-black uppercase tracking-[0.12em]">{item.label}</span>
-              </button>
-            ))}
+            </AnimatePresence>
           </div>
-        </nav>
-      )}
+        )}
+        </main>
 
+        {user && hasStarted && (
+          <nav className="premium-bottom-nav fixed bottom-0 z-50 w-full max-w-md px-3 pb-5 pt-3">
+            <div className="flex items-center justify-around gap-1">
+              {navItems.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`flex min-w-[64px] flex-col items-center gap-1.5 rounded-2xl px-2 py-2 transition-all duration-300 active:scale-95 ${
+                    activeTab === item.id ? 'bg-primary/[0.12] text-primary shadow-lg shadow-primary/10' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06]'
+                  }`}
+                >
+                  <item.icon className={`h-5 w-5 ${activeTab === item.id ? 'fill-primary/20' : ''}`} />
+                  <span className="text-[9px] font-black uppercase tracking-[0.12em]">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+        )}
+      </div>
+
+      {/* TABLET + DESKTOP LAYOUT (>= 768px) */}
+      <div className="hidden md:flex flex-col min-h-screen bg-white dark:bg-[#050505]">
+        {user && hasStarted && (
+          <Header 
+            activeTab={activeTab} 
+            isSubView={(activeTab === 'trade' && showOptionChain)}
+            onBack={() => {
+              if (showOptionChain) setShowOptionChain(false);
+            }}
+            onOpenOptionChain={() => setShowOptionChain(true)}
+            onLogout={user ? handleLogout : undefined}
+            providerStatus={providerStatus}
+            onSearch={() => setShowSearch(true)}
+          />
+        )}
+
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className={`fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl font-bold text-sm whitespace-nowrap ${
+                toast.type === 'success'
+                  ? 'bg-emerald-500 text-white'
+                  : toast.type === 'info'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-red-500 text-white'
+              }`}
+            >
+              {toast.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex flex-1 overflow-hidden">
+          {user && hasStarted && (
+            <nav className="flex flex-col w-64 border-r border-slate-200/70 dark:border-white/10 bg-white/[0.03] dark:bg-white/[0.02] p-4 gap-2 overflow-y-auto">
+              <div className="flex flex-col gap-1">
+                {navItems.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`flex w-full flex-row items-center gap-3 rounded-2xl px-4 py-3 transition-all duration-300 active:scale-95 ${
+                      activeTab === item.id ? 'bg-primary/10 text-primary shadow-lg shadow-primary/10' : 'text-slate-400 hover:bg-white/5 dark:hover:bg-white/[0.08]'
+                    }`}
+                  >
+                    <item.icon className={`h-4 w-4 ${activeTab === item.id ? 'fill-primary/20' : ''}`} />
+                    <span className="text-sm font-black uppercase tracking-[0.12em]">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </nav>
+          )}
+
+          <main className="flex-1 overflow-y-auto w-full">
+        {!isAuthReady ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : !user ? (
+          <div className="min-h-screen bg-white dark:bg-[#050505]">
+            <LandingPage 
+              onLoginClick={() => setShowAuthModal(true)} 
+              onAdminLogin={async (mobile, pass) => {
+                try {
+                  const userData = await api.adminLogin(mobile, pass);
+                  localStorage.setItem('trader_user', JSON.stringify(userData));
+                  setUser(userData);
+                  setUserProfile(userData);
+                  setHasStarted(true);
+                  setShowOptionChain(false);
+                  showToast('Admin Access Granted');
+                } catch (err: any) {
+                  showToast(err.message || 'Admin login failed', 'error');
+                }
+              }}
+              onLogoClick={() => setShowAuthModal(true)}
+              isLoggedIn={!!user}
+              plans={plans}
+            />
+            
+            <AnimatePresence>
+              {showAuthModal && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
+                >
+                  <motion.div 
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: 20 }}
+                    className="bg-white dark:bg-[#160d08] p-4 rounded-[2.5rem] border border-slate-200 dark:border-white/10 w-full max-w-sm relative"
+                  >
+                    <button 
+                      onClick={() => setShowAuthModal(false)}
+                      className="absolute top-6 right-6 p-2 rounded-full bg-slate-100 dark:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      <Plus className="w-5 h-5 rotate-45" />
+                    </button>
+                    <AuthView onAuthSuccess={(userData) => {
+                      setUser(userData);
+                      setUserProfile(userData);
+                      setShowAuthModal(false);
+                      setHasStarted(true);
+                      setShowOptionChain(false);
+                      showToast('Welcome!');
+                    }} showToast={showToast} />
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : !hasStarted ? (
+          <LandingPage 
+            onLoginClick={() => setHasStarted(true)} 
+            onLogoClick={() => setHasStarted(true)}
+            isLoggedIn={!!user}
+            plans={plans}
+          />
+        ) : (
+          <div className="flex-1 w-full overflow-y-auto">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab + (showOptionChain ? '-oc' : '')}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="w-full"
+              >
+              {activeTab === 'trade' && (
+                showOptionChain ? (
+                  <OptionChain
+                    symbol={selectedSymbol}
+                    data={marketData[selectedSymbol] as any}
+                    onStrikeSelect={(strike, type, ltp) => {
+                      setSelectedStrike(strike);
+                      selectOptionChart(selectedSymbol, strike, type);
+                      showToast(`${type} ${strike} @ ₹${ltp.toFixed(2)}`);
+                    }}
+                    onExpiryChange={async (expiry) => {
+                      setIsOptionChainLoading(true);
+                      try {
+                        await fetch('/api/market/expiry', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ symbol: selectedSymbol, expiry })
+                        });
+                        showToast(`Expiry updated to ${expiry}`, 'success');
+                      } catch { showToast('Failed to update expiry', 'error'); }
+                      finally { setIsOptionChainLoading(false); }
+                    }}
+                    onTrade={(strike, type, action, ltp) => {
+                      setSelectedStrike(strike);
+                      if (action === 'BUY') {
+                        openOrderTicketFromOption(selectedSymbol, strike, type);
+                      }
+                      selectOptionChart(selectedSymbol, strike, type);
+                      showToast(`${action} ${type} ${strike} @ ₹${ltp.toFixed(2)}`, 'info');
+                    }}
+                    onAddToWatchlist={(strike, type, ltp) => {
+                      void addOptionToWatchlist(strike, type, ltp);
+                    }}
+                  />
+                ) : (
+                  <TradeView 
+                    onViewOptionChain={() => {
+                      setIsOptionChainLoading(true);
+                      setShowOptionChain(true);
+                      // If data is already there, clear loading quickly for better UX
+                      if (marketData[selectedSymbol].optionChain.length > 0) {
+                        setTimeout(() => setIsOptionChainLoading(false), 300);
+                      }
+                    }} 
+                    price={marketData[selectedSymbol].price}
+                    change={marketData[selectedSymbol].change}
+                    timestamp={marketData[selectedSymbol].timestamp}
+                    optionChain={marketData[selectedSymbol].optionChain}
+                    selectedSymbol={selectedSymbol}
+                    onSymbolChange={(s) => {
+                      setSelectedSymbol(s);
+                      setSelectedStrike(0);
+                      selectIndexChart(s);
+                      setIsOptionChainLoading(true);
+                    }}
+                    selectedStrike={selectedStrike}
+                    onStrikeChange={setSelectedStrike}
+                    onTrade={handleTrade}
+                    chartSelection={chartSelection}
+                    liveChartTick={latestChartTick}
+                    onChartSelectionChange={setChartSelection}
+                    openPositions={openPositions}
+                    isLive={isSocketConnected}
+                    connectionStatus={connectionStatus}
+                    expiry={marketData[selectedSymbol].expiry}
+                    isMarketOpen={marketData[selectedSymbol].isMarketOpen}
+                    dataSource={marketData[selectedSymbol].dataSource}
+                  />
+                )
+              )}
+              {activeTab === 'watchlist' && (
+                <WatchlistView
+                  watchlists={watchlists || []}
+                  items={currentWatchlistItems}
+                  selectedWatchlistId={selectedWatchlistId}
+                  marketData={marketData}
+                  onCreateWatchlist={(name) => void createWatchlist(name)}
+                  onRenameWatchlist={(id, name) => void renameWatchlist(id, name)}
+                  onDeleteWatchlist={(id) => void deleteWatchlist(id)}
+                  onSelectWatchlist={persistSelectedWatchlist}
+                  onAddIndex={(symbol) => void addIndexToWatchlist(symbol)}
+                  onRemoveItem={(item) => void removeWatchlistItem(item)}
+                  onOpenChart={openWatchlistChart}
+                  onBuy={openWatchlistOrderTicket}
+                />
+              )}
+              {activeTab === 'challenges' && <ChallengesView onSelectPlan={handleBuyChallenge} plans={plans} rules={rules} />}
+              {activeTab === 'portfolio' && <PortfolioView portfolio={portfolio} onClosePosition={handleClosePosition} userId={user.uid} allTrades={allTrades} />}
+              {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} />}
+              {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} setPlans={setPlans} />}
+            </motion.div>
+            </AnimatePresence>
+          </div>
+        )}
+          </main>
+        </div>
+      </div>
+
+      {/* SHARED MODALS - visible on all layouts */}
       {orderTicket && (
         <OrderTicketModal
           instrument={orderTicket}
@@ -5378,7 +5616,7 @@ function App() {
           href="https://api.whatsapp.com/send/?phone=919303259841&text=Hi+I+want+to+know+about+Proprupee+Funded+Account&type=phone_number&app_absent=0"
           target="_blank"
           rel="noopener noreferrer"
-          className="fixed bottom-24 right-4 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white shadow-lg hover:shadow-2xl hover:scale-110 transition-all duration-300 active:scale-95"
+          className="fixed bottom-24 md:bottom-6 right-4 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white shadow-lg hover:shadow-2xl hover:scale-110 transition-all duration-300 active:scale-95"
           title="Chat with us on WhatsApp"
         >
           <svg 
@@ -5391,7 +5629,7 @@ function App() {
           </svg>
         </a>
       )}
-    </div>
+    </>
   );
 }
 
