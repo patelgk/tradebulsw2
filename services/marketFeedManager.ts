@@ -351,8 +351,9 @@ export class MarketFeedManager {
     }
 
     console.log(`[MarketSimulator] seeded option chain symbol=${symbol} rows=${chain.length} tokens=${tokenCount}`);
-    this.io.emit("marketUpdate", { [symbol]: this.state[symbol] });
-    this.io.emit("optionChain:update", { symbol, expiry, optionChain: chain });
+    const room = `symbol:${symbol}`;
+    this.io.to(room).emit("marketUpdate", { [symbol]: this.state[symbol] });
+    this.io.to(room).emit("optionChain:update", { symbol, expiry, optionChain: chain });
   }
 
   private _tradingDateKey(ts = Date.now()) {
@@ -626,7 +627,8 @@ export class MarketFeedManager {
       if (row.pe_security_id) this.unsubscribeOptionSecurity(row.pe_security_id);
     }
     await this._fetchOptionChain(symbol);
-    this.io.emit("marketUpdate", { [symbol]: this.state[symbol] });
+    const room = `symbol:${symbol}`;
+    this.io.to(room).emit("marketUpdate", { [symbol]: this.state[symbol] });
   }
 
   // ─── Feed Handlers ────────────────────────────────────────────────────────
@@ -684,6 +686,7 @@ export class MarketFeedManager {
       this._logTick(`[MarketFeed] OI tick token=${securityId} symbol=${symbol} strike=${optionMeta.strike} type=${optionMeta.optionType} oi=${update.oi}`);
       
       // EMIT IMMEDIATELY
+      const room = `symbol:${symbol}`;
       this._emitWithDebug("market:optionTick", {
         symbol,
         strike: optionMeta.strike,
@@ -696,7 +699,7 @@ export class MarketFeedManager {
         responseCode: update.responseCode,
         source: "ws",
         latencyMs,
-      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType });
+      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType }, room);
       
       this._emitWithDebug("optionChain:update", {
         symbol,
@@ -709,7 +712,7 @@ export class MarketFeedManager {
         row: targetRow || null,
         source: "ws",
         latencyMs,
-      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType });
+      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType }, room);
       
       // DEFER DB write to next tick (no await)
       setImmediate(() => {
@@ -756,32 +759,33 @@ export class MarketFeedManager {
       }
 
       // EMIT IMMEDIATELY - Do not await
-      this._emitWithDebug("market:optionTick", {
-        symbol,
-        strike: optionMeta.strike,
-        optionType: optionMeta.optionType,
-        securityId,
-        price: optionPrice,
-        change: optionChange,
-        changePct: optionChangePct,
-        volume,
-        source: "ws",
-        latencyMs,
-      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType });
-      
-      this._emitWithDebug("optionChain:update", {
-        symbol,
-        strike: optionMeta.strike,
-        optionType: optionMeta.optionType,
-        securityId,
-        price: optionPrice,
-        volume,
-        change: optionChange,
-        changePct: optionChangePct,
-        row: updatedOption || null,
-        source: "ws",
-        latencyMs,
-      });
+const room = `symbol:${symbol}`;
+    this._emitWithDebug("market:optionTick", {
+      symbol,
+      strike: optionMeta.strike,
+      optionType: optionMeta.optionType,
+      securityId,
+      price: optionPrice,
+      change: optionChange,
+      changePct: optionChangePct,
+      volume,
+      source: "ws",
+      latencyMs,
+    }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType }, room);
+    
+    this._emitWithDebug("optionChain:update", {
+      symbol,
+      strike: optionMeta.strike,
+      optionType: optionMeta.optionType,
+      securityId,
+      price: optionPrice,
+      volume,
+      change: optionChange,
+      changePct: optionChangePct,
+      row: updatedOption || null,
+      source: "ws",
+      latencyMs,
+    }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType }, room);
 
       // CHART TICK - Send immediately if subscribed
       const chartKeys = this.chartSubscribersBySecurity.get(securityId);
@@ -790,8 +794,8 @@ export class MarketFeedManager {
           const sub = this.chartSubscriptions.get(chartKey);
           if (!sub) continue;
           
-          // EMIT CHART TICK IMMEDIATELY
-          this.io.emit("chartTick", {
+          // EMIT CHART TICK IMMEDIATELY to chart room only
+          this.io.to(`chart:${chartKey}`).emit("chartTick", {
             chartKey: sub.chartKey,
             symbol: sub.symbol,
             securityId: sub.securityId,
@@ -866,6 +870,7 @@ export class MarketFeedManager {
 
     // EMIT INDEX TICK IMMEDIATELY
     this._logTick(`[MarketFeed] tick token=${securityId} symbol=${symbol} price=${s.price}`);
+    const room = `symbol:${symbol}`;
     this._emitWithDebug("market:indexTick", {
       symbol,
       securityId,
@@ -879,7 +884,7 @@ export class MarketFeedManager {
       timestamp: s.timestamp,
       source: "ws",
       latencyMs,
-    }, { symbol });
+    }, { symbol }, room);
 
     // EMIT CHART TICK IMMEDIATELY if subscribed
     const chartKeys = this.chartSubscribersBySecurity.get(securityId);
@@ -900,7 +905,7 @@ export class MarketFeedManager {
           volume,
           timestamp: new Date().toISOString(),
           ltt: update.ltt,
-        });
+        }, undefined, `chart:${chartKey}`);
       }
       
       // DEFER chart candle update to next tick
@@ -922,7 +927,7 @@ export class MarketFeedManager {
             cacheKey,
             timeframe: tf,
             candle,
-          });
+          }, undefined, `chart:${chartKey}`);
         }
       });
     }
@@ -1107,8 +1112,9 @@ export class MarketFeedManager {
           }
           console.log(`[MarketFeed] ✅ OC loaded for ${symbol}: ${chain.length} strikes, tokens=${nextIds.size}.`);
           console.log(`[MarketFeed] option chain tokens count=${nextIds.size} symbol=${symbol}`);
-          this.io.emit("marketUpdate", { [symbol]: this.state[symbol] });
-          this.io.emit("optionChain:update", { symbol, expiry, optionChain: chain, source: emitDiffTicks ? "rest-fallback" : "rest-snapshot" });
+          const room = `symbol:${symbol}`;
+          this.io.to(room).emit("marketUpdate", { [symbol]: this.state[symbol] });
+          this.io.to(room).emit("optionChain:update", { symbol, expiry, optionChain: chain, source: emitDiffTicks ? "rest-fallback" : "rest-snapshot" });
         }
       } catch (err: any) {
         console.error(`[MarketFeed] OC fetch failed (${symbol}):`, err.response?.data || err.message);
@@ -1191,6 +1197,7 @@ export class MarketFeedManager {
     const changePct = oldPrice > 0 ? +((change / oldPrice) * 100).toFixed(2) : 0;
     const oiChange = oldOi !== undefined ? oi - oldOi : (optionType === "CE" ? row.ce_oi_change : row.pe_oi_change);
 
+    const room = `symbol:${symbol}`;
     this._emitWithDebug("market:optionTick", {
       symbol,
       strike: row.strike,
@@ -1205,7 +1212,7 @@ export class MarketFeedManager {
       timestamp,
       responseCode: 4,
       source: "rest-fallback",
-    }, { symbol, strike: String(row.strike), type: optionType });
+    }, { symbol, strike: String(row.strike), type: optionType }, room);
     this._emitWithDebug("optionChain:update", {
       symbol,
       strike: row.strike,
@@ -1217,7 +1224,7 @@ export class MarketFeedManager {
       source: "rest-fallback",
       updatedRows: 1,
       timestamp,
-    });
+    }, { symbol, strike: String(row.strike), type: optionType }, room);
 
     const chartKeys = this.chartSubscribersBySecurity.get(token);
     if (chartKeys && chartKeys.size > 0) {
@@ -1248,7 +1255,7 @@ export class MarketFeedManager {
           candle,
           timestamp,
           source: "rest-fallback",
-        });
+        }, undefined, `chart:${chartKey}`);
         this._emitWithDebug("chartTick", {
           chartKey: sub.chartKey,
           symbol: sub.symbol,
@@ -1262,7 +1269,7 @@ export class MarketFeedManager {
           timestamp: new Date().toISOString(),
           responseCode: 4,
           source: "rest-fallback",
-        });
+        }, undefined, `chart:${chartKey}`);
       }
     }
 
@@ -1276,7 +1283,7 @@ export class MarketFeedManager {
     return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
   }
 
-  private _emitWithDebug(eventName: string, payload: any, meta?: {symbol?: string; strike?: string; type?: string}) {
+  private _emitWithDebug(eventName: string, payload: any, meta?: {symbol?: string; strike?: string; type?: string}, room?: string) {
     const timestamp = new Date().toISOString();
     const connectedCount = (this.io as any).engine?.clientsCount || 0;
     const payloadSize = JSON.stringify(payload).length;
@@ -1284,9 +1291,11 @@ export class MarketFeedManager {
     if (eventKey in this.emissionStats) {
       this.emissionStats[eventKey]++;
     }
-    
-    console.log(`[🚀 EMIT] ${eventName} | clients=${connectedCount} | size=${payloadSize}B | ${meta?.symbol ? `symbol=${meta.symbol}` : ''} ${meta?.strike ? `strike=${meta.strike}` : ''} | [${timestamp}]`);
-    this.io.emit(eventName, payload);
+    const emitter = room ? this.io.to(room) : this.io;
+    emitter.emit(eventName, payload);
+    if (process.env.NODE_ENV !== "production" && Date.now() - this.lastTickLogAt > 5000) {
+      console.log(`[🚀 EMIT SUMMARY] ${eventName} room=${room || 'all'} clients=${connectedCount} size=${payloadSize}B ${meta?.symbol ? `symbol=${meta.symbol}` : ''} ${meta?.strike ? `strike=${meta.strike}` : ''} [${timestamp}]`);
+    }
   }
 
   getEmissionStats() {

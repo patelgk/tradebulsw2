@@ -22,7 +22,7 @@ import * as dotenv from "dotenv";
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
 import nodemailer from "nodemailer";
-import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction, ChallengePurchase, FundHistory, AdminAction, ChallengeStatus, TradingAccount, Notification } from "./db.js";
+import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction, ChallengePurchase, FundHistory, AdminAction, ChallengeStatus, TradingAccount, Notification, Partner, Referral, Commission, Payout } from "./db.js";
 import dhanRoutes from "./routes/dhanRoutes.js";
 import { MarketFeedManager } from "./services/marketFeedManager.js";
 import { DevelopmentMarketSimulator } from "./services/developmentMarketSimulator.js";
@@ -77,6 +77,7 @@ function shouldAutoStartSimulator() {
 
 let connectedClients = 0;
 const socketChartSubscriptions = new Map<string, Set<string>>();
+const socketSymbolSubscriptions = new Map<string, Set<string>>();
 const chartSubscriptionRefCounts = new Map<string, number>();
 
 const INDEX_SECURITY_MAP: Record<string, { securityId: string; exchangeSegment: "IDX_I" | "NSE_FNO"; instrument: "INDEX" | "OPTIDX" }> = {
@@ -237,6 +238,7 @@ io.on("connection", (socket) => {
   console.log(`[Socket] ✅ Client connected. Total: ${connectedClients} [${timestamp}]`);
   console.log(`[Socket] socket.id=${socket.id} namespace=${socket.nsp.name}`);
   socketChartSubscriptions.set(socket.id, new Set<string>());
+  socketSymbolSubscriptions.set(socket.id, new Set<string>());
 
   // Send current state immediately on connect
   const state = marketFeed.getState();
@@ -251,6 +253,7 @@ io.on("connection", (socket) => {
     if (nextCount === 1) {
       marketFeed.subscribeChart(payload);
     }
+    socket.join(`chart:${payload.chartKey}`);
     console.log(`[Socket] chart subscribed key=${payload.chartKey} token=${payload.securityId} count=${nextCount}`);
     socketSubs?.add(payload.chartKey);
   });
@@ -266,6 +269,27 @@ io.on("connection", (socket) => {
     }
     console.log(`[Socket] chart unsubscribed key=${payload.chartKey} remaining=${chartSubscriptionRefCounts.get(payload.chartKey) || 0}`);
     socketChartSubscriptions.get(socket.id)?.delete(payload.chartKey);
+    socket.leave(`chart:${payload.chartKey}`);
+  });
+
+  socket.on("symbol:subscribe", (payload) => {
+    if (!payload?.symbol) return;
+    const symbol = String(payload.symbol);
+    const subscriptions = socketSymbolSubscriptions.get(socket.id);
+    if (!subscriptions || subscriptions.has(symbol)) return;
+    subscriptions.add(symbol);
+    socket.join(`symbol:${symbol}`);
+    console.log(`[Socket] symbol subscribed symbol=${symbol} total=${subscriptions.size}`);
+  });
+
+  socket.on("symbol:unsubscribe", (payload) => {
+    if (!payload?.symbol) return;
+    const symbol = String(payload.symbol);
+    const subscriptions = socketSymbolSubscriptions.get(socket.id);
+    if (!subscriptions || !subscriptions.has(symbol)) return;
+    subscriptions.delete(symbol);
+    socket.leave(`symbol:${symbol}`);
+    console.log(`[Socket] symbol unsubscribed symbol=${symbol} remaining=${subscriptions.size}`);
   });
 
   socket.on("disconnect", (reason) => {
@@ -286,6 +310,7 @@ io.on("connection", (socket) => {
       }
     }
     socketChartSubscriptions.delete(socket.id);
+    socketSymbolSubscriptions.delete(socket.id);
   });
 });
 
@@ -554,14 +579,52 @@ app.post("/api/users", async (req, res) => {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
+// User Signup - creates regular trader account
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { email, password, name, phoneNumber, mobile } = req.body;
+    const { email, password, name, phoneNumber, mobile, referralCode, isPartner } = req.body;
     const finalPhone = phoneNumber || mobile;
     const existing = await User.findOne({
       $or: [{ email }, { phoneNumber: finalPhone || "___none___" }],
     });
     if (existing) return res.status(400).json({ error: "User already exists with this email or mobile number" });
+    
+    // PARTNER SIGNUP PATH
+    if (isPartner) {
+      const partnerCode = `PARTNER_${uuidv4().substring(0, 8).toUpperCase()}`;
+      const uid = uuidv4();
+      const user = new User({
+        uid,
+        email,
+        password,
+        name,
+        phoneNumber: finalPhone,
+        balance: 0,
+        initial_balance: 0,
+        accountStatus: "active",
+        tradingCapital: 0,
+        tradingPermission: false,
+        role: 'partner',
+        partnerCode,
+        referralCode: partnerCode,
+      });
+      await user.save();
+      
+      const partner = new Partner({
+        userId: uid,
+        partnerName: name,
+        referralCode: partnerCode,
+        status: 'approved',
+        commissionRate: 15,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await partner.save();
+      
+      return res.json(user);
+    }
+    
+    // REGULAR USER SIGNUP PATH
     const user = new User({
       uid: uuidv4(), email, password, name,
       phoneNumber: finalPhone,
@@ -572,8 +635,24 @@ app.post("/api/auth/signup", async (req, res) => {
       tradingPermission: false,
       challenge: null,
       challengeStatus: "none",
+      role: 'user',
     });
     await user.save();
+    // Attach partner attribution if a valid referral code was provided
+    if (referralCode) {
+      try {
+        const partner = await Partner.findOne({ referralCode: String(referralCode).toUpperCase() });
+        if (partner && partner.status === 'approved') {
+          user.partnerId = partner._id.toString();
+          user.partnerCode = partner.referralCode;
+          user.referralSource = 'partner';
+          await user.save();
+          await new Referral({ referralCode: partner.referralCode, partnerId: partner._id.toString(), type: 'signup', userId: user.uid }).save();
+        }
+      } catch (err) {
+        console.error('[Referral] attach failed', err);
+      }
+    }
     res.json(user);
   } catch (err: any) {
     res.status(500).json({ error: "Signup failed: " + err.message });
@@ -755,6 +834,236 @@ const recordFundHistory = async (userId: string, type: string, amount: number, b
   }
 };
 
+// ─── Partner / Referral Helpers & Endpoints ───────────────────────────────
+
+const generateReferralCode = async (baseName: string) => {
+  const base = (baseName || 'PARTNER').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8) || 'PARTNER';
+  for (let i = 0; i < 8; i++) {
+    const suffix = Math.floor(1000 + Math.random() * 9000).toString().slice(0, 4);
+    const code = (base + suffix).slice(0, 10).toUpperCase();
+    const exists = await Partner.findOne({ referralCode: code });
+    if (!exists) return code;
+  }
+  // fallback
+  return base + Date.now().toString().slice(-6);
+};
+
+app.get('/api/referral/validate', async (req, res) => {
+  try {
+    const { code } = req.query as any;
+    if (!code) return res.status(400).json({ error: 'code is required' });
+    const partner = await Partner.findOne({ referralCode: String(code).toUpperCase() });
+    if (!partner) return res.status(404).json({ valid: false });
+    res.json({ valid: true, partnerId: partner._id.toString(), partnerName: partner.partnerName });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/referral/click', async (req, res) => {
+  try {
+    const { referralCode, partnerId, ip, userAgent, path } = req.body || {};
+    if (!referralCode || !partnerId) return res.status(400).json({ error: 'referralCode and partnerId required' });
+    await new Referral({ referralCode: String(referralCode).toUpperCase(), partnerId, type: 'click', ip, userAgent, path }).save();
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/partners/apply', async (req, res) => {
+  try {
+    const { uid, partnerName, partnerType, instagram, youtube, website, audienceSize, city, reason } = req.body || {};
+    if (!uid || !partnerName) return res.status(400).json({ error: 'uid and partnerName required' });
+    const existing = await Partner.findOne({ userId: uid });
+    if (existing) return res.status(400).json({ error: 'Partner application already exists for this user' });
+    const partner = new Partner({ userId: uid, partnerName, partnerType, commissionRate: 15, status: 'pending', createdAt: new Date(), updatedAt: new Date(), application: { instagram, youtube, website, audienceSize, city, reason } });
+    await partner.save();
+    res.json({ success: true, partner });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: list partners
+app.get('/api/partners', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const partners = await Partner.find().sort({ createdAt: -1 });
+    res.json(partners);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: approve partner application
+app.post('/api/partners/:id/approve', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const partner = await Partner.findById(req.params.id);
+    if (!partner) return res.status(404).json({ error: 'Partner not found' });
+    if (partner.status === 'approved') return res.json({ success: true, partner });
+    partner.status = 'approved';
+    partner.referralCode = await generateReferralCode(partner.partnerName || partner.userId || 'PART');
+    partner.updatedAt = new Date();
+    await partner.save();
+    // attach partner to user record - be tolerant of stored key (uid vs _id)
+    try {
+      let updatedUser = await User.findOneAndUpdate({ uid: partner.userId }, { $set: { partnerId: partner._id.toString(), partnerCode: partner.referralCode, referralSource: 'partner', role: 'partner' } }, { new: true });
+      if (!updatedUser) {
+        // maybe partner.userId holds the Mongo _id
+        try {
+          updatedUser = await User.findByIdAndUpdate(partner.userId, { $set: { partnerId: partner._id.toString(), partnerCode: partner.referralCode, referralSource: 'partner', role: 'partner' } }, { new: true });
+        } catch (innerErr) {
+          console.error('[PartnerApprove] findById update failed', innerErr?.message || innerErr);
+        }
+      }
+      if (!updatedUser) {
+        console.warn('[PartnerApprove] Warning: no matching User found to attach partner for partner.userId=', partner.userId);
+      } else {
+        console.log('[PartnerApprove] User updated to partner:', { uid: updatedUser.uid, _id: updatedUser._id.toString(), partnerId: updatedUser.partnerId, partnerCode: updatedUser.partnerCode, role: updatedUser.role });
+      }
+    } catch (err: any) {
+      console.error('[PartnerApprove] attaching partner to user failed', err.message);
+    }
+    res.json({ success: true, partner });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Partner: list commissions
+app.get('/api/partner/commissions', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    if (!uid) return res.status(400).json({ error: 'uid required' });
+    const user = await User.findOne({ uid });
+    let partnerId = user?.partnerId;
+    if (!partnerId) {
+      const p = await Partner.findOne({ userId: uid });
+      partnerId = p?._id?.toString() || null;
+    }
+    if (!partnerId) return res.status(403).json({ error: 'Partner role required' });
+    const commissions = await Commission.find({ partnerId }).sort({ createdAt: -1 });
+    res.json(commissions);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Partner: request payout
+app.post('/api/partner/payouts/request', async (req, res) => {
+  try {
+    const { uid, amount, paymentMethod, payoutDetails } = req.body || {};
+    if (!uid || !amount) return res.status(400).json({ error: 'uid and amount required' });
+    const user = await User.findOne({ uid });
+    let partnerId = user?.partnerId;
+    if (!partnerId) {
+      const p = await Partner.findOne({ userId: uid });
+      partnerId = p?._id?.toString() || null;
+    }
+    if (!partnerId) return res.status(403).json({ error: 'Partner role required' });
+    // calculate available balance: sum(approved commissions) - sum(payouts in pending/processing/paid)
+    const agg = await Commission.aggregate([
+      { $match: { partnerId, status: 'approved' } },
+      { $group: { _id: null, totalApproved: { $sum: '$commissionAmount' } } }
+    ]);
+    const totalApproved = agg[0]?.totalApproved || 0;
+    const payoutsAgg = await Payout.aggregate([
+      { $match: { partnerId, status: { $in: ['pending', 'processing', 'paid'] } } },
+      { $group: { _id: null, totalOut: { $sum: '$amount' } } }
+    ]);
+    const totalOut = payoutsAgg[0]?.totalOut || 0;
+    const available = totalApproved - totalOut;
+    if (amount > available) return res.status(400).json({ error: 'Requested amount exceeds available balance', available });
+    const payout = await new Payout({ partnerId, amount, paymentMethod, payoutDetails, status: 'pending', requestedAt: new Date() }).save();
+    res.json({ success: true, payout });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Partner: list own payouts
+app.get('/api/partner/payouts', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    if (!uid) return res.status(400).json({ error: 'uid required' });
+    const user = await User.findOne({ uid });
+    let partnerId = user?.partnerId;
+    if (!partnerId) {
+      const p = await Partner.findOne({ userId: uid });
+      partnerId = p?._id?.toString() || null;
+    }
+    if (!partnerId) return res.status(403).json({ error: 'Partner role required' });
+    const payouts = await Payout.find({ partnerId }).sort({ requestedAt: -1 });
+    res.json(payouts);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Partner: list referrals
+app.get('/api/partner/referrals', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    if (!uid) return res.status(400).json({ error: 'uid required' });
+    const user = await User.findOne({ uid });
+    let partnerId = user?.partnerId;
+    if (!partnerId) {
+      const p = await Partner.findOne({ userId: uid });
+      partnerId = p?._id?.toString() || null;
+    }
+    if (!partnerId) return res.status(403).json({ error: 'Partner role required' });
+    const referrals = await Referral.find({ partnerId }).sort({ createdAt: -1 });
+    res.json(referrals);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: list payout requests
+app.get('/api/admin/payouts', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const payouts = await Payout.find().sort({ requestedAt: -1 });
+    res.json(payouts);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: list all commissions (admin-only)
+app.get('/api/admin/commissions', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const commissions = await Commission.find().sort({ createdAt: -1 });
+    res.json(commissions);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: mark payout as paid
+app.post('/api/admin/payouts/:id/mark-paid', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const payout = await Payout.findById(req.params.id);
+    if (!payout) return res.status(404).json({ error: 'Payout not found' });
+    const { transactionRef, paidAmount } = req.body || {};
+    if (!transactionRef) return res.status(400).json({ error: 'transactionRef required' });
+    payout.status = 'paid';
+    payout.processedAt = new Date();
+    payout.transactionRef = transactionRef;
+    await payout.save();
+    res.json({ success: true, payout });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: reject payout
+app.post('/api/admin/payouts/:id/reject', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const payout = await Payout.findById(req.params.id);
+    if (!payout) return res.status(404).json({ error: 'Payout not found' });
+    payout.status = 'rejected';
+    payout.processedAt = new Date();
+    payout.adminNote = req.body.adminNote || '';
+    await payout.save();
+    res.json({ success: true, payout });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+
 app.get("/api/transactions", async (req, res) => {
   try {
     const filter: any = {};
@@ -784,6 +1093,21 @@ app.post("/api/transactions", async (req, res) => {
         invoiceNumber: payload.invoiceNumber || `INV-${Date.now()}`,
         status: 'pending',
       }).save();
+      // If the user was referred by a partner, create one commission record (idempotent)
+      try {
+        const referringPartnerId = user?.partnerId;
+        if (referringPartnerId) {
+          const existing = await Commission.findOne({ transactionId: String(transaction._id) });
+          if (!existing) {
+            const partner = await Partner.findById(referringPartnerId);
+            const commissionRate = partner?.commissionRate ?? 15;
+            const commissionAmount = ((purchase.challengeFee || 0) * commissionRate) / 100;
+            await new Commission({ partnerId: referringPartnerId, userId: payload.userId, transactionId: String(transaction._id), challengeName: purchase.challengeName, purchaseAmount: purchase.challengeFee || 0, commissionRate, commissionAmount, status: 'pending' }).save();
+          }
+        }
+      } catch (err: any) {
+        console.error('[Commission] creation failed', err.message);
+      }
       await createNotification(payload.userId, 'payment_successful', 'Payment Successful', 'Payment Successful. Your challenge is under review. Once approved, your funded account will be activated.');
       await ChallengeStatus.findOneAndUpdate({ userId: payload.userId }, { $set: { status: 'pending', challengeName: purchase.challengeName, fundingAmount: purchase.fundingAmount, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
       await TradingAccount.findOneAndUpdate({ userId: payload.userId }, { $set: { status: 'inactive', fundingAmount: purchase.fundingAmount, challengeName: purchase.challengeName, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
@@ -820,6 +1144,22 @@ app.put("/api/transactions/:id", async (req, res) => {
         }
       });
       await ChallengePurchase.findOneAndUpdate({ transactionId: String(tx._id) }, { $set: { status: 'approved', paymentStatus: 'approved', approvedAt: new Date() } }, { new: true });
+      // Create commission on approval if not already created
+      try {
+        const userRecord = await User.findOne({ uid: tx.userId });
+        const referringPartnerId = userRecord?.partnerId;
+        if (referringPartnerId) {
+          const existing = await Commission.findOne({ transactionId: String(tx._id) });
+          if (!existing) {
+            const partner = await Partner.findById(referringPartnerId);
+            const commissionRate = partner?.commissionRate ?? 15;
+            const commissionAmount = ((tx.amount || 0) * commissionRate) / 100;
+            await new Commission({ partnerId: referringPartnerId, userId: tx.userId, transactionId: String(tx._id), challengeName: tx.planName || tx.challengeName, purchaseAmount: tx.amount || 0, commissionRate, commissionAmount, status: 'pending' }).save();
+          }
+        }
+      } catch (err: any) {
+        console.error('[Commission] creation on approval failed', err.message);
+      }
       await ChallengeStatus.findOneAndUpdate({ userId: tx.userId }, { $set: { status: 'active', challengeName: tx.planName || tx.challengeName || 'Challenge', fundingAmount: tx.capital, tradingCapital: tx.capital, activationDate: new Date(), updatedAt: new Date() } }, { upsert: true, new: true });
       await TradingAccount.findOneAndUpdate({ userId: tx.userId }, { $set: { status: 'active', fundingAmount: tx.capital, challengeName: tx.planName || tx.challengeName || 'Challenge', tradingCapital: tx.capital, activatedAt: new Date(), updatedAt: new Date() } }, { upsert: true, new: true });
       await recordFundHistory(tx.userId, 'credit', tx.capital, before, after, 'Challenge approved', String(tx._id));
@@ -879,8 +1219,8 @@ app.post("/api/challenge-purchases/:id/approve", async (req, res) => {
     await purchase.save();
     await ChallengeStatus.findOneAndUpdate({ userId: purchase.userId }, { $set: { status: 'active', challengeName: purchase.challengeName, fundingAmount: purchase.fundingAmount, tradingCapital: purchase.fundingAmount, activationDate: new Date(), updatedAt: new Date() } }, { upsert: true, new: true });
     await TradingAccount.findOneAndUpdate({ userId: purchase.userId }, { $set: { status: 'active', accountNumber: `TRD-${Date.now()}`, fundingAmount: purchase.fundingAmount, challengeName: purchase.challengeName, tradingCapital: purchase.fundingAmount, activatedAt: new Date(), updatedAt: new Date() } }, { upsert: true, new: true });
-    await recordFundHistory(purchase.userId, 'credit', purchase.fundingAmount || 0, before, after, 'Challenge approved', purchase._id.toString(), adminId);
-    await createNotification(purchase.userId, 'challenge_approved', 'Challenge Approved', 'Your challenge has been approved and your funded account is now active.');
+    await recordFundHistory(String(purchase.userId), 'credit', purchase.fundingAmount || 0, before, after, 'Challenge approved', purchase._id.toString(), adminId);
+    await createNotification(String(purchase.userId), 'challenge_approved', 'Challenge Approved', 'Your challenge has been approved and your funded account is now active.');
     await recordAdminAction(adminId, 'approve_challenge', 'ChallengePurchase', purchase._id.toString(), { challengeName: purchase.challengeName });
     res.json({ success: true, purchase });
   } catch (err: any) {
@@ -904,7 +1244,7 @@ app.post("/api/challenge-purchases/:id/reject", async (req, res) => {
     await User.findOneAndUpdate({ uid: purchase.userId }, { $set: { balance: before, tradingCapital: 0, tradingPermission: false, challengeStatus: 'rejected' } });
     await ChallengeStatus.findOneAndUpdate({ userId: purchase.userId }, { $set: { status: 'rejected', challengeName: purchase.challengeName, fundingAmount: purchase.fundingAmount, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
     await TradingAccount.findOneAndUpdate({ userId: purchase.userId }, { $set: { status: 'rejected', fundingAmount: purchase.fundingAmount, challengeName: purchase.challengeName, tradingCapital: 0, updatedAt: new Date() } }, { upsert: true, new: true });
-    await createNotification(purchase.userId, 'challenge_rejected', 'Challenge Rejected', 'Your challenge purchase was rejected.');
+    await createNotification(String(purchase.userId), 'challenge_rejected', 'Challenge Rejected', 'Your challenge purchase was rejected.');
     await recordAdminAction(adminId, 'reject_challenge', 'ChallengePurchase', purchase._id.toString(), { reason: purchase.reviewReason });
     res.json({ success: true, purchase });
   } catch (err: any) {
@@ -953,6 +1293,23 @@ app.get("/api/fund-history", async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: "Failed to fetch fund history", message: err.message });
   }
+});
+
+// Debug: list registered API routes
+app.get('/api/debug/routes', (_req, res) => {
+  try {
+    const routes: string[] = [];
+    (app as any)._router.stack.forEach((middleware: any) => {
+      if (middleware.route) {
+        routes.push(middleware.route.path);
+      } else if (middleware.name === 'router' && middleware.handle && middleware.handle.stack) {
+        middleware.handle.stack.forEach((handler: any) => {
+          if (handler.route) routes.push(handler.route.path);
+        });
+      }
+    });
+    res.json({ routes });
+  } catch (err) { res.status(500).json({ error: 'failed' }); }
 });
 
 app.get("/api/admin-actions", async (_req, res) => {

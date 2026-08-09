@@ -8,7 +8,12 @@ const userSchema = new mongoose.Schema({
   phoneNumber: String,
   balance: { type: Number, default: 0 },
   initial_balance: { type: Number, default: 0 },
-  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  role: { type: String, enum: ['user', 'admin', 'partner'], default: 'user' },
+  // Partner role: partners authenticate with existing user accounts
+  // Add partner-related attribution fields (nullable for direct users)
+  partnerId: { type: String, default: null },
+  partnerCode: { type: String, default: null },
+  referralSource: { type: String, enum: ['direct', 'partner'], default: 'direct' },
   accountStatus: { type: String, enum: ['inactive', 'active', 'suspended', 'rejected'], default: 'inactive' },
   tradingCapital: { type: Number, default: 0 },
   tradingPermission: { type: Boolean, default: false },
@@ -18,6 +23,56 @@ const userSchema = new mongoose.Schema({
   challengeActivatedAt: Date,
   tradingAccountId: String,
   createdAt: { type: Date, default: Date.now },
+});
+
+// ─── Partner / Referral / Commission / Payout Schemas ───────────────────────
+
+const partnerSchema = new mongoose.Schema({
+  userId: { type: String, required: true },
+  partnerName: { type: String, required: true },
+  partnerType: { type: String, default: '' },
+  referralCode: { type: String, unique: true, sparse: true, default: null },
+  application: mongoose.Schema.Types.Mixed,
+  commissionRate: { type: Number, default: 15 },
+  status: { type: String, enum: ['pending', 'approved', 'rejected', 'suspended'], default: 'pending' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+const referralSchema = new mongoose.Schema({
+  referralCode: { type: String, required: true, index: true },
+  partnerId: { type: String, required: true, index: true },
+  type: { type: String, enum: ['click', 'signup'], required: true },
+  userId: { type: String, default: null }, // set when signup occurs
+  ip: String,
+  userAgent: String,
+  path: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const commissionSchema = new mongoose.Schema({
+  partnerId: { type: String, required: true, index: true },
+  userId: { type: String, required: true, index: true },
+  transactionId: { type: String, required: true, unique: true, index: true },
+  challengeName: { type: String },
+  purchaseAmount: { type: Number, required: true },
+  commissionRate: { type: Number, required: true },
+  commissionAmount: { type: Number, required: true },
+  status: { type: String, enum: ['pending', 'approved', 'paid', 'cancelled'], default: 'pending' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+const payoutSchema = new mongoose.Schema({
+  partnerId: { type: String, required: true, index: true },
+  amount: { type: Number, required: true },
+  paymentMethod: { type: String, default: '' },
+  payoutDetails: mongoose.Schema.Types.Mixed,
+  status: { type: String, enum: ['pending', 'processing', 'paid', 'rejected', 'cancelled'], default: 'pending' },
+  requestedAt: { type: Date, default: Date.now },
+  processedAt: Date,
+  transactionRef: String, // UTR / reference
+  adminNote: String,
 });
 
 const tradeSchema = new mongoose.Schema({
@@ -149,6 +204,10 @@ const notificationSchema = new mongoose.Schema({
 });
 
 export const User = mongoose.model('User', userSchema);
+export const Partner = mongoose.model('Partner', partnerSchema);
+export const Referral = mongoose.model('Referral', referralSchema);
+export const Commission = mongoose.model('Commission', commissionSchema);
+export const Payout = mongoose.model('Payout', payoutSchema);
 export const Trade = mongoose.model('Trade', tradeSchema);
 export const Challenge = mongoose.model('Challenge', challengeSchema);
 export const Rule = mongoose.model('Rule', ruleSchema);

@@ -20,51 +20,15 @@ import { APP_NAME } from './components/BrandLogo';
 import LWChart from './components/LWChart';
 import OptionChain from './components/OptionChain';
 import GlobalSearch from './components/GlobalSearch';
-import { 
-  CandlestickChart, 
-  Briefcase, 
-  ReceiptText, 
-  User, 
-  Home, 
-  Trophy, 
-  Search, 
-  Bell, 
-  TrendingUp, 
-  TrendingDown,
-  ChevronRight,
-  Plus,
-  Minus,
-  ArrowUp,
-  ArrowDown,
-  LayoutDashboard,
-  Wallet,
-  Menu,
-  X,
-  ShieldCheck,
-  Users,
-  BarChart3,
-  PieChart,
-  Activity,
-  Filter,
-  ArrowRightLeft,
-  Settings,
-  Phone,
-  Save,
-  Trash2,
-  Maximize2,
-  ChevronLeft,
-  Sun,
-  Moon,
-  Mail,
-  AlertTriangle,
-  CircleOff,
-  Info,
-  RefreshCw
-} from 'lucide-react';
+import { CandlestickChart, Briefcase, ReceiptText, User, UserPlus, Home, Trophy, Search, Bell, TrendingUp, TrendingDown, ChevronRight, Plus, Minus, ArrowUp, ArrowDown, LayoutDashboard, Wallet, Menu, X, ShieldCheck, Users, BarChart3, PieChart, Activity, Filter, ArrowRightLeft, Settings, Phone, Save, Trash2, Maximize2, ChevronLeft, Sun, Moon, Mail, AlertTriangle, CircleOff, Info, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
 import { api } from './api';
 import { NavItem, Trade, Plan, OptionStrike, Portfolio, Account, Client, Rule, SymbolMarketData, SYMBOLS, LOT_SIZES, INDEX_SECURITY_IDS, ChartSelection, ChartTick, SymbolName, Watchlist, WatchlistItem, OrderTicketInstrument } from './types';
+import PartnerDashboard from './components/PartnerDashboard';
+import AdminPartners from './components/AdminPartners';
+import AdminCommissions from './components/AdminCommissions';
+import AdminPayouts from './components/AdminPayouts';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db.client';
 
@@ -250,7 +214,9 @@ const Header = ({
   onLogout, 
   onOpenOptionChain,
   providerStatus,
-  onSearch
+  onSearch,
+  isPartner,
+  onPartnerDashboard,
 }: { 
   activeTab: string, 
   onBack?: () => void, 
@@ -258,7 +224,9 @@ const Header = ({
   onLogout?: () => void,
   onOpenOptionChain?: () => void,
   providerStatus?: Record<string, { status: string, nextRetryIn?: number, error?: string }>,
-  onSearch?: () => void
+  onSearch?: () => void,
+  isPartner?: boolean,
+  onPartnerDashboard?: () => void,
 }) => {
   const handleReconnect = async (provider: string) => {
     try {
@@ -304,6 +272,11 @@ const Header = ({
         >
           <Search className="w-5 h-5" />
         </button>
+        {isPartner && onPartnerDashboard && (
+          <button onClick={onPartnerDashboard} className="rounded-full border border-slate-200/80 bg-slate-100/80 px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-400 dark:hover:bg-white/10">
+            Partner Dashboard
+          </button>
+        )}
         {onLogout && (
           <button onClick={onLogout} className="rounded-full border border-slate-200/80 bg-slate-100/80 p-2 text-slate-600 transition-colors hover:bg-slate-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-400 dark:hover:bg-white/10">
             <User className="w-5 h-5" />
@@ -319,9 +292,13 @@ const Header = ({
 };
 
 const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => void, showToast: (msg: string, type?: 'success' | 'error') => void }) => {
+  // ============ AUTH MODE STATE (SEPARATE USER vs PARTNER) ============
+  const [authMode, setAuthMode] = useState<'home' | 'user' | 'partner'>('home'); // 'home' = choose, 'user' = trader flow, 'partner' = partner flow
+  
+  // User auth state
   const [isLogin, setIsLogin] = useState(true);
   const [isForgot, setIsForgot] = useState(false);
-  const [loginMethod, setLoginMethod] = useState<'email' | 'mobile'>('mobile'); // Default to mobile as requested
+  const [loginMethod, setLoginMethod] = useState<'email' | 'mobile'>('mobile');
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
@@ -329,7 +306,20 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleAuth = async (e: React.FormEvent) => {
+  // Reset form when switching auth modes
+  const resetFormState = () => {
+    setEmail('');
+    setMobile('');
+    setPassword('');
+    setName('');
+    setError('');
+    setIsLogin(true);
+    setIsForgot(false);
+    setLoginMethod('mobile');
+  };
+
+  // User (Trader) Authentication - for regular traders
+  const handleUserAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -339,19 +329,55 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
         const res = await api.forgotPassword(loginMethod === 'email' ? { email } : { mobile });
         showToast(res.message, 'success');
         if (res.password) {
-          alert(`Your password is: ${res.password}`); // Development convenience
+          alert(`Your password is: ${res.password}`);
         }
         setIsForgot(false);
         setIsLogin(true);
       } else if (isLogin) {
         userData = await api.login(loginMethod === 'email' ? { email, password } : { mobile, password });
-        // Save locally
         localStorage.setItem('trader_user', JSON.stringify(userData));
         onAuthSuccess(userData);
       } else {
-        userData = await api.signup({ email, password, phoneNumber: mobile, name: name || email.split('@')[0] });
-        // Save locally
+        userData = await api.signup({ email, password, phoneNumber: mobile, name: name || email.split('@')[0], referralCode: localStorage.getItem('referralCode') || undefined });
         localStorage.setItem('trader_user', JSON.stringify(userData));
+        onAuthSuccess(userData);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Partner Authentication - SEPARATE FLOW for partners only
+  const handlePartnerAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      if (isForgot) {
+        const res = await api.forgotPassword(loginMethod === 'email' ? { email } : { mobile });
+        showToast(res.message, 'success');
+        if (res.password) {
+          alert(`Your password is: ${res.password}`);
+        }
+        setIsForgot(false);
+        setIsLogin(true);
+      } else if (isLogin) {
+        // Partner login - MUST have partner role
+        const userData = await api.login(loginMethod === 'email' ? { email, password } : { mobile, password });
+        if (userData.role !== 'partner') {
+          setError('This account does not have partner access. Please use Trader Login instead.');
+          setLoading(false);
+          return;
+        }
+        localStorage.setItem('trader_user', JSON.stringify(userData));
+        onAuthSuccess(userData);
+      } else {
+        // Partner signup - uses SEPARATE endpoint that creates partner accounts
+        const userData = await api.partnerSignup({ email, password, phoneNumber: mobile, name: name || email.split('@')[0] });
+        localStorage.setItem('trader_user', JSON.stringify(userData));
+        showToast('Partner account created successfully!', 'success');
         onAuthSuccess(userData);
       }
     } catch (err: any) {
@@ -365,86 +391,139 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
     showToast('Google login is disabled. Please use email/password.', 'error');
   };
 
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 pb-32">
-      <div className="w-full max-w-sm space-y-8">
-        <div className="text-center">
-          <div className="inline-flex p-4 rounded-3xl bg-primary/10 mb-4">
-            <TrendingUp className="w-12 h-12 text-primary" />
-          </div>
-          <h2 className="text-3xl font-black tracking-tight">
-            {isForgot ? 'Recover Key' : isLogin ? 'Welcome Back' : 'Create Account'}
-          </h2>
-          <p className="text-slate-400 font-bold text-sm mt-2 uppercase tracking-widest">
-            {isForgot ? 'Get your password back' : isLogin ? 'Sign in to your trading account' : 'Join the elite trading community'}
-          </p>
-        </div>
-
-        {!isForgot && (
-          <div className="flex bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 shadow-inner">
-            <button 
-              type="button"
-              onClick={() => setLoginMethod('mobile')}
-              className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300 ${loginMethod === 'mobile' ? 'bg-primary text-white shadow-xl scale-[1.02]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-            >
-              Mobile Access
-            </button>
-            <button 
-              type="button"
-              onClick={() => setLoginMethod('email')}
-              className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300 ${loginMethod === 'email' ? 'bg-primary text-white shadow-xl scale-[1.02]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-            >
-              Email Access
-            </button>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <button
-            onClick={handleGoogleAuth}
-            disabled={loading}
-            className="w-full py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-200 font-bold rounded-2xl flex items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-white/10 transition-all disabled:opacity-50"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="currentColor"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="currentColor"
-                d="M5.84 14.09c-.22-.67-.35-1.39-.35-2.09s.13-1.42.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
-              />
-              <path
-                fill="currentColor"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              />
-            </svg>
-            Continue with Google
-          </button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200 dark:border-white/10"></div>
+  // ============ RENDER: HOME SCREEN (CHOOSE USER OR PARTNER) ============
+  if (authMode === 'home') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-6">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center">
+            <div className="inline-flex p-4 rounded-3xl bg-primary/10 mb-4">
+              <TrendingUp className="w-12 h-12 text-primary" />
             </div>
-            <div className="relative flex justify-center text-[10px] uppercase font-bold">
-              <span className="bg-white dark:bg-[#160d08] px-4 text-slate-400">Or use details</span>
-            </div>
+            <h2 className="text-3xl font-black tracking-tight">Welcome</h2>
+            <p className="text-slate-400 font-bold text-sm mt-2 uppercase tracking-widest">
+              Choose your account type
+            </p>
           </div>
 
-          <form onSubmit={handleAuth} className="space-y-4">
-            {error && (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold">
-                <p>{error}</p>
+          <div className="space-y-4">
+            {/* TRADER / USER LOGIN */}
+            <button
+              onClick={() => {
+                resetFormState();
+                setAuthMode('user');
+              }}
+              className="w-full py-6 bg-primary text-white font-black rounded-3xl shadow-xl shadow-primary/20 transition-all hover:bg-emerald-600 active:scale-95 uppercase tracking-[0.2em] text-sm border-2 border-primary"
+            >
+              <div className="flex flex-col items-center gap-2">
+                <TrendingUp className="w-6 h-6" />
+                <span>Trader Login</span>
               </div>
-            )}
-            
-            {!isLogin && !isForgot && (
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Full Name</label>
+              <p className="text-xs font-bold mt-2 opacity-90">For trading and investing</p>
+            </button>
+
+            {/* PARTNER LOGIN */}
+            <button
+              onClick={() => {
+                resetFormState();
+                setAuthMode('partner');
+              }}
+              className="w-full py-6 bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 font-black rounded-3xl shadow-inner transition-all hover:bg-slate-200 dark:hover:bg-white/20 active:scale-95 uppercase tracking-[0.2em] text-sm border-2 border-slate-200 dark:border-white/10"
+            >
+              <div className="flex flex-col items-center gap-2">
+                <UserPlus className="w-6 h-6" />
+                <span>Partner Portal</span>
+              </div>
+              <p className="text-xs font-bold mt-2 opacity-75">For affiliate partners</p>
+            </button>
+          </div>
+
+          <div className="text-center pt-4">
+            <p className="text-xs text-slate-500">
+              Choose your account type to get started
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ============ RENDER: USER/TRADER LOGIN FORM ============
+  if (authMode === 'user') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 pb-32">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center">
+            <button 
+              onClick={() => { resetFormState(); setAuthMode('home'); }}
+              className="mb-4 text-primary hover:underline text-sm font-bold"
+            >
+              ← Back to Login Options
+            </button>
+            <div className="inline-flex p-4 rounded-3xl bg-primary/10 mb-4">
+              <TrendingUp className="w-12 h-12 text-primary" />
+            </div>
+            <h2 className="text-3xl font-black tracking-tight">
+              {isForgot ? 'Recover Password' : isLogin ? 'Trader Login' : 'Create Account'}
+            </h2>
+            <p className="text-slate-400 font-bold text-sm mt-2 uppercase tracking-widest">
+              {isForgot ? 'Get your password back' : isLogin ? 'Sign in to trade' : 'Start trading today'}
+            </p>
+          </div>
+
+          {!isForgot && (
+            <div className="flex bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 shadow-inner">
+              <button 
+                type="button"
+                onClick={() => setLoginMethod('mobile')}
+                className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300 ${loginMethod === 'mobile' ? 'bg-primary text-white shadow-xl scale-[1.02]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+              >
+                Mobile
+              </button>
+              <button 
+                type="button"
+                onClick={() => setLoginMethod('email')}
+                className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300 ${loginMethod === 'email' ? 'bg-primary text-white shadow-xl scale-[1.02]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+              >
+                Email
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <button
+              onClick={handleGoogleAuth}
+              disabled={loading}
+              className="w-full py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-200 font-bold rounded-2xl flex items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-white/10 transition-all disabled:opacity-50"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="currentColor" d="M5.84 14.09c-.22-.67-.35-1.39-.35-2.09s.13-1.42.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+              </svg>
+              Google
+            </button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200 dark:border-white/10"></div>
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase font-bold">
+                <span className="bg-white dark:bg-[#160d08] px-4 text-slate-400">Or use credentials</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleUserAuth} className="space-y-4">
+              {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold">
+                  <p>{error}</p>
+                </div>
+              )}
+
+              {!isLogin && !isForgot && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Full Name</label>
                 <div className="relative group">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
                     <User className="w-4 h-4" />
@@ -457,12 +536,12 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
                     className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:border-primary transition-all font-bold"
                     required
                   />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {(loginMethod === 'email' || !isLogin) && (
-              <div className="space-y-1">
+              {(loginMethod === 'email' || !isLogin) && (
+                <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Email Address</label>
                 <div className="relative group">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
@@ -476,12 +555,12 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
                     className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:border-primary transition-all font-bold font-mono"
                     required={loginMethod === 'email' || !isLogin}
                   />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {(loginMethod === 'mobile' || !isLogin) && (
-              <div className="space-y-1">
+              {(loginMethod === 'mobile' || !isLogin) && (
+                <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Mobile Number</label>
                 <div className="relative group">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
@@ -495,12 +574,12 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
                     className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:border-primary transition-all font-bold font-mono"
                     required={loginMethod === 'mobile' || !isLogin}
                   />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {!isForgot && (
-              <div className="space-y-1">
+              {!isForgot && (
+                <div className="space-y-1">
                 <div className="flex justify-between items-center ml-4 mr-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase">Password</label>
                   {isLogin && (
@@ -524,14 +603,14 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-5 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/20 active:scale-95 transition-all disabled:opacity-50 uppercase tracking-[0.2em] text-xs"
-            >
-              {loading ? 'Processing...' : isForgot ? 'Request Reset' : isLogin ? 'Sign In' : 'Create Account'}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-5 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/20 active:scale-95 transition-all disabled:opacity-50 uppercase tracking-[0.2em] text-xs"
+              >
+                {loading ? 'Processing...' : isForgot ? 'Request Reset' : isLogin ? 'Sign In' : 'Create Account'}
+              </button>
+            </form>
 
           <div className="text-center space-y-3">
             <button
@@ -550,6 +629,185 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
           </div>
         </div>
       </div>
+    </div>
+    );
+  }
+
+  // ============ RENDER: PARTNER LOGIN FORM ============
+  if (authMode === 'partner') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 pb-32">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center">
+            <button 
+              onClick={() => { resetFormState(); setAuthMode('home'); }}
+              className="mb-4 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 underline text-sm font-bold"
+            >
+              ← Back to Login Options
+            </button>
+            <div className="inline-flex p-4 rounded-3xl bg-slate-100/50 dark:bg-white/10 mb-4">
+              <UserPlus className="w-12 h-12 text-slate-700 dark:text-slate-300" />
+            </div>
+            <h2 className="text-3xl font-black tracking-tight">
+              {isForgot ? 'Recover Password' : isLogin ? 'Partner Login' : 'Become a Partner'}
+            </h2>
+            <p className="text-slate-400 font-bold text-sm mt-2 uppercase tracking-widest">
+              {isForgot ? 'Get your password back' : isLogin ? 'Access partner portal' : 'Join our program'}
+            </p>
+          </div>
+
+          {!isForgot && (
+            <div className="flex bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 shadow-inner">
+              <button 
+                type="button"
+                onClick={() => setLoginMethod('mobile')}
+                className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300 ${loginMethod === 'mobile' ? 'bg-slate-700 dark:bg-white/20 text-white shadow-xl scale-[1.02]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+              >
+                Mobile
+              </button>
+              <button 
+                type="button"
+                onClick={() => setLoginMethod('email')}
+                className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-xl transition-all duration-300 ${loginMethod === 'email' ? 'bg-slate-700 dark:bg-white/20 text-white shadow-xl scale-[1.02]' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+              >
+                Email
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200 dark:border-white/10"></div>
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase font-bold">
+                <span className="bg-white dark:bg-[#160d08] px-4 text-slate-400">Partner Credentials</span>
+              </div>
+            </div>
+
+            <form onSubmit={handlePartnerAuth} className="space-y-4">
+              {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold">
+                  <p>{error}</p>
+                </div>
+              )}
+
+              {!isLogin && !isForgot && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Full Name</label>
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-700 dark:group-focus-within:text-slate-300 transition-colors">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Enter your full name"
+                      className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-600 dark:focus:border-slate-300 transition-all font-bold"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(loginMethod === 'email' || !isLogin) && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Email Address</label>
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-700 dark:group-focus-within:text-slate-300 transition-colors">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-600 dark:focus:border-slate-300 transition-all font-bold font-mono"
+                      required={loginMethod === 'email' || !isLogin}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(loginMethod === 'mobile' || !isLogin) && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-4">Mobile Number</label>
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-700 dark:group-focus-within:text-slate-300 transition-colors">
+                      <Phone className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="tel"
+                      value={mobile}
+                      onChange={(e) => setMobile(e.target.value)}
+                      placeholder="Enter 10 digit number"
+                      className="w-full pl-12 pr-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-600 dark:focus:border-slate-300 transition-all font-bold font-mono"
+                      required={loginMethod === 'mobile' || !isLogin}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {!isForgot && (
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center ml-4 mr-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Password</label>
+                    {isLogin && (
+                      <button 
+                        type="button"
+                        onClick={() => setIsForgot(true)}
+                        className="text-[9px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest hover:underline"
+                      >
+                        Forgot?
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-600 dark:focus:border-slate-300 transition-all font-bold"
+                    required
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-5 bg-slate-700 dark:bg-white/20 text-white font-black rounded-2xl shadow-xl shadow-slate-700/20 dark:shadow-white/10 active:scale-95 transition-all disabled:opacity-50 uppercase tracking-[0.2em] text-xs"
+              >
+                {loading ? 'Processing...' : isForgot ? 'Request Reset' : isLogin ? 'Partner Login' : 'Create Account'}
+              </button>
+            </form>
+
+            <div className="text-center space-y-3">
+              <button
+                onClick={() => {
+                  if (isForgot) {
+                    setIsForgot(false);
+                    setIsLogin(true);
+                  } else {
+                    setIsLogin(!isLogin);
+                  }
+                }}
+                className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors uppercase tracking-widest"
+              >
+                {isForgot ? "Back to Login" : isLogin ? "Become a Partner?" : "Already have account? Sign In"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback/default
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <p>Loading...</p>
     </div>
   );
 };
@@ -2606,7 +2864,7 @@ const ChallengesView = ({ onSelectPlan, plans, rules }: { onSelectPlan: (plan: P
 };
 
 const AdminView = ({ showToast, currentUser, setPlans }: { showToast: (msg: string, type?: 'success' | 'error') => void, currentUser: any, setPlans: (plans: any) => void }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'clients' | 'rules' | 'api' | 'challenges' | 'payments'>('clients');
+  const [activeSubTab, setActiveSubTab] = useState<'clients' | 'rules' | 'api' | 'challenges' | 'payments' | 'partners' | 'commissions' | 'payouts'>('clients');
   const [clients, setClients] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
   const [challenges, setChallenges] = useState<any[]>([]);
@@ -2803,6 +3061,9 @@ const AdminView = ({ showToast, currentUser, setPlans }: { showToast: (msg: stri
       <div className="flex gap-2 overflow-x-auto hide-scrollbar">
         {[
           { id: 'clients', label: 'Clients', icon: Users },
+          { id: 'partners', label: 'Partners', icon: UserPlus },
+          { id: 'commissions', label: 'Commissions', icon: BarChart3 },
+          { id: 'payouts', label: 'Payouts', icon: Wallet },
           { id: 'payments', label: 'Payments', icon: ReceiptText },
           { id: 'challenges', label: 'Challenges', icon: Trophy },
           { id: 'rules', label: 'Rules', icon: ShieldCheck },
@@ -2835,6 +3096,16 @@ const AdminView = ({ showToast, currentUser, setPlans }: { showToast: (msg: stri
                       <Phone className="w-3 h-3" /> {client.phoneNumber}
                     </p>
                   )}
+                  {/* Partner attribution */}
+                  <div className="mt-2 text-[12px] text-slate-500">
+                    <div className="flex gap-2 items-center">
+                      <span className="font-bold">Referral:</span>
+                      <span>{client.referralSource === 'partner' ? (client.partnerCode || '—') : 'Direct'}</span>
+                    </div>
+                    {client.partnerCode && (
+                      <div className="text-[11px] text-slate-400">Partner ID: {client.partnerId || '—'}</div>
+                    )}
+                  </div>
                 </div>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${client.role === 'admin' ? 'bg-primary/20 text-primary' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}>
                   {client.role?.toUpperCase() || 'USER'}
@@ -2945,6 +3216,24 @@ const AdminView = ({ showToast, currentUser, setPlans }: { showToast: (msg: stri
               );
             })
           )}
+        </div>
+      )}
+      {activeSubTab === 'partners' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold">Partners</h3>
+          </div>
+          <AdminPartners currentUser={currentUser} />
+        </div>
+      )}
+      {activeSubTab === 'commissions' && (
+        <div className="space-y-4">
+          <AdminCommissions />
+        </div>
+      )}
+      {activeSubTab === 'payouts' && (
+        <div className="space-y-4">
+          <AdminPayouts currentUser={currentUser} />
         </div>
       )}
       {activeSubTab === 'challenges' && (
@@ -3756,6 +4045,33 @@ function App() {
     'Bankex':         { price: 0, change: 0, changePct: 0, dayOpen: 0, dayHigh: 0, dayLow: 0, volume: 0, optionChain: [], timestamp: '--:--:--', expiry: '', expiries: [], isMarketOpen: false, dataSource: 'Stale' },
   });
 
+  // Capture referral code from URL once and store locally; record a click
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref');
+      if (ref) {
+        const code = String(ref).toUpperCase();
+        localStorage.setItem('referralCode', code);
+        // validate and record click
+        (async () => {
+          try {
+            const v = await fetch(`/api/referral/validate?code=${encodeURIComponent(code)}`);
+            if (v.ok) {
+              const data = await v.json();
+              await fetch('/api/referral/click', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ referralCode: code, partnerId: data.partnerId, ip: '', userAgent: navigator.userAgent, path: window.location.pathname })
+              });
+            }
+          } catch (err) { /* ignore */ }
+        })();
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, []);
+
   // Use Dexie to observe local market data
   const localMarketData = useLiveQuery(() => db.marketData.toArray());
   const localTrades = useLiveQuery(() => user ? db.trades.where('userId').equals(user.uid).toArray() : Promise.resolve([]));
@@ -3796,6 +4112,7 @@ function App() {
   const selectedSymbolRef = React.useRef(selectedSymbol);
   const chartSelectionRef = React.useRef(chartSelection);
   const marketDataRef = React.useRef(marketData);
+  const subscribedSymbolRef = React.useRef<Set<string>>(new Set());
   const portfolioDiagnosticRef = React.useRef(0);
   const socketRef = React.useRef<any>(null);
   const needsResubscribeRef = React.useRef(false);
@@ -3823,9 +4140,39 @@ function App() {
   useEffect(() => {
     selectedSymbolRef.current = selectedSymbol;
   }, [selectedSymbol]);
+
   useEffect(() => {
     chartSelectionRef.current = chartSelection;
   }, [chartSelection]);
+
+  const currentWatchlistItems = useMemo(() => {
+    return (watchlistItems || []).filter((item) => item.watchlistId === selectedWatchlistId);
+  }, [selectedWatchlistId, watchlistItems]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !socket.connected) return;
+
+    const watchlistSymbols = new Set<string>([
+      selectedSymbol,
+      ...(currentWatchlistItems?.map(item => item.symbol) || []),
+    ]);
+
+    const previous = new Set(subscribedSymbolRef.current);
+    const toSubscribe = Array.from(watchlistSymbols).filter(symbol => !previous.has(symbol));
+    const toUnsubscribe = Array.from(previous).filter(symbol => !watchlistSymbols.has(symbol));
+
+    toSubscribe.forEach(symbol => {
+      socket.emit('symbol:subscribe', { symbol });
+      subscribedSymbolRef.current.add(symbol);
+    });
+
+    toUnsubscribe.forEach(symbol => {
+      socket.emit('symbol:unsubscribe', { symbol });
+      subscribedSymbolRef.current.delete(symbol);
+    });
+  }, [selectedSymbol, currentWatchlistItems, isSocketConnected]);
+
   useEffect(() => {
     marketDataRef.current = marketData;
     // Diagnostic: log all symbols in marketData
@@ -3875,10 +4222,6 @@ function App() {
     const nextId = savedId && watchlists.some((list) => list.id === savedId) ? savedId : watchlists[0].id;
     if (selectedWatchlistId !== nextId) setSelectedWatchlistId(nextId);
   }, [selectedWatchlistId, user, watchlists]);
-
-  const currentWatchlistItems = useMemo(() => {
-    return (watchlistItems || []).filter((item) => item.watchlistId === selectedWatchlistId);
-  }, [selectedWatchlistId, watchlistItems]);
 
   const persistSelectedWatchlist = (id: string) => {
     if (!user) return;
@@ -4033,6 +4376,7 @@ function App() {
           setUser(userData);
           const profile = await api.getUser(userData.uid);
           setUserProfile(profile);
+          setActiveTab(profile?.role === 'partner' ? 'partner' : 'trade');
           setHasStarted(true);
           setShowOptionChain(false);
         } catch (err) {
@@ -5102,13 +5446,20 @@ function App() {
     });
   };
 
-  const navItems: NavItem[] = [
-    { id: 'trade', label: 'Trade', icon: CandlestickChart },
-    { id: 'watchlist', label: 'Watchlist', icon: LayoutDashboard },
-    { id: 'challenges', label: 'Challenges', icon: Trophy },
-    { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
-    { id: 'profile', label: 'Profile', icon: User },
-  ];
+  const isPartnerUser = userProfile?.role === 'partner' || user?.role === 'partner';
+
+  const navItems: NavItem[] = isPartnerUser
+    ? [
+        { id: 'partner', label: 'Partner', icon: UserPlus },
+        { id: 'profile', label: 'Profile', icon: User },
+      ]
+    : [
+        { id: 'trade', label: 'Trade', icon: CandlestickChart },
+        { id: 'watchlist', label: 'Watchlist', icon: LayoutDashboard },
+        { id: 'challenges', label: 'Challenges', icon: Trophy },
+        { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
+        { id: 'profile', label: 'Profile', icon: User },
+      ];
 
   if (userProfile?.role === 'admin' || user?.email === 'kushwahgourav2018@gmail.com') {
     if (!navItems.find(i => i.id === 'admin')) {
@@ -5161,7 +5512,8 @@ function App() {
         ) : !user ? (
           <div className="min-h-screen bg-white dark:bg-[#050505]">
             <LandingPage 
-              onLoginClick={() => setShowAuthModal(true)} 
+              onLoginClick={() => setShowAuthModal(true)}
+              onPartnerClick={() => setShowAuthModal(true)}
               onAdminLogin={async (mobile, pass) => {
                 try {
                   const userData = await api.adminLogin(mobile, pass);
@@ -5200,9 +5552,21 @@ function App() {
                     >
                       <Plus className="w-5 h-5 rotate-45" />
                     </button>
-                    <AuthView onAuthSuccess={(userData) => {
+                    <AuthView onAuthSuccess={async (userData) => {
                       setUser(userData);
-                      setUserProfile(userData);
+                      // Load full profile from server to ensure correct role
+                      try {
+                        const fullProfile = await api.getUser(userData.uid);
+                        setUserProfile(fullProfile);
+                        // Set activeTab based on ACTUAL role from server
+                        setActiveTab(fullProfile?.role === 'partner' ? 'partner' : 'trade');
+                      } catch (err) {
+                        // Fallback to signup response if profile fetch fails
+                        setUserProfile(userData);
+                        setActiveTab(userData?.role === 'partner' ? 'partner' : 'trade');
+                      }
+                      // Clear referral code after signup
+                      localStorage.removeItem('referralCode');
                       setShowAuthModal(false);
                       setHasStarted(true);
                       setShowOptionChain(false);
@@ -5221,7 +5585,7 @@ function App() {
             plans={plans}
           />
         ) : (
-          <div className="flex-1 w-full lg:overflow-y-auto">
+          <div className="flex-1 w-full min-h-0 overflow-y-auto">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab + (showOptionChain ? '-oc' : '')}
@@ -5320,7 +5684,8 @@ function App() {
               {activeTab === 'challenges' && <ChallengesView onSelectPlan={handleBuyChallenge} plans={plans} rules={rules} />}
               {activeTab === 'portfolio' && <PortfolioView portfolio={portfolio} onClosePosition={handleClosePosition} userId={user.uid} allTrades={allTrades} />}
               {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} />}
-              {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} setPlans={setPlans} />}
+                  {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} setPlans={setPlans} />}
+                  {activeTab === 'partner' && <PartnerDashboard user={user} />}
             </motion.div>
             </AnimatePresence>
           </div>
@@ -5410,7 +5775,8 @@ function App() {
         ) : !user ? (
           <div className="min-h-screen bg-white dark:bg-[#050505]">
             <LandingPage 
-              onLoginClick={() => setShowAuthModal(true)} 
+              onLoginClick={() => setShowAuthModal(true)}
+              onPartnerClick={() => setShowAuthModal(true)}
               onAdminLogin={async (mobile, pass) => {
                 try {
                   const userData = await api.adminLogin(mobile, pass);
@@ -5449,9 +5815,21 @@ function App() {
                     >
                       <Plus className="w-5 h-5 rotate-45" />
                     </button>
-                    <AuthView onAuthSuccess={(userData) => {
+                    <AuthView onAuthSuccess={async (userData) => {
                       setUser(userData);
-                      setUserProfile(userData);
+                      // Load full profile from server to ensure correct role
+                      try {
+                        const fullProfile = await api.getUser(userData.uid);
+                        setUserProfile(fullProfile);
+                        // Set activeTab based on ACTUAL role from server
+                        setActiveTab(fullProfile?.role === 'partner' ? 'partner' : 'trade');
+                      } catch (err) {
+                        // Fallback to signup response if profile fetch fails
+                        setUserProfile(userData);
+                        setActiveTab(userData?.role === 'partner' ? 'partner' : 'trade');
+                      }
+                      // Clear referral code after signup
+                      localStorage.removeItem('referralCode');
                       setShowAuthModal(false);
                       setHasStarted(true);
                       setShowOptionChain(false);
@@ -5570,6 +5948,7 @@ function App() {
               {activeTab === 'portfolio' && <PortfolioView portfolio={portfolio} onClosePosition={handleClosePosition} userId={user.uid} allTrades={allTrades} />}
               {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} />}
               {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} setPlans={setPlans} />}
+              {activeTab === 'partner' && <PartnerDashboard user={user} />}
             </motion.div>
             </AnimatePresence>
           </div>

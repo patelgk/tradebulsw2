@@ -228,6 +228,56 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+  async partnerSignup(data: any) {
+    // Add isPartner flag to trigger partner flow in signup endpoint
+    return safeFetch(`${API_BASE}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...data, isPartner: true }),
+    });
+  },
+  async validateReferral(code: string) {
+    return safeFetch(`${API_BASE}/referral/validate?code=${encodeURIComponent(code)}`);
+  },
+  async recordReferralClick(data: any) {
+    return safeFetch(`${API_BASE}/referral/click`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+  },
+  async applyPartner(data: any) {
+    return safeFetch(`${API_BASE}/partners/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  },
+  async getPartners(uid?: string) {
+    const q = uid ? `?uid=${encodeURIComponent(uid)}` : '';
+    return safeFetch(`${API_BASE}/partners${q}`);
+  },
+  async approvePartner(id: string, uid: string) {
+    return safeFetch(`${API_BASE}/partners/${id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid }) });
+  },
+  async getPartnerCommissions(uid: string) {
+    return safeFetch(`${API_BASE}/partner/commissions?uid=${encodeURIComponent(uid)}`);
+  },
+  async getPartnerReferrals(uid: string) {
+    return safeFetch(`${API_BASE}/partner/referrals?uid=${encodeURIComponent(uid)}`);
+  },
+  async requestPartnerPayout(data: any) {
+    return safeFetch(`${API_BASE}/partner/payouts/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  },
+  async getPartnerPayouts(uid: string) {
+    return safeFetch(`${API_BASE}/partner/payouts?uid=${encodeURIComponent(uid)}`);
+  },
+  async getAdminPayouts(uid: string) {
+    return safeFetch(`${API_BASE}/admin/payouts?uid=${encodeURIComponent(uid)}`);
+  },
+  async getAllPayouts() {
+    return safeFetch(`${API_BASE}/admin/payouts`);
+  },
+  async markPayoutPaid(id: string, uid: string, transactionRef: string) {
+    return safeFetch(`${API_BASE}/admin/payouts/${id}/mark-paid`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid, transactionRef }) });
+  },
+  async rejectPayout(id: string, uid: string, adminNote?: string) {
+    return safeFetch(`${API_BASE}/admin/payouts/${id}/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid, adminNote }) });
+  },
   async adminLogin(mobile: string, password: string) {
     return safeFetch(`${API_BASE}/auth/admin-login`, {
       method: 'POST',
