@@ -24,6 +24,7 @@ import { v4 as uuidv4 } from "uuid";
 import nodemailer from "nodemailer";
 import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction, ChallengePurchase, FundHistory, AdminAction, ChallengeStatus, TradingAccount, Notification, Partner, Referral, Commission, Payout } from "./db.js";
 import dhanRoutes from "./routes/dhanRoutes.js";
+import dhanDiagnosticRoutes from "./routes/dhanDiagnosticRoutes.js";
 import { MarketFeedManager } from "./services/marketFeedManager.js";
 import { DevelopmentMarketSimulator } from "./services/developmentMarketSimulator.js";
 
@@ -1338,6 +1339,10 @@ app.post("/api/notifications/:id/read", async (req, res) => {
     res.status(500).json({ error: "Failed to mark notification read", message: err.message });
   }
 });
+
+// ─── Dhan Diagnostic Routes (before 404 handler) ────────────────────────────
+
+app.use("/api/admin/dhan/diagnostic", dhanDiagnosticRoutes);
 
 // ─── API 404 & Error Handler ─────────────────────────────────────────────────
 
