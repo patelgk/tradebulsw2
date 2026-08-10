@@ -631,6 +631,14 @@ export class MarketFeedManager {
     this.io.to(room).emit("marketUpdate", { [symbol]: this.state[symbol] });
   }
 
+  async fetchOptionChainForSymbol(symbol: string): Promise<void> {
+    // Public method to trigger immediate option chain fetch for a symbol
+    // Used when client subscribes - ensures data is available right away
+    if (!this.state[symbol]) return;
+    console.log(`[MarketFeed] 📥 Client requested option chain fetch for ${symbol}`);
+    await this._fetchOptionChain(symbol, false);
+  }
+
   // ─── Feed Handlers ────────────────────────────────────────────────────────
 
   private _setupFeedHandlers() {
@@ -1044,6 +1052,12 @@ const room = `symbol:${symbol}`;
   }
 
   private async _fetchOptionChain(symbol: string, emitDiffTicks = false) {
+    // Skip option chain for instruments without tradeable options
+    if (symbol === 'Bankex' || symbol === 'Nifty Next 50') {
+      console.log(`[MarketFeed] ⏭️ Skipping OC for ${symbol} (no tradeable options)`);
+      return;
+    }
+
     if (this.inFlightFetch.has(symbol)) return;
     const details = SYMBOL_TO_SCRIP[symbol as SymbolName];
     if (!details) return;

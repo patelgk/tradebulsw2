@@ -564,8 +564,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overscroll-contain"
-        style={{ maxHeight: 'calc(100vh - 280px)', minHeight: 200 }}
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
       >
         {sortedStrikes.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-slate-400 text-xs">

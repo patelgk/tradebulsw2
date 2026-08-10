@@ -2042,7 +2042,8 @@ const TradeView = memo(({
   };
 
   return (
-    <div className="relative flex flex-col gap-4 p-4 pb-32 sm:gap-5 lg:pb-4 lg:pr-0 lg:max-w-none lg:mx-auto lg:w-full">
+    <div className="relative flex flex-col gap-4 p-4 pb-32 sm:gap-5 lg:pb-4 lg:pr-0 lg:max-w-none lg:mx-auto lg:w-full lg:h-full">
+      {/* Order Confirmation Overlay */}
       {/* Order Confirmation Overlay */}
       {confirmOrder && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -2150,12 +2151,12 @@ const TradeView = memo(({
         ))}
       </div>
 
-      <div className="flex rounded-[1.35rem] border border-slate-200/70 bg-white/50 p-1 dark:border-white/10 dark:bg-white/[0.035]">
+      <div className="flex gap-1 overflow-x-auto hide-scrollbar rounded-[1.35rem] border border-slate-200/70 bg-white/50 p-1 dark:border-white/10 dark:bg-white/[0.035]">
         {timeframeOptions.map((tf) => (
           <button 
             key={tf}
             onClick={() => setTimeframe(tf)}
-            className={`flex-1 rounded-2xl py-2.5 text-xs font-black transition-all ${
+            className={`flex-1 min-w-max sm:flex-1 rounded-2xl py-2 sm:py-2.5 text-xs font-black transition-all whitespace-nowrap ${
               timeframe === tf ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:bg-white/70 hover:text-slate-600 dark:hover:bg-white/[0.08] dark:hover:text-slate-200'
             }`}
           >
@@ -2224,13 +2225,15 @@ const TradeView = memo(({
       </div>
 
       {/* Lightweight Chart — replaces TradingView */}
-      <LWChart
-        selection={chartSelection}
-        interval={timeframe}
-        onIntervalChange={handleIntervalChange}
-        liveTick={liveChartTick}
-        height={380}
-      />
+      <div className="premium-card premium-gradient-line flex-1 min-h-0 lg:h-auto lg:min-h-fit">
+        <LWChart
+          selection={chartSelection}
+          interval={timeframe}
+          onIntervalChange={handleIntervalChange}
+          liveTick={liveChartTick}
+          height={380}
+        />
+      </div>
 
       <button 
         onClick={onViewOptionChain}

@@ -281,6 +281,12 @@ io.on("connection", (socket) => {
     subscriptions.add(symbol);
     socket.join(`symbol:${symbol}`);
     console.log(`[Socket] symbol subscribed symbol=${symbol} total=${subscriptions.size}`);
+    
+    // CRITICAL: Immediately fetch and emit option chain when client subscribes
+    // This ensures the client gets the data immediately, not waiting for periodic refresh
+    marketFeed.fetchOptionChainForSymbol(symbol as any).catch((err: any) => {
+      console.error(`[Socket] Failed to fetch option chain for ${symbol}:`, err.message);
+    });
   });
 
   socket.on("symbol:unsubscribe", (payload) => {
