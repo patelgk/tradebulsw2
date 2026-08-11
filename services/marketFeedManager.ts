@@ -562,7 +562,15 @@ export class MarketFeedManager {
     });
 
     if (instruments.length > 0) {
-      this.feed.subscribeInstruments(instruments);
+      // Batch subscribe to avoid rate limits
+      const batchSize = Number(process.env.DHAN_SUBSCRIBE_BATCH_SIZE || 50);
+      for (let i = 0; i < instruments.length; i += batchSize) {
+        const batch = instruments.slice(i, i + batchSize);
+        setTimeout(() => {
+          console.log(`[MarketFeed] Subscribing to batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(instruments.length / batchSize)} (${batch.length} instruments)`);
+          this.feed.subscribeInstruments(batch);
+        }, i / batchSize * 500); // Stagger requests by 500ms
+      }
     }
   }
 
