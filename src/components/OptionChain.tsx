@@ -261,7 +261,7 @@ const OptionChainRowMobile = memo(({
                   e.stopPropagation();
                   onAddToWatchlist(row.strike, 'CE', row.ce_ltp);
                 }}
-                className="rounded px-1.5 py-1 text-[7px] font-black text-slate-500 bg-slate-200 dark:bg-white/10 hover:bg-primary hover:text-white transition-colors min-h-[32px]"
+                className="rounded px-1.5 py-1 text-[8px] sm:text-[8px] font-black text-slate-500 bg-slate-200 dark:bg-white/10 hover:bg-primary hover:text-white transition-colors min-h-[32px]"
               >
                 +WL
               </button>
@@ -271,7 +271,7 @@ const OptionChainRowMobile = memo(({
                   e.stopPropagation();
                   onTrade(row.strike, 'CE', 'BUY', row.ce_ltp);
                 }}
-                className="rounded px-1.5 py-1 text-[7px] font-black text-white bg-red-500 hover:bg-red-600 transition-colors min-h-[32px]"
+                className="rounded px-1.5 py-1 text-[8px] sm:text-[8px] font-black text-white bg-red-500 hover:bg-red-600 transition-colors min-h-[32px]"
               >
                 Buy
               </button>
@@ -302,7 +302,7 @@ const OptionChainRowMobile = memo(({
                   e.stopPropagation();
                   onAddToWatchlist(row.strike, 'PE', row.pe_ltp);
                 }}
-                className="rounded px-1.5 py-1 text-[7px] font-black text-slate-500 bg-slate-200 dark:bg-white/10 hover:bg-primary hover:text-white transition-colors min-h-[32px]"
+                className="rounded px-1.5 py-1 text-[8px] sm:text-[8px] font-black text-slate-500 bg-slate-200 dark:bg-white/10 hover:bg-primary hover:text-white transition-colors min-h-[32px]"
               >
                 +WL
               </button>
@@ -312,7 +312,7 @@ const OptionChainRowMobile = memo(({
                   e.stopPropagation();
                   onTrade(row.strike, 'PE', 'BUY', row.pe_ltp);
                 }}
-                className="rounded px-1.5 py-1 text-[7px] font-black text-white bg-emerald-500 hover:bg-emerald-600 transition-colors min-h-[32px]"
+                className="rounded px-1.5 py-1 text-[8px] sm:text-[8px] font-black text-white bg-emerald-500 hover:bg-emerald-600 transition-colors min-h-[32px]"
               >
                 Buy
               </button>
@@ -344,7 +344,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(420);
   const [hasCentered, setHasCentered]       = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const scrollFrameRef = useRef<number | null>(null);
 
   const spotPrice    = data?.price    ?? 0;

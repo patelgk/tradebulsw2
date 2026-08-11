@@ -198,7 +198,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
-      width: Math.max(containerRef.current.clientWidth, 320),
+      width: Math.max(containerRef.current.clientWidth, 280),
       height,
       layout: {
         background: { type: ColorType.Solid, color: theme.bg },
@@ -257,7 +257,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
 
     const ro = new ResizeObserver(() => {
       if (containerRef.current) {
-        chart.applyOptions({ width: Math.max(containerRef.current.clientWidth, 320), height });
+        chart.applyOptions({ width: Math.max(containerRef.current.clientWidth, 280), height });
       }
     });
     ro.observe(containerRef.current);

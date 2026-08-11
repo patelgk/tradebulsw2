@@ -85,7 +85,7 @@ const CandlestickPreview = ({ compact = false }: { compact?: boolean }) => {
   ];
 
   return (
-    <div className={cx('relative overflow-hidden rounded-3xl border border-white/10 bg-[#081019]', compact ? 'h-56' : 'h-[320px] md:h-[390px]')}>
+    <div className={cx('relative overflow-hidden rounded-3xl border border-white/10 bg-[#081019]', compact ? 'h-48 sm:h-56' : 'h-[280px] sm:h-[320px] md:h-[390px]')}>
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[size:42px_42px]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_18%,rgba(16,185,129,0.22),transparent_34%),radial-gradient(circle_at_24%_82%,rgba(6,182,212,0.16),transparent_30%)]" />
       <svg className="absolute inset-x-0 bottom-10 h-40 w-full opacity-70" viewBox="0 0 760 180" preserveAspectRatio="none">

@@ -413,13 +413,13 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
                 resetFormState();
                 setAuthMode('user');
               }}
-              className="w-full py-6 bg-primary text-white font-black rounded-3xl shadow-xl shadow-primary/20 transition-all hover:bg-emerald-600 active:scale-95 uppercase tracking-[0.2em] text-sm border-2 border-primary"
+              className="w-full py-4 sm:py-6 bg-primary text-white font-black rounded-3xl shadow-xl shadow-primary/20 transition-all hover:bg-emerald-600 active:scale-95 uppercase tracking-[0.2em] text-xs sm:text-sm border-2 border-primary"
             >
               <div className="flex flex-col items-center gap-2">
-                <TrendingUp className="w-6 h-6" />
+                <TrendingUp className="w-5 sm:w-6 h-5 sm:h-6" />
                 <span>Trader Login</span>
               </div>
-              <p className="text-xs font-bold mt-2 opacity-90">For trading and investing</p>
+              <p className="text-[11px] sm:text-xs font-bold mt-1 sm:mt-2 opacity-90">For trading and investing</p>
             </button>
 
             {/* PARTNER LOGIN */}
@@ -428,13 +428,13 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
                 resetFormState();
                 setAuthMode('partner');
               }}
-              className="w-full py-6 bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 font-black rounded-3xl shadow-inner transition-all hover:bg-slate-200 dark:hover:bg-white/20 active:scale-95 uppercase tracking-[0.2em] text-sm border-2 border-slate-200 dark:border-white/10"
+              className="w-full py-4 sm:py-6 bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 font-black rounded-3xl shadow-inner transition-all hover:bg-slate-200 dark:hover:bg-white/20 active:scale-95 uppercase tracking-[0.2em] text-xs sm:text-sm border-2 border-slate-200 dark:border-white/10"
             >
               <div className="flex flex-col items-center gap-2">
-                <UserPlus className="w-6 h-6" />
+                <UserPlus className="w-5 sm:w-6 h-5 sm:h-6" />
                 <span>Partner Portal</span>
               </div>
-              <p className="text-xs font-bold mt-2 opacity-75">For affiliate partners</p>
+              <p className="text-[11px] sm:text-xs font-bold mt-1 sm:mt-2 opacity-75">For affiliate partners</p>
             </button>
           </div>
 
@@ -451,22 +451,22 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
   // ============ RENDER: USER/TRADER LOGIN FORM ============
   if (authMode === 'user') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 pb-32">
-        <div className="w-full max-w-sm space-y-8">
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-3 sm:p-6 pb-32">
+        <div className="w-full max-w-sm space-y-4 sm:space-y-8">
           <div className="text-center">
             <button 
               onClick={() => { resetFormState(); setAuthMode('home'); }}
-              className="mb-4 text-primary hover:underline text-sm font-bold"
+              className="mb-4 text-primary hover:underline text-xs sm:text-sm font-bold"
             >
               ← Back to Login Options
             </button>
-            <div className="inline-flex p-4 rounded-3xl bg-primary/10 mb-4">
-              <TrendingUp className="w-12 h-12 text-primary" />
+            <div className="inline-flex p-3 sm:p-4 rounded-3xl bg-primary/10 mb-4">
+              <TrendingUp className="w-10 sm:w-12 h-10 sm:h-12 text-primary" />
             </div>
-            <h2 className="text-3xl font-black tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
               {isForgot ? 'Recover Password' : isLogin ? 'Trader Login' : 'Create Account'}
             </h2>
-            <p className="text-slate-400 font-bold text-sm mt-2 uppercase tracking-widest">
+            <p className="text-slate-400 font-bold text-xs sm:text-sm mt-2 uppercase tracking-widest">
               {isForgot ? 'Get your password back' : isLogin ? 'Sign in to trade' : 'Start trading today'}
             </p>
           </div>
@@ -612,7 +612,7 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
               </button>
             </form>
 
-          <div className="text-center space-y-3">
+          <div className="text-center space-y-2 sm:space-y-3">
             <button
               onClick={() => {
                 if (isForgot) {
@@ -783,7 +783,7 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
               </button>
             </form>
 
-            <div className="text-center space-y-3">
+            <div className="text-center space-y-2 sm:space-y-3">
               <button
                 onClick={() => {
                   if (isForgot) {
@@ -2046,8 +2046,8 @@ const TradeView = memo(({
       {/* Order Confirmation Overlay */}
       {/* Order Confirmation Overlay */}
       {confirmOrder && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="premium-card premium-gradient-line w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="premium-card premium-gradient-line w-full max-w-sm p-4 sm:p-8 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-6">
               <div className={`p-3 rounded-2xl ${tradeAction === 'BUY' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-red-500/20 text-red-500'}`}>
                 <ReceiptText className="w-6 h-6" />
@@ -2058,7 +2058,7 @@ const TradeView = memo(({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-4 sm:mb-8">
               <div className="premium-panel p-4">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Lot Size</p>
                 <p className="text-lg font-bold">{lotSize}</p>
@@ -2231,7 +2231,7 @@ const TradeView = memo(({
           interval={timeframe}
           onIntervalChange={handleIntervalChange}
           liveTick={liveChartTick}
-          height={380}
+          height={Math.max(280, Math.min(400, window.innerHeight * 0.4))}
         />
       </div>
 
@@ -2557,17 +2557,17 @@ const OptionChainView = ({
 
 
 
-      <div className="overflow-x-auto sm:overflow-x-hidden -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6">
-        <table className="w-full text-[10px] border-collapse min-w-[400px] sm:min-w-0">
+      <div className="overflow-x-auto -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6">
+        <table className="w-full text-[9px] sm:text-[10px] border-collapse min-w-full sm:min-w-0">
           <thead>
-            <tr className="bg-slate-100 dark:bg-white/5 text-slate-400 uppercase font-bold">
-              <th className="p-2 text-left border-b border-slate-200 dark:border-white/10">OI Chg</th>
-              <th className="p-2 text-left border-b border-slate-200 dark:border-white/10">OI</th>
-              <th className="p-2 text-left border-b border-slate-200 dark:border-white/10">LTP</th>
-              <th className="p-2 text-center border-b border-slate-200 dark:border-white/10 bg-slate-200/50 dark:bg-white/10">Strike</th>
-              <th className="p-2 text-right border-b border-slate-200 dark:border-white/10">LTP</th>
-              <th className="p-2 text-right border-b border-slate-200 dark:border-white/10">OI</th>
-              <th className="p-2 text-right border-b border-slate-200 dark:border-white/10">OI Chg</th>
+            <tr className="bg-slate-100 dark:bg-white/5 text-slate-400 uppercase font-bold text-[8px] sm:text-[9px]">
+              <th className="p-1 sm:p-2 text-left border-b border-slate-200 dark:border-white/10">OI Chg</th>
+              <th className="p-1 sm:p-2 text-left border-b border-slate-200 dark:border-white/10">OI</th>
+              <th className="p-1 sm:p-2 text-left border-b border-slate-200 dark:border-white/10">LTP</th>
+              <th className="p-1 sm:p-2 text-center border-b border-slate-200 dark:border-white/10 bg-slate-200/50 dark:bg-white/10">Strike</th>
+              <th className="p-1 sm:p-2 text-right border-b border-slate-200 dark:border-white/10">LTP</th>
+              <th className="p-1 sm:p-2 text-right border-b border-slate-200 dark:border-white/10">OI</th>
+              <th className="p-1 sm:p-2 text-right border-b border-slate-200 dark:border-white/10">OI Chg</th>
             </tr>
           </thead>
           <tbody>
@@ -2582,12 +2582,12 @@ const OptionChainView = ({
                 <td className={`p-2 font-bold ${data.ce_oi_change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                   {data.ce_oi_change >= 0 ? '+' : ''}{(data.ce_oi_change / 1000).toFixed(1)}k
                 </td>
-                <td className="p-2 text-slate-500">{(data.ce_oi / 1000).toFixed(1)}k</td>
-                <td className="p-2 font-bold text-emerald-500">{data.ce_ltp.toFixed(2)}</td>
-                <td className="p-2 text-center font-black bg-slate-50 dark:bg-white/5 text-primary">{data.strike}</td>
-                <td className="p-2 text-right font-bold text-red-500">{data.pe_ltp.toFixed(2)}</td>
-                <td className="p-2 text-right text-slate-500">{(data.pe_oi / 1000).toFixed(1)}k</td>
-                <td className={`p-2 text-right font-bold ${data.pe_oi_change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                <td className="p-1 sm:p-2 text-slate-500">{(data.ce_oi / 1000).toFixed(1)}k</td>
+                <td className="p-1 sm:p-2 font-bold text-emerald-500">{data.ce_ltp.toFixed(2)}</td>
+                <td className="p-1 sm:p-2 text-center font-black bg-slate-50 dark:bg-white/5 text-primary">{data.strike}</td>
+                <td className="p-1 sm:p-2 text-right font-bold text-red-500">{data.pe_ltp.toFixed(2)}</td>
+                <td className="p-1 sm:p-2 text-right text-slate-500">{(data.pe_oi / 1000).toFixed(1)}k</td>
+                <td className={`p-1 sm:p-2 text-right font-bold ${data.pe_oi_change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                   {data.pe_oi_change >= 0 ? '+' : ''}{(data.pe_oi_change / 1000).toFixed(1)}k
                 </td>
               </tr>
