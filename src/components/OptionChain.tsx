@@ -340,12 +340,15 @@ OptionChainRowMobile.displayName = 'OptionChainRowMobile';
 
 const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrade, onAddToWatchlist }: Props) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [selectedStrike, setSelectedStrike] = useState<{ strike: number; type: 'CE' | 'PE' } | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(420);
+  const [viewportHeight, setViewportHeight] = useState(0); // Start at 0, will be measured
   const [hasCentered, setHasCentered]       = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [containerReady, setContainerReady] = useState(false);
   const scrollFrameRef = useRef<number | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const spotPrice    = data?.price    ?? 0;
   const optionChain  = data?.optionChain ?? [];
@@ -377,63 +380,88 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     setHasCentered(false);
   }, [atmIndex, sortedStrikes.length]);
 
-  // Center scroll on ATM after data loads
+  // Center scroll on ATM after data loads AND container is ready
   useEffect(() => {
-    if (hasCentered || !scrollRef.current || !sortedStrikes.length) return;
+    if (hasCentered || !scrollRef.current || !sortedStrikes.length || !containerReady || viewportHeight === 0) return;
+    
     const timer = window.setTimeout(() => {
       if (!scrollRef.current) return;
-      const nextTop = Math.max(0, atmIndex * ROW_HEIGHT - scrollRef.current.clientHeight / 2 + ROW_HEIGHT / 2);
-      scrollRef.current.scrollTo({ top: nextTop, behavior: 'smooth' });
-      setScrollTop(nextTop);
+      const rowHeight = isMobile ? ROW_HEIGHT_MOBILE : ROW_HEIGHT;
+      // Calculate scroll position to center ATM row
+      const targetScroll = Math.max(0, atmIndex * rowHeight - viewportHeight / 2 + rowHeight / 2);
+      console.log('[OptionChain] Centering on ATM:', { atmIndex, rowHeight, viewportHeight, targetScroll });
+      scrollRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' });
+      setScrollTop(targetScroll);
       setHasCentered(true);
-    }, 100);
+    }, 50);
+    
     return () => window.clearTimeout(timer);
-  }, [atmIndex, hasCentered, sortedStrikes.length]);
+  }, [atmIndex, hasCentered, sortedStrikes.length, containerReady, viewportHeight, isMobile]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     if (scrollFrameRef.current !== null) return;
+    
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null;
       if (!scrollRef.current) return;
       setScrollTop(scrollRef.current.scrollTop);
-      setViewportHeight(scrollRef.current.clientHeight || 420);
+      // Also update viewport height in case of resize during scroll
+      const newHeight = scrollRef.current.clientHeight;
+      if (newHeight > 0) {
+        setViewportHeight(newHeight);
+      }
     });
   }, []);
 
+  // Measure and track container height with ResizeObserver
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    
-    // Ensure we measure the scrollable container's actual height
-    const measureHeight = () => {
-      const height = el.scrollHeight > 0 ? el.clientHeight : 420;
+
+    // Cleanup old observer if exists
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+    }
+
+    // Initial measurement - force layout if needed
+    const measure = () => {
+      const height = el.clientHeight;
+      console.log('[OptionChain] Container measured - height:', height, 'scrollHeight:', el.scrollHeight);
       if (height > 0) {
         setViewportHeight(height);
-        console.log('[OptionChain] Measured viewport height:', height);
-        return height;
+        setContainerReady(true);
+        return true;
       }
-      return 420;
+      return false;
     };
-    
-    // Initial measurement
-    const initialHeight = measureHeight();
-    
-    // Use ResizeObserver to track real-time height changes
-    const observer = new ResizeObserver(() => {
-      const newHeight = el.clientHeight;
-      if (newHeight > 0) {
-        setViewportHeight(newHeight);
-        console.log('[OptionChain] ResizeObserver: viewport height changed:', newHeight);
+
+    // Try immediate measurement
+    if (!measure()) {
+      // If not ready, try again after a microtask
+      Promise.resolve().then(() => {
+        measure();
+        // One more try after layout
+        requestAnimationFrame(() => measure());
+      });
+    }
+
+    // Set up ResizeObserver for future changes
+    resizeObserverRef.current = new ResizeObserver(() => {
+      const height = el.clientHeight;
+      if (height > 0) {
+        console.log('[OptionChain] ResizeObserver fired - new height:', height);
+        setViewportHeight(height);
+        setContainerReady(true);
       }
     });
-    observer.observe(el);
-    
+    resizeObserverRef.current.observe(el);
+
     return () => {
-      observer.disconnect();
-      if (scrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(scrollFrameRef.current);
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
       }
     };
   }, []);
@@ -447,11 +475,15 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
   }, []);
 
   const virtualRange = useMemo(() => {
-    if (!sortedStrikes.length) return { start: 0, end: -1, top: 0, bottom: 0 };
+    if (!sortedStrikes.length || viewportHeight === 0) {
+      return { start: 0, end: -1, top: 0, bottom: 0 };
+    }
+    
     const rowHeight = isMobile ? ROW_HEIGHT_MOBILE : ROW_HEIGHT;
     const start = Math.max(0, Math.floor(scrollTop / rowHeight) - VIRTUAL_OVERSCAN);
     const visibleCount = Math.ceil(viewportHeight / rowHeight) + VIRTUAL_OVERSCAN * 2;
     const end = Math.min(sortedStrikes.length - 1, start + visibleCount - 1);
+    
     const range = {
       start,
       end,
@@ -459,20 +491,22 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       bottom: Math.max(0, (sortedStrikes.length - end - 1) * rowHeight),
     };
     
-    // Debug logging
-    if (sortedStrikes.length > 0 && (scrollTop === 0 || range.start === 0)) {
-      console.log('[OptionChain] virtualRange calc:', {
-        scrollTop,
-        viewportHeight,
-        rowHeight,
-        totalRows: sortedStrikes.length,
-        visibleCount,
-        start: range.start,
-        end: range.end,
-        top: range.top,
-        bottom: range.bottom,
-        shouldShowRows: range.start <= range.end,
-      });
+    // Only log on significant changes
+    if (process.env.NODE_ENV === 'development' && sortedStrikes.length > 0) {
+      const isInitial = scrollTop === 0 && start === 0;
+      const hasVisibleRows = range.start <= range.end;
+      if (isInitial || !hasVisibleRows) {
+        console.log('[OptionChain] virtualRange:', {
+          scrollTop,
+          viewportHeight,
+          rowHeight,
+          totalRows: sortedStrikes.length,
+          start: range.start,
+          end: range.end,
+          visibleRowsCount: range.start <= range.end ? range.end - range.start + 1 : 0,
+          hasVisibleRows,
+        });
+      }
     }
     
     return range;
@@ -556,7 +590,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
   }
 
   return (
-    <div className="premium-card premium-gradient-line flex h-full flex-col overflow-hidden">
+    <div ref={containerRef} className="premium-card premium-gradient-line flex h-full flex-col overflow-hidden">
       {/* Header bar */}
       <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200/80 bg-slate-50/80 px-3 sm:px-4 md:px-6 py-3 dark:border-white/10 dark:bg-white/[0.045]">
         <div className="flex items-center gap-2 sm:gap-3">
