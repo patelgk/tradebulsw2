@@ -404,9 +404,37 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) setViewportHeight(el.clientHeight || 420);
+    if (!el) return;
+    
+    // Ensure we measure the scrollable container's actual height
+    const measureHeight = () => {
+      const height = el.scrollHeight > 0 ? el.clientHeight : 420;
+      if (height > 0) {
+        setViewportHeight(height);
+        console.log('[OptionChain] Measured viewport height:', height);
+        return height;
+      }
+      return 420;
+    };
+    
+    // Initial measurement
+    const initialHeight = measureHeight();
+    
+    // Use ResizeObserver to track real-time height changes
+    const observer = new ResizeObserver(() => {
+      const newHeight = el.clientHeight;
+      if (newHeight > 0) {
+        setViewportHeight(newHeight);
+        console.log('[OptionChain] ResizeObserver: viewport height changed:', newHeight);
+      }
+    });
+    observer.observe(el);
+    
     return () => {
-      if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+      observer.disconnect();
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
     };
   }, []);
 
@@ -424,12 +452,30 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     const start = Math.max(0, Math.floor(scrollTop / rowHeight) - VIRTUAL_OVERSCAN);
     const visibleCount = Math.ceil(viewportHeight / rowHeight) + VIRTUAL_OVERSCAN * 2;
     const end = Math.min(sortedStrikes.length - 1, start + visibleCount - 1);
-    return {
+    const range = {
       start,
       end,
       top: start * rowHeight,
       bottom: Math.max(0, (sortedStrikes.length - end - 1) * rowHeight),
     };
+    
+    // Debug logging
+    if (sortedStrikes.length > 0 && (scrollTop === 0 || range.start === 0)) {
+      console.log('[OptionChain] virtualRange calc:', {
+        scrollTop,
+        viewportHeight,
+        rowHeight,
+        totalRows: sortedStrikes.length,
+        visibleCount,
+        start: range.start,
+        end: range.end,
+        top: range.top,
+        bottom: range.bottom,
+        shouldShowRows: range.start <= range.end,
+      });
+    }
+    
+    return range;
   }, [scrollTop, sortedStrikes.length, viewportHeight, isMobile]);
 
   const visibleStrikes = useMemo(
