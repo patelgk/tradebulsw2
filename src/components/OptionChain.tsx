@@ -459,24 +459,42 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       const boundingHeight = boundingRect.height;
       const scrollHeight = el.scrollHeight;
       const overflowY = window.getComputedStyle(el).overflowY;
+      const containerParentHeight = el.parentElement?.clientHeight || 0;
+      const containerParentOffsetHeight = el.parentElement?.offsetHeight || 0;
       
       const height = clientHeight > 0 ? clientHeight : boundingHeight;
       
-      console.log('[OptionChain] VIEWPORT MEASUREMENT DEBUG', {
+      console.log('[OptionChain] SCROLL CONTAINER DEBUG', {
+        element: el.className,
+        parent: el.parentElement?.className || 'none',
+        grandparent: el.parentElement?.parentElement?.className || 'none',
+      });
+      
+      console.log('[OptionChain] VIEWPORT DEBUG', {
         clientHeight,
         offsetHeight,
         'getBoundingClientRect.height': boundingHeight,
         scrollHeight,
         overflowY,
-        viewportHeight: height,
+        containerParentHeight,
+        containerParentOffsetHeight,
+        calculatedHeight: height,
       });
       
       // Use clientHeight as primary measure (visible area only)
-      if (height > 0 && height < 10000) {  // Guard against unrealistic values
+      // If height < 100px while parent is larger, measurement might be invalid (collapsed)
+      if (height > 0 && height >= 100 && height < 10000) {
         console.log('[OptionChain] Container measured - VALID height:', height);
         setViewportHeight(height);
         setContainerReady(true);
         return true;
+      } else if (height > 0 && height < 100) {
+        console.warn('[OptionChain] Container measured - SUSPICIOUS low height:', height, 'parent:', containerParentHeight);
+        // Container might be collapsed, retry
+        return false;
+      } else if (height === 0) {
+        console.log('[OptionChain] Container height is 0 - not ready yet');
+        return false;
       }
       
       console.log('[OptionChain] Container measurement FAILED - invalid height:', height);
@@ -497,10 +515,12 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     resizeObserverRef.current = new ResizeObserver(() => {
       if (!el) return;
       const height = el.clientHeight;
-      if (height > 0 && height < 10000) {
+      if (height > 0 && height >= 100 && height < 10000) {
         console.log('[OptionChain] ResizeObserver fired - new height:', height);
         setViewportHeight(height);
         setContainerReady(true);
+      } else if (height > 0 && height < 100) {
+        console.warn('[OptionChain] ResizeObserver - suspicious low height:', height);
       }
     });
     resizeObserverRef.current.observe(el);
@@ -539,29 +559,25 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       bottom: Math.max(0, (sortedStrikes.length - end - 1) * rowHeight),
     };
     
-    // DIAGNOSTIC: Always log virtualRange calculation
-    console.log('[DEBUG] virtualRange calc - viewportHeight:', viewportHeight, 'scrollTop:', scrollTop, 'start:', range.start, 'end:', range.end, 'visibleCount:', range.end - range.start + 1);
-    
-    // Only log on significant changes
-    if (process.env.NODE_ENV === 'development' && sortedStrikes.length > 0) {
-      const isInitial = scrollTop === 0 && start === 0;
-      const hasVisibleRows = range.start <= range.end;
-      if (isInitial || !hasVisibleRows) {
-        console.log('[OptionChain] virtualRange:', {
-          scrollTop,
-          viewportHeight,
-          rowHeight,
-          totalRows: sortedStrikes.length,
-          start: range.start,
-          end: range.end,
-          visibleRowsCount: range.start <= range.end ? range.end - range.start + 1 : 0,
-          hasVisibleRows,
-        });
-      }
-    }
+    // COMPREHENSIVE DEBUG LOG
+    console.log('[OptionChain] VIEWPORT DEBUG', {
+      viewportHeight,
+      scrollTop,
+      clientHeight: scrollRef.current?.clientHeight || 'N/A',
+      scrollHeight: scrollRef.current?.scrollHeight || 'N/A',
+      rowHeight,
+      totalRows: sortedStrikes.length,
+      startIndex: range.start,
+      endIndex: range.end,
+      visibleRowsCount: range.end - range.start + 1,
+      virtualRangeTop: range.top,
+      virtualRangeBottom: range.bottom,
+      containerReady,
+      isMobile,
+    });
     
     return range;
-  }, [scrollTop, sortedStrikes.length, viewportHeight, isMobile]);
+  }, [scrollTop, sortedStrikes.length, viewportHeight, isMobile, containerReady]);
 
   const visibleStrikes = useMemo(
     () => {
@@ -696,11 +712,11 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       </div>
 
       {/* Scrollable body — independent scroll */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="h-full min-h-0 overflow-y-auto overscroll-contain"
+          className="h-full min-h-0 overflow-y-auto overscroll-contain flex-1"
         >
           {sortedStrikes.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-slate-400 text-xs">
