@@ -126,6 +126,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const candlesRef = useRef<StoredCandle[]>([]);
   const historyCacheRef = useRef(new Map<string, StoredCandle[]>());
+  const cacheTimestampRef = useRef(new Map<string, number>());
   const pendingTicksRef = useRef<ChartTick[]>([]);
   const loadSeqRef = useRef(0);
   const activeCacheKeyRef = useRef('');
@@ -133,6 +134,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
   const liveTickFrameRef = useRef<number | null>(null);
   const pendingLiveTickRef = useRef<ChartTick | null>(null);
   const lastChartDiagnosticRef = useRef(0);
+  const historyAbortRef = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('Waiting for live data...');
 
@@ -380,6 +382,13 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
     };
 
     const loadHistory = async () => {
+      // Abort any pending history request for the old chart
+      if (historyAbortRef.current) {
+        historyAbortRef.current.abort();
+      }
+      historyAbortRef.current = new AbortController();
+      const signal = historyAbortRef.current.signal;
+
       try {
         if (selection.kind === 'option' && !selection.securityId) {
           candlesRef.current = [];
@@ -391,15 +400,31 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
         }
 
         const memoryHistory = historyCacheRef.current.get(cacheKey);
+        const memoryTimestamp = cacheTimestampRef.current.get(cacheKey) || 0;
+        const now = Date.now();
+        const cacheAge = now - memoryTimestamp;
+        const CACHE_FRESHNESS = 15 * 60 * 1000; // 15 minutes
+
+        // If memory cache is fresh, use it without calling API
+        if (memoryHistory && memoryHistory.length > 0 && cacheAge < CACHE_FRESHNESS) {
+          applySnapshot(memoryHistory);
+          setMessage('Waiting for live data...');
+          flushBufferedTicks();
+          setLoading(false);
+          return;
+        }
+
+        // Otherwise, try local cache first
         if (memoryHistory && memoryHistory.length > 0) {
           applySnapshot(memoryHistory);
           setMessage('Loading backend history...');
         } else {
           const localHistory = await db.chartHistory.get(cacheKey);
-          if (requestId !== loadSeqRef.current) return;
+          if (signal.aborted || requestId !== loadSeqRef.current) return;
           if (localHistory?.candles?.length) {
             const normalized = localHistory.candles.map((row) => toStoredCandle(row as ChartCandle));
             historyCacheRef.current.set(cacheKey, normalized);
+            cacheTimestampRef.current.set(cacheKey, now);
             applySnapshot(normalized);
             setMessage('Loading backend history...');
           }
@@ -423,7 +448,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
               }
         );
 
-        if (requestId !== loadSeqRef.current) return;
+        if (signal.aborted || requestId !== loadSeqRef.current) return;
 
         const rows = Array.isArray(history) ? history : [];
         const candleData = rows
@@ -433,6 +458,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
 
         if (candleData.length > 0) {
           historyCacheRef.current.set(cacheKey, candleData);
+          cacheTimestampRef.current.set(cacheKey, now);
           applySnapshot(candleData);
           await db.chartHistory.bulkPut([{
             cacheKey,
@@ -443,7 +469,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
             timeframe: interval,
             date: dateKey,
             candles: candleData,
-            lastUpdated: Date.now(),
+            lastUpdated: now,
           }]);
           setMessage('Waiting for live data...');
         } else if (!historyCacheRef.current.get(cacheKey)?.length) {
@@ -455,8 +481,8 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
 
         flushBufferedTicks();
         setLoading(false);
-      } catch {
-        if (requestId !== loadSeqRef.current) return;
+      } catch (err) {
+        if (signal.aborted || requestId !== loadSeqRef.current) return;
         const cached = historyCacheRef.current.get(cacheKey);
         if (cached && cached.length > 0) {
           applySnapshot(cached);
@@ -473,7 +499,7 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
       pendingTicksRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interval, selection.chartKey, selection.exchangeSegment, selection.instrument, selection.kind, selection.securityId, selection.symbol, theme.volumeDown, theme.volumeUp]);
+  }, [interval, selection.chartKey, selection.exchangeSegment, selection.instrument, selection.kind, selection.securityId, selection.symbol]);
 
   useEffect(() => {
     if (!liveTick) return;
@@ -576,6 +602,9 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
       }
       if (liveTickFrameRef.current !== null) {
         window.cancelAnimationFrame(liveTickFrameRef.current);
+      }
+      if (historyAbortRef.current) {
+        historyAbortRef.current.abort();
       }
     };
   }, []);

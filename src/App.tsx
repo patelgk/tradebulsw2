@@ -3774,41 +3774,45 @@ const WithdrawalModal = ({ isOpen, onClose, userProfile, user, showToast, setUse
   );
 };
 
-const ProfileView = ({ userProfile, user, showToast, setUserProfile }: { userProfile: any, user: any, showToast: (msg: string, type?: 'success' | 'error') => void, setUserProfile: (profile: any) => void }) => {
+const ProfileView = ({ userProfile, user, showToast, setUserProfile, allTrades }: { userProfile: any, user: any, showToast: (msg: string, type?: 'success' | 'error') => void, setUserProfile: (profile: any) => void, allTrades?: Trade[] }) => {
   const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);
   const [challengePurchases, setChallengePurchases] = useState<any[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
 
+  // Use allTrades from props if available, otherwise fetch once
   useEffect(() => {
-    if (!user?.uid) return;
-    let consecutiveErrors = 0;
-    const fetchTrades = async () => {
+    if (allTrades && Array.isArray(allTrades) && allTrades.length > 0) {
+      const closed = allTrades.filter(t => t.status === 'Closed').slice(0, 10);
+      setTradeHistory(closed);
+      setLoading(false);
+      return;
+    }
+
+    if (!user?.uid) {
+      setLoading(false);
+      return;
+    }
+
+    // Fetch challenge purchases and payment history only (trades already handled by App polling)
+    const fetchChallengeAndPaymentData = async () => {
       try {
-        const [trades, challengePurchaseData, transactions] = await Promise.all([
-          api.getTrades(user.uid),
+        const [challengePurchaseData, transactions] = await Promise.all([
           api.getChallengePurchases(),
           api.getTransactions(user.uid)
         ]);
-        const closed = trades.filter(t => t.status === 'Closed').slice(0, 10);
-        setTradeHistory(closed);
-        setChallengePurchases(challengePurchaseData.filter((purchase: any) => purchase.userId === user.uid));
-        setPaymentHistory(transactions.filter((tx: any) => tx.userId === user.uid));
-        consecutiveErrors = 0;
+        setChallengePurchases(challengePurchaseData && Array.isArray(challengePurchaseData) ? challengePurchaseData.filter((purchase: any) => purchase.userId === user.uid) : []);
+        setPaymentHistory(transactions && Array.isArray(transactions) ? transactions.filter((tx: any) => tx.userId === user.uid) : []);
+        setLoading(false);
       } catch (error) {
-        consecutiveErrors++;
-        if (consecutiveErrors % 10 === 1) {
-          console.warn("Retrying trade history fetch (server may be starting)...");
-        }
-      } finally {
+        console.warn("Failed to fetch challenge and payment data");
         setLoading(false);
       }
     };
-    fetchTrades();
-    const interval = setInterval(fetchTrades, 10000);
-    return () => clearInterval(interval);
-  }, [user?.uid]);
+
+    fetchChallengeAndPaymentData();
+  }, [user?.uid, allTrades]);
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-28 lg:pb-4 lg:max-w-none">
@@ -4938,14 +4942,26 @@ function App() {
       const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
 
       try {
-        const response = await fetch('/api/market/quotes', { signal: controller.signal });
+        const response = await fetch('/api/market/quotes?minimal=true', { signal: controller.signal });
         clearTimeout(timeoutId);
         
         if (response.ok) {
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const data = await response.json();
-            setMarketData(prev => ({ ...prev, ...data }));
+            setMarketData(prev => {
+              const next = { ...prev };
+              for (const [symbol, info] of Object.entries(data)) {
+                const patch = info as any;
+                const current = prev[symbol] || {};
+                next[symbol] = {
+                  ...current,
+                  ...patch,
+                  optionChain: patch.optionChain?.length ? patch.optionChain : (current.optionChain || []),
+                };
+              }
+              return next;
+            });
             setConnectionStatus('polling');
             consecutiveErrors = 0;
             if (data[selectedSymbolRef.current]) {
@@ -5036,7 +5052,12 @@ function App() {
       return;
     }
     let consecutiveErrors = 0;
+    let isPolling = true;
+    
     const fetchTrades = async () => {
+      if (!isPolling || document.visibilityState === 'hidden') {
+        return;
+      }
       try {
         const trades = await api.getTrades(user.uid);
         setAllTrades(trades);
@@ -5058,9 +5079,27 @@ function App() {
         }
       }
     };
+    
     fetchTrades();
-    const interval = setInterval(fetchTrades, 5000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchTrades, 20000); // Changed from 5000ms to 20000ms
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Resume polling when tab becomes visible
+        isPolling = true;
+        fetchTrades();
+      } else {
+        // Pause polling when tab is hidden
+        isPolling = false;
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [user]);
 
   useEffect(() => {
@@ -5686,7 +5725,7 @@ function App() {
               )}
               {activeTab === 'challenges' && <ChallengesView onSelectPlan={handleBuyChallenge} plans={plans} rules={rules} />}
               {activeTab === 'portfolio' && <PortfolioView portfolio={portfolio} onClosePosition={handleClosePosition} userId={user.uid} allTrades={allTrades} />}
-              {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} />}
+              {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} allTrades={allTrades} />}
                   {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} setPlans={setPlans} />}
                   {activeTab === 'partner' && <PartnerDashboard user={user} />}
             </motion.div>
@@ -5949,7 +5988,7 @@ function App() {
               )}
               {activeTab === 'challenges' && <ChallengesView onSelectPlan={handleBuyChallenge} plans={plans} rules={rules} />}
               {activeTab === 'portfolio' && <PortfolioView portfolio={portfolio} onClosePosition={handleClosePosition} userId={user.uid} allTrades={allTrades} />}
-              {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} />}
+              {activeTab === 'profile' && <ProfileView userProfile={userProfile} user={user} showToast={showToast} setUserProfile={setUserProfile} allTrades={allTrades} />}
               {activeTab === 'admin' && <AdminView showToast={showToast} currentUser={user} setPlans={setPlans} />}
               {activeTab === 'partner' && <PartnerDashboard user={user} />}
             </motion.div>

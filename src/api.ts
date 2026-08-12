@@ -195,6 +195,10 @@ export const api = {
   async getMarketQuotes(minimal = false) {
     return safeFetch(`${API_BASE}/market/quotes${minimal ? '?minimal=true' : ''}`);
   },
+  // Used for fallback when Socket.IO is disconnected
+  async getMarketQuotesMinimal() {
+    return safeFetch(`${API_BASE}/market/quotes?minimal=true`);
+  },
   async updateExpiry(symbol: string, expiry: string) {
     return safeFetch(`${API_BASE}/market/expiry`, {
       method: 'POST',

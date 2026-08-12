@@ -363,6 +363,11 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     [optionChain]
   );
 
+  // DIAGNOSTIC: Log sortedStrikes length
+  useEffect(() => {
+    console.log('[DEBUG] sortedStrikes.length:', sortedStrikes.length);
+  }, [sortedStrikes.length]);
+
   // Find ATM index
   const atmIndex = useMemo(() => {
     if (!sortedStrikes.length || !spotPrice) return Math.floor(sortedStrikes.length / 2);
@@ -372,13 +377,16 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       const d = Math.abs(row.strike - spotPrice);
       if (d < minDiff) { minDiff = d; closest = i; }
     });
+    console.log('[OptionChain] ATM index found:', { atmIndex: closest, spotPrice, totalRows: sortedStrikes.length });
     return closest;
   }, [sortedStrikes, spotPrice]);
 
+  // Reset centering flag when option chain data or symbol changes
   useEffect(() => {
     if (!sortedStrikes.length) return;
     setHasCentered(false);
-  }, [atmIndex, sortedStrikes.length]);
+    console.log('[OptionChain] Reset centering flag - new data detected');
+  }, [sortedStrikes, symbol]);
 
   // Center scroll on ATM after data loads AND container is ready
   useEffect(() => {
@@ -387,16 +395,32 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     const timer = window.setTimeout(() => {
       if (!scrollRef.current) return;
       const rowHeight = isMobile ? ROW_HEIGHT_MOBILE : ROW_HEIGHT;
-      // Calculate scroll position to center ATM row
+      const atmStrike = atmIndex < sortedStrikes.length ? sortedStrikes[atmIndex].strike : null;
+      
+      // Calculate scroll position to center ATM row in viewport
+      // targetScroll = position of ATM row - half viewport height + half row height (to center)
       const targetScroll = Math.max(0, atmIndex * rowHeight - viewportHeight / 2 + rowHeight / 2);
-      console.log('[OptionChain] Centering on ATM:', { atmIndex, rowHeight, viewportHeight, targetScroll });
-      scrollRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' });
-      setScrollTop(targetScroll);
+      const maxScroll = Math.max(0, sortedStrikes.length * rowHeight - viewportHeight);
+      const finalScroll = Math.min(targetScroll, maxScroll);
+      
+      console.log('[OptionChain] ATM CENTER DEBUG', {
+        atmIndex,
+        atmStrike,
+        rowHeight,
+        viewportHeight,
+        targetScroll,
+        maxScroll,
+        finalScroll,
+        totalRows: sortedStrikes.length,
+      });
+      
+      scrollRef.current.scrollTo({ top: finalScroll, behavior: 'smooth' });
+      setScrollTop(finalScroll);
       setHasCentered(true);
     }, 50);
     
     return () => window.clearTimeout(timer);
-  }, [atmIndex, hasCentered, sortedStrikes.length, containerReady, viewportHeight, isMobile]);
+  }, [atmIndex, hasCentered, sortedStrikes.length, containerReady, viewportHeight, isMobile, sortedStrikes]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -427,13 +451,35 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
 
     // Initial measurement - force layout if needed
     const measure = () => {
-      const height = el.clientHeight;
-      console.log('[OptionChain] Container measured - height:', height, 'scrollHeight:', el.scrollHeight);
-      if (height > 0) {
+      if (!el) return false;
+      
+      const clientHeight = el.clientHeight;
+      const offsetHeight = el.offsetHeight;
+      const boundingRect = el.getBoundingClientRect();
+      const boundingHeight = boundingRect.height;
+      const scrollHeight = el.scrollHeight;
+      const overflowY = window.getComputedStyle(el).overflowY;
+      
+      const height = clientHeight > 0 ? clientHeight : boundingHeight;
+      
+      console.log('[OptionChain] VIEWPORT MEASUREMENT DEBUG', {
+        clientHeight,
+        offsetHeight,
+        'getBoundingClientRect.height': boundingHeight,
+        scrollHeight,
+        overflowY,
+        viewportHeight: height,
+      });
+      
+      // Use clientHeight as primary measure (visible area only)
+      if (height > 0 && height < 10000) {  // Guard against unrealistic values
+        console.log('[OptionChain] Container measured - VALID height:', height);
         setViewportHeight(height);
         setContainerReady(true);
         return true;
       }
+      
+      console.log('[OptionChain] Container measurement FAILED - invalid height:', height);
       return false;
     };
 
@@ -449,8 +495,9 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
 
     // Set up ResizeObserver for future changes
     resizeObserverRef.current = new ResizeObserver(() => {
+      if (!el) return;
       const height = el.clientHeight;
-      if (height > 0) {
+      if (height > 0 && height < 10000) {
         console.log('[OptionChain] ResizeObserver fired - new height:', height);
         setViewportHeight(height);
         setContainerReady(true);
@@ -476,6 +523,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
 
   const virtualRange = useMemo(() => {
     if (!sortedStrikes.length || viewportHeight === 0) {
+      console.log('[DEBUG] virtualRange guard - sortedStrikes:', sortedStrikes.length, 'viewportHeight:', viewportHeight);
       return { start: 0, end: -1, top: 0, bottom: 0 };
     }
     
@@ -490,6 +538,9 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       top: start * rowHeight,
       bottom: Math.max(0, (sortedStrikes.length - end - 1) * rowHeight),
     };
+    
+    // DIAGNOSTIC: Always log virtualRange calculation
+    console.log('[DEBUG] virtualRange calc - viewportHeight:', viewportHeight, 'scrollTop:', scrollTop, 'start:', range.start, 'end:', range.end, 'visibleCount:', range.end - range.start + 1);
     
     // Only log on significant changes
     if (process.env.NODE_ENV === 'development' && sortedStrikes.length > 0) {
@@ -513,7 +564,11 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
   }, [scrollTop, sortedStrikes.length, viewportHeight, isMobile]);
 
   const visibleStrikes = useMemo(
-    () => sortedStrikes.slice(virtualRange.start, virtualRange.end + 1),
+    () => {
+      const visible = sortedStrikes.slice(virtualRange.start, virtualRange.end + 1);
+      console.log('[DEBUG] visibleStrikes - total:', visible.length, 'from range:', virtualRange.start, 'to', virtualRange.end);
+      return visible;
+    },
     [sortedStrikes, virtualRange.end, virtualRange.start]
   );
 
@@ -641,33 +696,38 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       </div>
 
       {/* Scrollable body — independent scroll */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
-      >
-        {sortedStrikes.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-slate-400 text-xs">
-            {data?.dataSource === 'Stale'
-              ? 'Waiting for market data...'
-              : 'Option chain loading...'}
-          </div>
-        ) : (
-          <table className="w-full">
-            <tbody>
-              {virtualRange.start > 0 && (
-                <tr>
-                  <td colSpan={7} className="text-center py-1 text-[10px] text-slate-400">
-                    ↑ {virtualRange.start} more strikes above
-                  </td>
-                </tr>
-              )}
-              {virtualRange.top > 0 && (
-                <tr aria-hidden="true">
-                  <td colSpan={7} style={{ height: virtualRange.top, padding: 0 }} />
-                </tr>
-              )}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="h-full min-h-0 overflow-y-auto overscroll-contain"
+        >
+          {sortedStrikes.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-slate-400 text-xs">
+              {data?.dataSource === 'Stale'
+                ? 'Waiting for market data...'
+                : 'Option chain loading...'}
+            </div>
+          ) : (
+            <table className="w-full">
+              <tbody>
+                {virtualRange.start > 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-1 text-[10px] text-slate-400">
+                      ↑ {virtualRange.start} more strikes above
+                    </td>
+                  </tr>
+                )}
+                {virtualRange.top > 0 && (
+                  <tr aria-hidden="true">
+                    <td colSpan={7} style={{ height: virtualRange.top, padding: 0 }} />
+                  </tr>
+                )}
               {visibleStrikes.map((row, i) => {
+                // DIAGNOSTIC: Log on first render of rows
+                if (i === 0) {
+                  console.log('[DEBUG] Row rendering condition entered - rendering', visibleStrikes.length, 'rows from index', virtualRange.start);
+                }
                 const globalIndex = virtualRange.start + i;
                 const isATM = globalIndex === atmIndex;
                 const isSelected = selectedStrike?.strike === row.strike;
@@ -716,6 +776,7 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
           </table>
         )}
       </div>
+    </div>
 
       {/* Footer: total OI */}
       <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200/80 bg-slate-50/80 px-3 sm:px-4 md:px-6 py-2 text-[9px] text-slate-400 dark:border-white/10 dark:bg-white/[0.045]">
