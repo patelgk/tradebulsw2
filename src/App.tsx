@@ -4604,6 +4604,7 @@ function App() {
         const row = updatedChain[existingIndex];
         
         if (payload.optionType === 'CE') {
+          const oldLtp = row.ce_ltp;
           updatedChain[existingIndex] = {
             ...row,
             ce_ltp: payload.price !== undefined ? payload.price : row.ce_ltp,
@@ -4615,7 +4616,9 @@ function App() {
             ce_change: payload.change !== undefined ? payload.change : row.ce_change,
             ce_change_pct: payload.changePct !== undefined ? payload.changePct : row.ce_change_pct,
           };
+          console.log(`[mergeOptionRow] CE UPDATE: strike=${payload.strike} securityId=${payload.securityId} ltp: ${oldLtp} → ${updatedChain[existingIndex].ce_ltp}`);
         } else if (payload.optionType === 'PE') {
+          const oldLtp = row.pe_ltp;
           updatedChain[existingIndex] = {
             ...row,
             pe_ltp: payload.price !== undefined ? payload.price : row.pe_ltp,
@@ -4627,6 +4630,7 @@ function App() {
             pe_change: payload.change !== undefined ? payload.change : row.pe_change,
             pe_change_pct: payload.changePct !== undefined ? payload.changePct : row.pe_change_pct,
           };
+          console.log(`[mergeOptionRow] PE UPDATE: strike=${payload.strike} securityId=${payload.securityId} ltp: ${oldLtp} → ${updatedChain[existingIndex].pe_ltp}`);
         }
         if (IS_DEV) {
           console.log(`[mergeOptionRow] strike=${payload.strike} type=${payload.optionType} UPDATED row at index=${existingIndex}`);
@@ -4747,7 +4751,10 @@ function App() {
       );
       
       console.log(`[📈 OPTION TICK] symbol=${symbolKey} strike=${tick.strike} type=${tick.optionType} price=${tick.price} securityId=${tick.securityId}`);
-      console.log(`[📈 CHAIN CHECK] symbol=${symbolKey} chain_length=${existingChain.length} row_found=${!!existingRow}`);
+      console.log(`[📈 CHAIN CHECK] symbol=${symbolKey} chain_length=${existingChain.length} row_found=${!!existingRow} price=${tick.price} latency=${tick.latencyMs}ms`);
+      if (existingRow) {
+        console.log(`[📈 ROW MATCH] Found existing row - old_${tick.optionType}_ltp=${tick.optionType === 'CE' ? existingRow.ce_ltp : existingRow.pe_ltp} new_price=${tick.price}`);
+      }
       
       if (IS_DEV) {
         console.log('[Market] option tick received', {
@@ -4782,7 +4789,7 @@ function App() {
       });
       const chainAfter = nextChain.length;
       
-      console.log(`[📈 MERGE RESULT] symbol=${symbolKey} strike=${tick.strike} chain: ${chainBefore} → ${chainAfter}`);
+      console.log(`[📈 MERGE RESULT] symbol=${symbolKey} strike=${tick.strike} type=${tick.optionType} price=${tick.price} chain: ${chainBefore} → ${chainAfter} rows`);
       
       updateMarketSymbol(symbolKey, {
         timestamp: tick.timestamp,

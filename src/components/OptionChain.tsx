@@ -450,6 +450,9 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       
       // Use ONLY clientHeight - this is the visible viewport of the scroll container
       const height = el.clientHeight;
+      const scrollHeight = el.scrollHeight;
+      
+      console.log('[OptionChain] VIEWPORT measurement:', { height, scrollHeight });
       
       if (height > 0 && height < 20000) {  // Guard against unrealistic values
         console.log('[OptionChain] VIEWPORT Height measured:', height);
@@ -511,6 +514,19 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       top: start * rowHeight,
       bottom: Math.max(0, (sortedStrikes.length - end - 1) * rowHeight),
     };
+    
+    console.log('[OptionChain] VIRTUAL RANGE:', {
+      scrollTop,
+      viewportHeight,
+      rowHeight,
+      visibleCount,
+      start,
+      end,
+      totalRows: sortedStrikes.length,
+      renderedCount: end - start + 1,
+      topSpacer: range.top,
+      bottomSpacer: range.bottom,
+    });
     
     return range;
   }, [scrollTop, sortedStrikes.length, viewportHeight, isMobile]);
@@ -661,13 +677,6 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
           ) : (
             <table className="w-full">
               <tbody>
-                {virtualRange.start > 0 && (
-                  <tr>
-                    <td colSpan={7} className="text-center py-1 text-[10px] text-slate-400">
-                      ↑ {virtualRange.start} more strikes above
-                    </td>
-                  </tr>
-                )}
                 {virtualRange.top > 0 && (
                   <tr aria-hidden="true">
                     <td colSpan={7} style={{ height: virtualRange.top, padding: 0 }} />
@@ -713,13 +722,6 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
               {virtualRange.bottom > 0 && (
                 <tr aria-hidden="true">
                   <td colSpan={7} style={{ height: virtualRange.bottom, padding: 0 }} />
-                </tr>
-              )}
-              {virtualRange.end < sortedStrikes.length - 1 && (
-                <tr>
-                  <td colSpan={7} className="text-center py-1 text-[10px] text-slate-400">
-                    ↓ {sortedStrikes.length - 1 - virtualRange.end} more strikes below
-                  </td>
                 </tr>
               )}
             </tbody>
