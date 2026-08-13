@@ -772,7 +772,13 @@ export class MarketFeedManager {
           updatedOption.pe_change = optionChange;
           updatedOption.pe_change_pct = optionChangePct;
         }
+        this._logTick(`[MarketFeed] LTP tick token=${securityId} symbol=${symbol} strike=${optionMeta.strike} type=${optionMeta.optionType} price=${optionPrice}`);
+      } else {
+        this._logTick(`[MarketFeed] LTP tick - NO ROW FOUND token=${securityId} symbol=${symbol} strike=${optionMeta.strike} type=${optionMeta.optionType} price=${optionPrice}`);
       }
+    } else {
+      this._logTick(`[MarketFeed] LTP tick - NO OPTIONMETA token=${securityId} symbol=${symbol} price=${update.ltp}`);
+    }
 
       // EMIT IMMEDIATELY - Do not await
 const room = `symbol:${symbol}`;

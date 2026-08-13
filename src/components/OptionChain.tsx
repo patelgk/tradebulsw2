@@ -363,11 +363,6 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
     [optionChain]
   );
 
-  // DIAGNOSTIC: Log sortedStrikes length
-  useEffect(() => {
-    console.log('[DEBUG] sortedStrikes.length:', sortedStrikes.length);
-  }, [sortedStrikes.length]);
-
   // Find ATM index
   const atmIndex = useMemo(() => {
     if (!sortedStrikes.length || !spotPrice) return Math.floor(sortedStrikes.length / 2);
@@ -449,79 +444,38 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       resizeObserverRef.current.disconnect();
     }
 
-    // Initial measurement - force layout if needed
+    // Simple, direct measurement of the actual scroll container
     const measure = () => {
       if (!el) return false;
       
-      const clientHeight = el.clientHeight;
-      const offsetHeight = el.offsetHeight;
-      const boundingRect = el.getBoundingClientRect();
-      const boundingHeight = boundingRect.height;
-      const scrollHeight = el.scrollHeight;
-      const overflowY = window.getComputedStyle(el).overflowY;
-      const containerParentHeight = el.parentElement?.clientHeight || 0;
-      const containerParentOffsetHeight = el.parentElement?.offsetHeight || 0;
+      // Use ONLY clientHeight - this is the visible viewport of the scroll container
+      const height = el.clientHeight;
       
-      const height = clientHeight > 0 ? clientHeight : boundingHeight;
-      
-      console.log('[OptionChain] SCROLL CONTAINER DEBUG', {
-        element: el.className,
-        parent: el.parentElement?.className || 'none',
-        grandparent: el.parentElement?.parentElement?.className || 'none',
-      });
-      
-      console.log('[OptionChain] VIEWPORT DEBUG', {
-        clientHeight,
-        offsetHeight,
-        'getBoundingClientRect.height': boundingHeight,
-        scrollHeight,
-        overflowY,
-        containerParentHeight,
-        containerParentOffsetHeight,
-        calculatedHeight: height,
-      });
-      
-      // Use clientHeight as primary measure (visible area only)
-      // If height < 100px while parent is larger, measurement might be invalid (collapsed)
-      if (height > 0 && height >= 100 && height < 10000) {
-        console.log('[OptionChain] Container measured - VALID height:', height);
+      if (height > 0 && height < 20000) {  // Guard against unrealistic values
+        console.log('[OptionChain] VIEWPORT Height measured:', height);
         setViewportHeight(height);
         setContainerReady(true);
         return true;
-      } else if (height > 0 && height < 100) {
-        console.warn('[OptionChain] Container measured - SUSPICIOUS low height:', height, 'parent:', containerParentHeight);
-        // Container might be collapsed, retry
-        return false;
-      } else if (height === 0) {
+      }
+      
+      if (height === 0) {
         console.log('[OptionChain] Container height is 0 - not ready yet');
         return false;
       }
       
-      console.log('[OptionChain] Container measurement FAILED - invalid height:', height);
+      console.log('[OptionChain] Container measurement invalid - height:', height);
       return false;
     };
 
     // Try immediate measurement
-    if (!measure()) {
-      // If not ready, try again after a microtask
-      Promise.resolve().then(() => {
-        measure();
-        // One more try after layout
-        requestAnimationFrame(() => measure());
-      });
-    }
+    measure();
+    
+    // Also try after a microtask in case layout hasn't settled
+    Promise.resolve().then(() => measure());
 
     // Set up ResizeObserver for future changes
     resizeObserverRef.current = new ResizeObserver(() => {
-      if (!el) return;
-      const height = el.clientHeight;
-      if (height > 0 && height >= 100 && height < 10000) {
-        console.log('[OptionChain] ResizeObserver fired - new height:', height);
-        setViewportHeight(height);
-        setContainerReady(true);
-      } else if (height > 0 && height < 100) {
-        console.warn('[OptionChain] ResizeObserver - suspicious low height:', height);
-      }
+      measure();
     });
     resizeObserverRef.current.observe(el);
 
@@ -543,7 +497,6 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
 
   const virtualRange = useMemo(() => {
     if (!sortedStrikes.length || viewportHeight === 0) {
-      console.log('[DEBUG] virtualRange guard - sortedStrikes:', sortedStrikes.length, 'viewportHeight:', viewportHeight);
       return { start: 0, end: -1, top: 0, bottom: 0 };
     }
     
@@ -559,31 +512,12 @@ const OptionChain = memo(({ symbol, data, onStrikeSelect, onExpiryChange, onTrad
       bottom: Math.max(0, (sortedStrikes.length - end - 1) * rowHeight),
     };
     
-    // COMPREHENSIVE DEBUG LOG
-    console.log('[OptionChain] VIEWPORT DEBUG', {
-      viewportHeight,
-      scrollTop,
-      clientHeight: scrollRef.current?.clientHeight || 'N/A',
-      scrollHeight: scrollRef.current?.scrollHeight || 'N/A',
-      rowHeight,
-      totalRows: sortedStrikes.length,
-      startIndex: range.start,
-      endIndex: range.end,
-      visibleRowsCount: range.end - range.start + 1,
-      virtualRangeTop: range.top,
-      virtualRangeBottom: range.bottom,
-      containerReady,
-      isMobile,
-    });
-    
     return range;
-  }, [scrollTop, sortedStrikes.length, viewportHeight, isMobile, containerReady]);
+  }, [scrollTop, sortedStrikes.length, viewportHeight, isMobile]);
 
   const visibleStrikes = useMemo(
     () => {
-      const visible = sortedStrikes.slice(virtualRange.start, virtualRange.end + 1);
-      console.log('[DEBUG] visibleStrikes - total:', visible.length, 'from range:', virtualRange.start, 'to', virtualRange.end);
-      return visible;
+      return sortedStrikes.slice(virtualRange.start, virtualRange.end + 1);
     },
     [sortedStrikes, virtualRange.end, virtualRange.start]
   );
