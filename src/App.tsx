@@ -18,7 +18,7 @@ if (typeof window !== 'undefined') {
 import { LandingPage } from './components/LandingPage';
 import { APP_NAME } from './components/BrandLogo';
 import LWChart from './components/LWChart';
-import OptionChain from './components/OptionChain';
+import OptionChain from './components/OptionChainProduction';
 import GlobalSearch from './components/GlobalSearch';
 import { CandlestickChart, Briefcase, ReceiptText, User, UserPlus, Home, Trophy, Search, Bell, TrendingUp, TrendingDown, ChevronRight, Plus, Minus, ArrowUp, ArrowDown, LayoutDashboard, Wallet, Menu, X, ShieldCheck, Users, BarChart3, PieChart, Activity, Filter, ArrowRightLeft, Settings, Phone, Save, Trash2, Maximize2, ChevronLeft, Sun, Moon, Mail, AlertTriangle, CircleOff, Info, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
