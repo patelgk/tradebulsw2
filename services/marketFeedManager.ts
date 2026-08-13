@@ -780,34 +780,35 @@ export class MarketFeedManager {
       this._logTick(`[MarketFeed] LTP tick - NO OPTIONMETA token=${securityId} symbol=${symbol} price=${update.ltp}`);
     }
 
+    if (optionMeta) {
       // EMIT IMMEDIATELY - Do not await
-const room = `symbol:${symbol}`;
-    this._emitWithDebug("market:optionTick", {
-      symbol,
-      strike: optionMeta.strike,
-      optionType: optionMeta.optionType,
-      securityId,
-      price: optionPrice,
-      change: optionChange,
-      changePct: optionChangePct,
-      volume,
-      source: "ws",
-      latencyMs,
-    }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType }, room);
-    
-    this._emitWithDebug("optionChain:update", {
-      symbol,
-      strike: optionMeta.strike,
-      optionType: optionMeta.optionType,
-      securityId,
-      price: optionPrice,
-      volume,
-      change: optionChange,
-      changePct: optionChangePct,
-      row: updatedOption || null,
-      source: "ws",
-      latencyMs,
-    }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType }, room);
+      const room = `symbol:${symbol}`;
+      this._emitWithDebug("market:optionTick", {
+        symbol,
+        strike: optionMeta.strike,
+        optionType: optionMeta.optionType,
+        securityId,
+        price: optionPrice,
+        change: optionChange,
+        changePct: optionChangePct,
+        volume,
+        source: "ws",
+        latencyMs,
+      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType }, room);
+      
+      this._emitWithDebug("optionChain:update", {
+        symbol,
+        strike: optionMeta.strike,
+        optionType: optionMeta.optionType,
+        securityId,
+        price: optionPrice,
+        volume,
+        change: optionChange,
+        changePct: optionChangePct,
+        row: updatedOption || null,
+        source: "ws",
+        latencyMs,
+      }, { symbol, strike: String(optionMeta.strike), type: optionMeta.optionType }, room);
 
       // CHART TICK - Send immediately if subscribed
       const chartKeys = this.chartSubscribersBySecurity.get(securityId);
