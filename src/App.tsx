@@ -48,6 +48,28 @@ function buildChartKey(selection: ChartSelectionInput, timeframe: ChartSelection
   return keyParts.join(':');
 }
 
+function getStrikeStep(chain: OptionStrike[]) {
+  const strikes = [...new Set(chain.map(row => Number(row.strike)).filter(Number.isFinite))].sort((a, b) => a - b);
+  let minStep = Infinity;
+  for (let i = 1; i < strikes.length; i++) {
+    const diff = strikes[i] - strikes[i - 1];
+    if (diff > 0) minStep = Math.min(minStep, diff);
+  }
+  return Number.isFinite(minStep) ? minStep : 50;
+}
+
+function optionChainCoversSpot(chain: OptionStrike[] = [], spot?: number) {
+  if (!chain.length || !spot || !Number.isFinite(spot) || spot <= 0) return true;
+  const strikes = chain.map(row => Number(row.strike)).filter(Number.isFinite);
+  if (!strikes.length) return false;
+  const min = Math.min(...strikes);
+  const max = Math.max(...strikes);
+  const step = getStrikeStep(chain);
+  const closestDiff = Math.min(...strikes.map(strike => Math.abs(strike - spot)));
+  const tolerance = Math.max(step * 3, spot * 0.02);
+  return spot >= min - step * 2 && spot <= max + step * 2 && closestDiff <= tolerance;
+}
+
 interface User {
   uid: string;
   email: string;
@@ -4132,12 +4154,15 @@ function App() {
     setMarketData(prev => {
       const updated = { ...prev };
       localMarketData.forEach(item => {
+        const cachedChain = optionChainCoversSpot(item.optionChain || [], item.price)
+          ? (item.optionChain || prev[item.symbol]?.optionChain || [])
+          : [];
         updated[item.symbol] = {
           ...prev[item.symbol],
           price: item.price,
           change: item.change,
           timestamp: item.timestamp,
-          optionChain: item.optionChain || prev[item.symbol]?.optionChain || []
+          optionChain: cachedChain
         };
       });
       return updated;
@@ -4512,11 +4537,18 @@ function App() {
           const current = nextState[symbol] || {};
           const prevChainLen = current.optionChain?.length || 0;
           const nextChainLen = patch.optionChain?.length || prevChainLen;
+          const patchPrice = Number(patch.price);
+          const shouldDropStaleChain = patch.optionChain === undefined
+            && Number.isFinite(patchPrice)
+            && !optionChainCoversSpot(current.optionChain || [], patchPrice);
           const next = {
             ...current,
             ...patch,
-            optionChain: patch.optionChain ?? current.optionChain ?? [],
+            optionChain: shouldDropStaleChain ? [] : (patch.optionChain ?? current.optionChain ?? []),
           };
+          if (shouldDropStaleChain) {
+            console.warn(`[State] Dropped stale option chain for ${symbol}: livePrice=${patchPrice} previousRows=${prevChainLen}`);
+          }
           if (IS_DEV) {
             if (patch.price) {
               console.log(`[State] Updated symbol=${symbol} price=${patch.price} chain_before=${prevChainLen} chain_after=${nextChainLen}`);
@@ -4569,6 +4601,11 @@ function App() {
       return SYMBOLS.find((candidate) =>
         candidate.toLowerCase().replace(/[^a-z0-9]/g, '') === normalized
       ) || symbol;
+    };
+
+    const safeLatency = (latency: unknown) => {
+      const value = Number(latency);
+      return Number.isFinite(value) && value >= 0 && value < 24 * 60 * 60 * 1000 ? value : null;
     };
 
     const mergeOptionRow = (chain: OptionStrike[] = [], payload: {
@@ -4689,7 +4726,8 @@ function App() {
     socket.on('chartTick', (tick: ChartTick) => {
       const timestamp = new Date().toISOString();
       receptionStats['chartTick']++;
-      console.log(`[📉 CHART TICK] symbol=${tick.symbol} interval=${(tick as any).interval || 'unknown'} [${timestamp}]`);
+      const tickInterval = tick.interval || tick.timeframe || chartSelectionRef.current.timeframe || '5m';
+      console.log(`[📉 CHART TICK] symbol=${tick.symbol} interval=${tickInterval} [${timestamp}]`);
       const activeChart = chartSelectionRef.current;
       const tokenMatchesActive = sameToken(tick.securityId, activeChart.securityId);
       if (tick.chartKey === activeChart.chartKey || tokenMatchesActive) {
@@ -4700,6 +4738,8 @@ function App() {
           securityId: String(activeChart.securityId || tick.securityId),
           exchangeSegment: activeChart.exchangeSegment || tick.exchangeSegment,
           instrument: activeChart.instrument || tick.instrument,
+          timeframe: activeChart.timeframe || tick.timeframe,
+          interval: activeChart.timeframe || tick.interval,
           strike: activeChart.strike ?? tick.strike,
           optionType: activeChart.optionType ?? tick.optionType,
         };
@@ -4721,8 +4761,9 @@ function App() {
       const normalizedSymbol = normalizeSymbolKey(tick.symbol);
       const incomingSymbol = tick.symbol;
       const existingChainLength = marketDataRef.current[normalizedSymbol]?.optionChain?.length || 0;
+      const latencyMs = safeLatency(tick.latencyMs);
       
-      console.log(`[📊 INDEX TICK] incoming=${incomingSymbol} normalized=${normalizedSymbol} price=${tick.price} latency=${tick.latencyMs}ms existing_chain=${existingChainLength}`);
+      console.log(`[📊 INDEX TICK] incoming=${incomingSymbol} normalized=${normalizedSymbol} price=${tick.price} latency=${latencyMs ?? 'n/a'}ms existing_chain=${existingChainLength}`);
       
       updateMarketSymbol(normalizedSymbol, {
         price: tick.price,
@@ -4746,12 +4787,13 @@ function App() {
       
       const symbolKey = normalizeSymbolKey(tick.symbol);
       const existingChain = marketDataRef.current[symbolKey]?.optionChain || [];
+      const latencyMs = safeLatency(tick.latencyMs);
       const existingRow = existingChain.find((row: OptionStrike) =>
         sameToken(row.ce_security_id, tick.securityId) || sameToken(row.pe_security_id, tick.securityId) || Number(row.strike) === Number(tick.strike)
       );
       
       console.log(`[📈 OPTION TICK] symbol=${symbolKey} strike=${tick.strike} type=${tick.optionType} price=${tick.price} securityId=${tick.securityId}`);
-      console.log(`[📈 CHAIN CHECK] symbol=${symbolKey} chain_length=${existingChain.length} row_found=${!!existingRow} price=${tick.price} latency=${tick.latencyMs}ms`);
+      console.log(`[📈 CHAIN CHECK] symbol=${symbolKey} chain_length=${existingChain.length} row_found=${!!existingRow} price=${tick.price} latency=${latencyMs ?? 'n/a'}ms`);
       if (existingRow) {
         console.log(`[📈 ROW MATCH] Found existing row - old_${tick.optionType}_ltp=${tick.optionType === 'CE' ? existingRow.ce_ltp : existingRow.pe_ltp} new_price=${tick.price}`);
       }
@@ -4767,7 +4809,7 @@ function App() {
           rowExists: !!existingRow,
           previousLtp: tick.optionType === 'CE' ? existingRow?.ce_ltp : existingRow?.pe_ltp,
           newLtp: tick.price,
-          wsLatencyMs: tick.latencyMs,
+          wsLatencyMs: latencyMs,
         });
       }
       
@@ -4814,8 +4856,9 @@ function App() {
       const previousLtp = payload.optionType === 'CE' ? previousRow?.ce_ltp : payload.optionType === 'PE' ? previousRow?.pe_ltp : undefined;
       const nextLtp = payload.optionType === 'CE' ? payload.row?.ce_ltp : payload.optionType === 'PE' ? payload.row?.pe_ltp : undefined;
       const frontendReceivedAt = Date.now();
-      const wsLatencyMs = payload.latencyMs;
-      const totalLatencyMs = frontendReceivedAt - (payload.tickReceivedAt || payload.emittedAt || 0);
+      const wsLatencyMs = safeLatency(payload.latencyMs);
+      const emittedAt = Number(payload.tickReceivedAt || payload.emittedAt || 0);
+      const totalLatencyMs = emittedAt > 0 ? safeLatency(frontendReceivedAt - emittedAt) : null;
       
       if (IS_DEV) console.log('[Market] optionChain:update received', {
         source: payload.source || 'ws',
@@ -4833,7 +4876,7 @@ function App() {
         allLatencies: {
           tickReceivedAtBackend: payload.tickReceivedAt,
           emittedAtBackend: payload.emittedAt,
-          wsLatency: payload.latencyMs,
+          wsLatency: wsLatencyMs,
           frontendReceivedAt,
           totalLatency: totalLatencyMs,
         }
@@ -4846,7 +4889,7 @@ function App() {
       const sideRowPatch = payload.row || {};
       const isCeUpdate = payload.optionType === 'CE';
       const isPeUpdate = payload.optionType === 'PE';
-      const nextChain = isFullChain && payload.source !== 'rest-fallback'
+      const nextChain = isFullChain
           ? payload.optionChain
           : mergeOptionRow(current.optionChain || [], {
               strike: payload.strike,

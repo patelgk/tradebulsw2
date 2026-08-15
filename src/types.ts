@@ -92,6 +92,7 @@ export interface ChartSubscription {
   securityId: string;
   exchangeSegment: 'IDX_I' | 'NSE_FNO';
   instrument: 'INDEX' | 'OPTIDX';
+  timeframe?: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '1D';
   strike?: number;
   optionType?: 'CE' | 'PE';
 }
@@ -102,6 +103,8 @@ export interface ChartTick {
   securityId: string;
   exchangeSegment: 'IDX_I' | 'NSE_FNO';
   instrument: 'INDEX' | 'OPTIDX';
+  timeframe?: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '1D';
+  interval?: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '1D';
   strike?: number;
   optionType?: 'CE' | 'PE';
   price: number;

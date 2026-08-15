@@ -29,6 +29,7 @@ import { APP_NAME } from './BrandLogo';
 
 interface LandingPageProps {
   onLoginClick: () => void;
+  onPartnerClick?: () => void;
   onAdminLogin?: (mobile: string, pass: string) => void;
   onLogoClick: () => void;
   isLoggedIn?: boolean;

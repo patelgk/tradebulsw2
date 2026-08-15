@@ -409,6 +409,44 @@ export class MarketFeedManager {
     return Math.floor(tsMs / ms) * ms;
   }
 
+  private _tickTimeMs(update: TickerUpdate | QuoteUpdate) {
+    if (!update.ltt) return Date.now();
+    const tickTimeMs = update.ltt * 1000;
+    const now = Date.now();
+    // Dhan LTT can be absent/stale on non-trade packets. Do not report impossible latency.
+    if (!Number.isFinite(tickTimeMs) || tickTimeMs <= 0 || Math.abs(now - tickTimeMs) > 24 * 60 * 60 * 1000) {
+      return now;
+    }
+    return tickTimeMs;
+  }
+
+  private _latencyMs(tickTimeMs: number) {
+    const latency = Date.now() - tickTimeMs;
+    return latency >= 0 && latency < 24 * 60 * 60 * 1000 ? latency : null;
+  }
+
+  private _strikeStep(chain: OptionStrike[]) {
+    const strikes = [...new Set(chain.map(row => row.strike).filter(Number.isFinite))].sort((a, b) => a - b);
+    let minStep = Infinity;
+    for (let i = 1; i < strikes.length; i++) {
+      const diff = +(strikes[i] - strikes[i - 1]).toFixed(2);
+      if (diff > 0) minStep = Math.min(minStep, diff);
+    }
+    return Number.isFinite(minStep) ? minStep : 50;
+  }
+
+  private _optionChainCoversSpot(chain: OptionStrike[], spot: number) {
+    if (!chain.length || !Number.isFinite(spot) || spot <= 0) return true;
+    const strikes = chain.map(row => row.strike).filter(Number.isFinite);
+    if (!strikes.length) return false;
+    const min = Math.min(...strikes);
+    const max = Math.max(...strikes);
+    const step = this._strikeStep(chain);
+    const closestDiff = Math.min(...strikes.map(strike => Math.abs(strike - spot)));
+    const tolerance = Math.max(step * 3, spot * 0.02);
+    return spot >= min - step * 2 && spot <= max + step * 2 && closestDiff <= tolerance;
+  }
+
   private _upsertChartCandle(key: string, tickTimeMs: number, price: number, volume: number | undefined, timeframe: ChartSubscription["timeframe"] | undefined) {
     const startMs = this._bucketStart(tickTimeMs, timeframe);
     const time = new Date(startMs).toISOString();
@@ -627,13 +665,15 @@ export class MarketFeedManager {
 
   async updateExpiry(symbol: string, expiry: string) {
     if (!this.state[symbol]) return;
-    console.log(`[MarketFeed] Expiry updated: ${symbol} → ${expiry}`);
+    console.log(`[MarketFeed] Expiry updated: ${symbol} -> ${expiry}`);
     this.state[symbol].expiry = expiry;
     delete this.optionChainLastFetch[symbol];
-    for (const row of this.state[symbol].optionChain || []) {
-      if (row.ce_security_id) this.unsubscribeOptionSecurity(row.ce_security_id);
-      if (row.pe_security_id) this.unsubscribeOptionSecurity(row.pe_security_id);
+    const previousWsIds = this.optionChainWsTokensBySymbol.get(symbol as SymbolName) || new Set<string>();
+    for (const token of previousWsIds) {
+      this.unsubscribeOptionSecurity(token);
     }
+    this.optionChainWsTokensBySymbol.set(symbol as SymbolName, new Set<string>());
+    this.state[symbol].optionChain = [];
     await this._fetchOptionChain(symbol);
     const room = `symbol:${symbol}`;
     this.io.to(room).emit("marketUpdate", { [symbol]: this.state[symbol] });
@@ -674,10 +714,9 @@ export class MarketFeedManager {
     if (!symbol || !this.state[symbol]) return;
 
     const s = this.state[symbol];
-    const tickTimeMs = update.ltt ? update.ltt * 1000 : Date.now();
+    const tickTimeMs = this._tickTimeMs(update);
     const volume = "volume" in update ? (update as QuoteUpdate).volume : undefined;
-    const emittedAt = Date.now();
-    const latencyMs = emittedAt - tickTimeMs;
+    const latencyMs = this._latencyMs(tickTimeMs);
 
     // IMMEDIATE EMIT - No await, no blocking before this point
     
@@ -748,17 +787,22 @@ export class MarketFeedManager {
       s.prevClose = +update.prevClose.toFixed(2);
     }
 
+    let optionPrice = 0;
+    let optionChange = 0;
+    let optionChangePct = 0;
+    let updatedOption: OptionStrike | undefined;
+
     if (optionMeta) {
       this.lastOptionWsTickAt = Date.now();
-      const optionPrice = +(update.ltp || 0).toFixed(2);
+      optionPrice = +(update.ltp || 0).toFixed(2);
       if (optionPrice <= 0) return;
 
-      const updatedOption = s.optionChain.find(row => row.strike === optionMeta.strike);
+      updatedOption = s.optionChain.find(row => row.strike === optionMeta.strike);
       const previousLtp = updatedOption
         ? (optionMeta.optionType === "CE" ? updatedOption.ce_ltp : updatedOption.pe_ltp)
         : optionPrice;
-      const optionChange = +(optionPrice - previousLtp).toFixed(2);
-      const optionChangePct = previousLtp > 0 ? +((optionChange / previousLtp) * 100).toFixed(2) : 0;
+      optionChange = +(optionPrice - previousLtp).toFixed(2);
+      optionChangePct = previousLtp > 0 ? +((optionChange / previousLtp) * 100).toFixed(2) : 0;
 
       if (updatedOption) {
         if (optionMeta.optionType === "CE") {
@@ -824,6 +868,8 @@ export class MarketFeedManager {
             securityId: sub.securityId,
             exchangeSegment: sub.exchangeSegment,
             instrument: sub.instrument,
+            timeframe: sub.timeframe || "5m",
+            interval: sub.timeframe || "5m",
             strike: sub.strike,
             optionType: sub.optionType,
             price: optionPrice,
@@ -854,7 +900,7 @@ export class MarketFeedManager {
               cacheKey,
               timeframe: tf,
               candle,
-            });
+            }, undefined, `chart:${chartKey}`);
           }
         });
       }
@@ -891,6 +937,14 @@ export class MarketFeedManager {
       }
     }
 
+    if (s.optionChain.length > 0 && !this._optionChainCoversSpot(s.optionChain, s.price)) {
+      const minStrike = Math.min(...s.optionChain.map(row => row.strike));
+      const maxStrike = Math.max(...s.optionChain.map(row => row.strike));
+      console.warn(`[MarketFeed] Clearing stale OC for ${symbol}: spot=${s.price} strikeRange=${minStrike}-${maxStrike}`);
+      s.optionChain = [];
+      delete this.optionChainLastFetch[symbol];
+    }
+
     // EMIT INDEX TICK IMMEDIATELY
     this._logTick(`[MarketFeed] tick token=${securityId} symbol=${symbol} price=${s.price}`);
     const room = `symbol:${symbol}`;
@@ -922,6 +976,8 @@ export class MarketFeedManager {
           securityId: sub.securityId,
           exchangeSegment: sub.exchangeSegment,
           instrument: sub.instrument,
+          timeframe: sub.timeframe || "5m",
+          interval: sub.timeframe || "5m",
           strike: sub.strike,
           optionType: sub.optionType,
           price: s.price,
@@ -1106,6 +1162,21 @@ export class MarketFeedManager {
           }
         );
         const chain = this._parseOC(res.data);
+        const chainSpot = Number(res.data?.data?.last_price || 0);
+        const effectiveSpot = chainSpot > 0 ? chainSpot : this.state[symbol].price;
+        if (chainSpot > 0) {
+          this.state[symbol].price = +chainSpot.toFixed(2);
+        }
+        if (chain.length > 0 && !this._optionChainCoversSpot(chain, effectiveSpot)) {
+          const strikes = chain.map(row => row.strike);
+          console.error(`[MarketFeed] Rejecting stale OC for ${symbol}: spot=${effectiveSpot} strikeRange=${Math.min(...strikes)}-${Math.max(...strikes)}`);
+          this.state[symbol].optionChain = [];
+          this.optionChainLastFetch[symbol] = Date.now();
+          const room = `symbol:${symbol}`;
+          this.io.to(room).emit("marketUpdate", { [symbol]: this.state[symbol] });
+          this.io.to(room).emit("optionChain:update", { symbol, expiry, optionChain: [], source: "stale-rejected" });
+          return;
+        }
         if (chain.length > 0) {
           const previous = this.state[symbol].optionChain || [];
           const nextIds = new Set<string>();
@@ -1117,6 +1188,8 @@ export class MarketFeedManager {
             if (row.ce_security_id) {
               const token = this._normalizeSecurityId(row.ce_security_id);
               nextIds.add(token);
+              this.optionSecurityMeta.set(token, { symbol: symbol as SymbolName, strike: row.strike, optionType: "CE" });
+              this.securityOi.set(token, row.ce_oi);
               if (!previousWsIds.has(token)) {
                 wsEntries.push({ meta: { symbol: symbol as SymbolName, strike: row.strike, optionType: "CE" }, securityId: token });
               }
@@ -1124,6 +1197,8 @@ export class MarketFeedManager {
             if (row.pe_security_id) {
               const token = this._normalizeSecurityId(row.pe_security_id);
               nextIds.add(token);
+              this.optionSecurityMeta.set(token, { symbol: symbol as SymbolName, strike: row.strike, optionType: "PE" });
+              this.securityOi.set(token, row.pe_oi);
               if (!previousWsIds.has(token)) {
                 wsEntries.push({ meta: { symbol: symbol as SymbolName, strike: row.strike, optionType: "PE" }, securityId: token });
               }
@@ -1313,7 +1388,8 @@ export class MarketFeedManager {
   }
 
   private _emitWithDebug(eventName: string, payload: any, meta?: {symbol?: string; strike?: string; type?: string}, room?: string) {
-    const timestamp = new Date().toISOString();
+    const emittedAt = Date.now();
+    const timestamp = new Date(emittedAt).toISOString();
     const connectedCount = (this.io as any).engine?.clientsCount || 0;
     const payloadSize = JSON.stringify(payload).length;
     const eventKey = eventName as keyof typeof this.emissionStats;
@@ -1321,7 +1397,7 @@ export class MarketFeedManager {
       this.emissionStats[eventKey]++;
     }
     const emitter = room ? this.io.to(room) : this.io;
-    emitter.emit(eventName, payload);
+    emitter.emit(eventName, { ...payload, emittedAt });
     if (process.env.NODE_ENV !== "production" && Date.now() - this.lastTickLogAt > 5000) {
       console.log(`[🚀 EMIT SUMMARY] ${eventName} room=${room || 'all'} clients=${connectedCount} size=${payloadSize}B ${meta?.symbol ? `symbol=${meta.symbol}` : ''} ${meta?.strike ? `strike=${meta.strike}` : ''} [${timestamp}]`);
     }

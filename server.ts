@@ -164,7 +164,7 @@ async function fetchChartHistory(params: { symbol: string; securityId: string; e
   }
 
   const r = await axios.post(endpoint, payload, {
-    headers: { "access-token": DHAN_ACCESS_TOKEN, "Content-Type": "application/json" },
+    headers: { "access-token": DHAN_ACCESS_TOKEN, "client-id": DHAN_CLIENT_ID, "Content-Type": "application/json" },
     timeout: 10000,
   });
   const d = r.data?.data;

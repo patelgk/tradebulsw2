@@ -440,10 +440,13 @@ const LWChart = memo(({ selection, interval = '5m', onIntervalChange, liveTick, 
                 date: dateKey,
               }
             : {
+                symbol: selection.symbol,
                 securityId: selection.securityId,
                 timeframe: interval,
                 exchangeSegment: selection.exchangeSegment || 'NSE_FNO',
                 instrument: selection.instrument || 'OPTIDX',
+                strike: selection.strike,
+                optionType: selection.optionType,
                 date: dateKey,
               }
         );

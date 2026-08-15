@@ -29,7 +29,6 @@ interface OptionChainProductionProps {
 interface OptionChainRowProps {
   row: OptionStrike;
   isATM: boolean;
-  isMobile: boolean;
   spotPrice: number;
   ceBarWidth: number;
   peBarWidth: number;
@@ -91,7 +90,7 @@ function formatDelta(value: number | undefined): string {
 /**
  * OI Change Badge with color coding
  */
-function OIChangeBadge({ value }: { value: number }): React.ReactNode {
+function OIChangeBadge({ value }: { value: number }): React.ReactElement {
   const className = value > 0 
     ? 'text-emerald-600 dark:text-emerald-400' 
     : value < 0 
@@ -116,7 +115,7 @@ function OptionChainRowDesktop({
   onSelect,
   onTrade,
   onAddToWatchlist,
-}: OptionChainRowProps): React.ReactNode {
+}: OptionChainRowProps): React.ReactElement {
   const isITM_CE = row.strike < spotPrice;
   const isITM_PE = row.strike > spotPrice;
 
@@ -229,7 +228,7 @@ function OptionChainRowMobile({
   ceBarWidth,
   peBarWidth,
   onSelect,
-}: Omit<OptionChainRowProps, 'onTrade' | 'onAddToWatchlist'>): React.ReactNode {
+}: Omit<OptionChainRowProps, 'onTrade' | 'onAddToWatchlist'>): React.ReactElement {
   const isITM_CE = row.strike < spotPrice;
   const isITM_PE = row.strike > spotPrice;
 
@@ -352,6 +351,10 @@ const OptionChainProduction: React.FC<OptionChainProductionProps> = ({
   }, [sortedRows, spotPrice]);
 
   const atmStrike = sortedRows[atmIndex]?.strike ?? null;
+
+  useEffect(() => {
+    setHasScrolledToATM(false);
+  }, [symbol, expiry, spotPrice, atmStrike]);
 
   // Calculate max OI for bar scaling
   const { maxCeOI, maxPeOI } = useMemo(() => {
@@ -477,7 +480,6 @@ const OptionChainProduction: React.FC<OptionChainProductionProps> = ({
                 key={`${row.strike}-${idx}`}
                 row={row}
                 isATM={isATM}
-                isMobile={true}
                 spotPrice={spotPrice}
                 ceBarWidth={ceBarWidth}
                 peBarWidth={peBarWidth}
@@ -491,7 +493,6 @@ const OptionChainProduction: React.FC<OptionChainProductionProps> = ({
               key={`${row.strike}-${idx}`}
               row={row}
               isATM={isATM}
-              isMobile={false}
               spotPrice={spotPrice}
               ceBarWidth={ceBarWidth}
               peBarWidth={peBarWidth}

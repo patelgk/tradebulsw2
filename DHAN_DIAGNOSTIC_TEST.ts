@@ -47,7 +47,7 @@ class DiagnosticTest {
         resolve();
       });
 
-      this.ws.on("message", (data) => this.handleMessage(data));
+      this.ws.on("message", (data: WebSocket.RawData) => this.handleMessage(data));
       this.ws.on("error", (err) => reject(err));
       this.ws.on("close", () => console.log("Connection closed"));
     });
@@ -69,16 +69,16 @@ class DiagnosticTest {
     return new Promise((r) => setTimeout(r, 1000));
   }
 
-  private handleMessage(data: Buffer | string) {
-    if (typeof data === "string") return;
-    if (data.length < 8) return;
+  private handleMessage(data: WebSocket.RawData) {
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+    if (buf.length < 8) return;
 
     try {
-      const responseCode = data[0];
-      const securityId = data.readInt32LE(4).toString();
+      const responseCode = buf[0];
+      const securityId = buf.readInt32LE(4).toString();
 
-      if (responseCode === RESPONSE_CODE.QUOTE && data.length >= 50) {
-        const ltp = data.readFloatLE(8).toFixed(2);
+      if (responseCode === RESPONSE_CODE.QUOTE && buf.length >= 50) {
+        const ltp = buf.readFloatLE(8).toFixed(2);
         const key = `${securityId}`;
         if (!this.receivedTicks.has(key)) {
           this.receivedTicks.add(key);
