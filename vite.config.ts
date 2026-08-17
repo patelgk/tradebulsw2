@@ -40,6 +40,14 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
+    esbuild: {
+      logOverride: { 'this-is-undefined-in-esm': 'silent' },
+    },
+    optimizeDeps: {
+      esbuildOptions: {
+        logOverride: { 'this-is-undefined-in-esm': 'silent' },
+      },
+    },
       chunkSizeWarningLimit: 800,
       rollupOptions: {
         output: {

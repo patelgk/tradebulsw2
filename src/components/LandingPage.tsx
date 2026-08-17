@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity,
@@ -777,6 +777,40 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminCreds, setAdminCreds] = useState({ mobile: '', pass: '' });
 
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+
+  useEffect(() => {
+    try {
+      const dismissed = localStorage.getItem('proprupee_interview_dismissed');
+      if (!dismissed) {
+        const timer = window.setTimeout(() => {
+          setShowInterviewModal(true);
+        }, 5000);
+        return () => window.clearTimeout(timer);
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, []);
+
+  const handleDismissInterview = () => {
+    setShowInterviewModal(false);
+    try {
+      localStorage.setItem('proprupee_interview_dismissed', 'true');
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const handleCtaInterview = () => {
+    setShowInterviewModal(false);
+    try {
+      localStorage.setItem('proprupee_interview_dismissed', 'true');
+    } catch (err) {
+      // ignore
+    }
+    window.open('https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header', '_blank', 'noopener,noreferrer');
+  };
   const handleLogoClick = () => {
     const nextClicks = logoClicks + 1;
     if (nextClicks >= 5) {
@@ -800,6 +834,65 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   return (
     <div className="min-h-screen overflow-x-hidden font-sans selection:bg-emerald-300/30 bg-[#050812] text-white">
+      <AnimatePresence>
+        {showInterviewModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-4 sm:p-6 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 20, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-lg rounded-[2.5rem] border border-emerald-500/30 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 p-6 sm:p-8 shadow-[0_0_50px_rgba(16,185,129,0.15)] text-left"
+            >
+              {/* Close Button */}
+              <button
+                onClick={handleDismissInterview}
+                className="absolute top-6 right-6 p-2.5 rounded-full bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Header Badge & Title */}
+              <div className="mb-6 pr-8">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black uppercase tracking-widest mb-3">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Exclusive Opportunity
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                  🚀 Book a Quick Interview
+                </h2>
+              </div>
+
+              {/* Body Text */}
+              <p className="text-slate-300 text-sm sm:text-base leading-relaxed mb-8">
+                Want to be part of Proprupee? Share your details and book a quick interview with our team.
+              </p>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={handleCtaInterview}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 px-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black rounded-2xl shadow-lg shadow-emerald-500/25 hover:opacity-95 transition-all active:scale-95 text-sm sm:text-base"
+                >
+                  Book a Quick Interview →
+                </button>
+                <button
+                  onClick={handleDismissInterview}
+                  className="py-3 px-5 rounded-2xl bg-white/5 border border-white/10 text-slate-400 hover:text-white font-bold text-sm transition-all"
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
         
       <AnimatePresence>
         {showAdminLogin && (
