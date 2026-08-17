@@ -744,27 +744,72 @@ const FinalCTA = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLo
   </section>
 );
 
-const Footer = ({ onLoginClick }: { onLoginClick: () => void }) => (
-  <footer className="border-t border-white/10 bg-[#050812] px-4 py-12 sm:px-6 lg:px-8">
-    <div className="mx-auto flex max-w-7xl flex-col gap-8 md:flex-row md:items-center md:justify-between">
-      <div>
-        <p className="font-black uppercase tracking-[-0.04em] text-white">{APP_NAME} Prop Trading</p>
-        <p className="text-xs text-slate-500">Premium trading challenges and dashboard infrastructure.</p>
+const Footer = ({ onLoginClick, onOpenPolicy }: { onLoginClick: () => void; onOpenPolicy: (type: 'about' | 'pricing' | 'contact' | 'privacy' | 'terms' | 'refund' | 'disclaimer') => void }) => (
+  <footer className="border-t border-white/10 bg-[#050812] px-4 py-16 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl grid grid-cols-1 md:grid-cols-4 gap-10 pb-12 border-b border-white/10">
+      <div className="space-y-4 md:col-span-1">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950 font-black text-lg">
+            ₹
+          </div>
+          <span className="text-base font-black tracking-tight text-white">{APP_NAME}</span>
+        </div>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Professional software and real-time market data analytics platform for modern traders and financial analysts.
+        </p>
       </div>
-      <div className="flex flex-wrap gap-3">
-        <button onClick={onLoginClick} className="rounded-full border border-white/10 px-4 py-2 text-sm font-bold text-slate-300 transition-colors hover:text-white">
-          Login
-        </button>
-        <a href="#plans" className="rounded-full border border-white/10 px-4 py-2 text-sm font-bold text-slate-300 transition-colors hover:text-white">
-          Plans
-        </a>
-        <a href="#faq" className="rounded-full border border-white/10 px-4 py-2 text-sm font-bold text-slate-300 transition-colors hover:text-white">
-          FAQ
-        </a>
+
+      <div>
+        <p className="text-xs font-bold text-white uppercase tracking-widest mb-4">Platform</p>
+        <ul className="space-y-2.5 text-xs text-slate-400">
+          <li><button onClick={() => onOpenPolicy('about')} className="hover:text-white transition">About Us</button></li>
+          <li><button onClick={() => onOpenPolicy('pricing')} className="hover:text-white transition">Pricing Plans</button></li>
+          <li><button onClick={() => onOpenPolicy('contact')} className="hover:text-white transition">Contact Support</button></li>
+          <li><button onClick={onLoginClick} className="hover:text-white transition">Trader Login</button></li>
+        </ul>
+      </div>
+
+      <div>
+        <p className="text-xs font-bold text-white uppercase tracking-widest mb-4">Legal & Compliance</p>
+        <ul className="space-y-2.5 text-xs text-slate-400">
+          <li><button onClick={() => onOpenPolicy('privacy')} className="hover:text-white transition">Privacy Policy</button></li>
+          <li><button onClick={() => onOpenPolicy('terms')} className="hover:text-white transition">Terms & Conditions</button></li>
+          <li><button onClick={() => onOpenPolicy('refund')} className="hover:text-white transition">Refund & Cancellation</button></li>
+          <li><button onClick={() => onOpenPolicy('disclaimer')} className="hover:text-white transition">Risk Disclaimer</button></li>
+        </ul>
+      </div>
+
+      <div>
+        <p className="text-xs font-bold text-white uppercase tracking-widest mb-4">Support & Contact</p>
+        <ul className="space-y-2.5 text-xs text-slate-400">
+          <li>Email: support@proprupee.com</li>
+          <li>Phone: +91 93032 59841</li>
+          <li>Mon - Sat: 9:00 AM - 6:00 PM IST</li>
+        </ul>
+      </div>
+    </div>
+
+    <div className="mx-auto max-w-7xl pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+      <p>© {new Date().getFullYear()} {APP_NAME}. All rights reserved.</p>
+      <div className="flex flex-wrap gap-4 font-bold text-slate-300">
+        <button onClick={() => onOpenPolicy('about')} className="hover:text-white transition">About</button>
+        <span className="text-white/20">|</span>
+        <button onClick={() => onOpenPolicy('pricing')} className="hover:text-white transition">Pricing</button>
+        <span className="text-white/20">|</span>
+        <button onClick={() => onOpenPolicy('contact')} className="hover:text-white transition">Contact</button>
+        <span className="text-white/20">|</span>
+        <button onClick={() => onOpenPolicy('privacy')} className="hover:text-white transition">Privacy Policy</button>
+        <span className="text-white/20">|</span>
+        <button onClick={() => onOpenPolicy('terms')} className="hover:text-white transition">Terms & Conditions</button>
+        <span className="text-white/20">|</span>
+        <button onClick={() => onOpenPolicy('refund')} className="hover:text-white transition">Refund & Cancellation</button>
+        <span className="text-white/20">|</span>
+        <button onClick={() => onOpenPolicy('disclaimer')} className="hover:text-white transition">Disclaimer</button>
       </div>
     </div>
   </footer>
 );
+
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onLoginClick,
@@ -963,7 +1008,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <FAQ />
         <FinalCTA onLoginClick={onLoginClick} isLoggedIn={isLoggedIn} />
       </main>
-      <Footer onLoginClick={onLoginClick} />
+      <Footer onLoginClick={onLoginClick} onOpenPolicy={(type) => setActivePolicy(type)} />
     </div>
   );
 };
