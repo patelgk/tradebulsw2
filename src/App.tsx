@@ -4434,6 +4434,7 @@ function App() {
   }, [user]);
 
   useEffect(() => {
+    if (!user || !hasStarted) return;
     // In development, explicitly specify the backend URL
     const socketUrl = import.meta.env.DEV ? 'http://localhost:3000' : '/';
     const socket = io(socketUrl, {

@@ -381,10 +381,12 @@ const OptionChainProduction: React.FC<OptionChainProductionProps> = ({
       const containerHeight = container.clientHeight;
       const headerHeight = isMobile ? 40 : 48;
 
-      // Calculate scroll position to center ATM row
+      // Calculate scroll position to center ATM row in the scroll container
+      // The scroll container has its own height (containerHeight), so the center of the viewport is containerHeight / 2.
+      // The center of the ATM row is (atmIndex + 0.5) * rowHeight.
       const targetScroll = Math.max(
         0,
-        atmIndex * rowHeight - (containerHeight - headerHeight - rowHeight) / 2
+        (atmIndex + 0.5) * rowHeight - containerHeight / 2
       );
 
       container.scrollTop = Math.min(
