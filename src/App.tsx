@@ -4436,7 +4436,7 @@ function App() {
   useEffect(() => {
     if (!user || !hasStarted) return;
     // In development, explicitly specify the backend URL
-    const socketUrl = import.meta.env.PROD ? 'https://tradebulsw2.onrender.com' : 'http://localhost:3000';
+    const socketUrl = 'https://tradebulsw2.onrender.com';
     const socket = io(socketUrl, {
       reconnection: true,
       reconnectionAttempts: Infinity,
