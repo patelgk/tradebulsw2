@@ -4462,6 +4462,14 @@ function App() {
       const timestamp = new Date().toISOString();
       console.log(`[📡 SOCKET CONNECTED] socket.id=${socket.id} [${timestamp}]`);
       diagnosticsRef.connectedAt = Date.now();
+      
+      // Immediately subscribe to current symbol and watchlist on connect
+      const symbolsToSub = new Set<string>([selectedSymbolRef.current]);
+      symbolsToSub.forEach(sym => {
+        socket.emit('symbol:subscribe', { symbol: sym });
+        subscribedSymbolRef.current.add(sym);
+      });
+
       if (IS_DEV) console.log('[Market] diagnostics reset');
       if (IS_DEV) console.log('[Market] active chart token', chartSelectionRef.current.chartKey);
       if (needsResubscribeRef.current) {
