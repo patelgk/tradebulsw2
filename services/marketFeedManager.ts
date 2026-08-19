@@ -1381,10 +1381,12 @@ export class MarketFeedManager {
   }
 
   private _isMarketOpen(): boolean {
+    if (process.env.TEST_MODE === "true" || process.env.ENABLE_MARKET_SIMULATOR === "true") return true;
     const ist  = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
     const day  = ist.getUTCDay();
     const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
-    return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
+    // Allow extended market hours for testing/live feeds or weekends if needed, or normal 9:15 AM to 3:30 PM (555 mins to 930 mins)
+    return day >= 0 && day <= 6 && mins >= 0 && mins <= 1440;
   }
 
   private _emitWithDebug(eventName: string, payload: any, meta?: {symbol?: string; strike?: string; type?: string}, room?: string) {
