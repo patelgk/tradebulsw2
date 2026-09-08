@@ -1070,6 +1070,78 @@ app.post('/api/admin/payouts/:id/reject', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Admin: get dashboard statistics
+app.get('/api/admin/stats', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const totalUsers = await User.countDocuments();
+    const activeTraders = await User.countDocuments({ accountStatus: 'active' });
+    const totalPayouts = await Payout.countDocuments({ status: 'paid' });
+    const totalPayoutAmount = await Payout.aggregate([
+      { $match: { status: 'paid' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    const totalRevenue = await Transaction.aggregate([
+      { $match: { type: 'challenge_purchase', status: 'successful' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    
+    res.json({
+      totalUsers,
+      activeTraders,
+      totalPayouts,
+      totalPayoutAmount: (totalPayoutAmount[0]?.total || 0),
+      totalRevenue: (totalRevenue[0]?.total || 0),
+      timestamp: new Date()
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: get all users (with pagination)
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const skip = (page - 1) * limit;
+    
+    const users = await User.find().select('uid email name accountStatus role createdAt balance').skip(skip).limit(limit).sort({ createdAt: -1 });
+    const total = await User.countDocuments();
+    
+    res.json({
+      users,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: get all transactions (with pagination)
+app.get('/api/admin/transactions', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const skip = (page - 1) * limit;
+    
+    const transactions = await Transaction.find().skip(skip).limit(limit).sort({ time: -1 });
+    const total = await Transaction.countDocuments();
+    
+    res.json({
+      transactions,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 
 app.get("/api/transactions", async (req, res) => {
   try {

@@ -821,6 +821,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [logoClicks, setLogoClicks] = useState(0);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminCreds, setAdminCreds] = useState({ mobile: '', pass: '' });
+  const [activePolicy, setActivePolicy] = useState<string | null>(null);
 
   const [showInterviewModal, setShowInterviewModal] = useState(false);
 

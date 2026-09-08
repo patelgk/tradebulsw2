@@ -1,8 +1,10 @@
 services:
+  # Backend API - shared by both frontends
   - type: web
-    name: tradebul-web
+    name: proprupee-backend
     env: node
     plan: starter
+    rootDir: backend
     buildCommand: npm ci && npm run build
     startCommand: npm start
     envVars:
@@ -34,3 +36,39 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
+      - key: CORS_ORIGINS
+        value: "proprupee.com,admin.proprupee.com"
+
+  # User Frontend - proprupee.com
+  - type: web
+    name: proprupee-frontend-user
+    env: node
+    plan: starter
+    rootDir: frontend/user
+    buildCommand: npm ci && npm run build
+    startCommand: npm run preview
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: VITE_BACKEND_URL
+        value: "https://proprupee-backend.onrender.com"
+      - key: VITE_PUBLIC_URL
+        value: "https://proprupee.com"
+
+  # Admin Frontend - admin.proprupee.com
+  - type: web
+    name: proprupee-frontend-admin
+    env: node
+    plan: starter
+    rootDir: frontend/admin
+    buildCommand: npm ci && npm run build
+    startCommand: npm run preview
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: VITE_BACKEND_URL
+        value: "https://proprupee-backend.onrender.com"
+      - key: VITE_PUBLIC_URL
+        value: "https://admin.proprupee.com"
+      - key: VITE_ADMIN_MODE
+        value: "true"
