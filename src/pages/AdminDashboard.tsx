@@ -1,69 +1,88 @@
 /**
- * AdminDashboard - Main admin dashboard
+ * AdminDashboard - Main admin dashboard with real-time stats
  */
 
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Users, CreditCard, DollarSign, TrendingUp, Activity, AlertTriangle } from 'lucide-react';
+import { BarChart3, Users, CreditCard, DollarSign, TrendingUp, Activity, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface DashboardStats {
   totalUsers: number;
+  fundedUsers: number;
+  noFundUsers: number;
+  totalFunds: number;
   activeTraders: number;
-  totalRevenue: number;
   totalPayouts: number;
   totalPayoutAmount?: number;
+  totalRevenue: number;
 }
 
 export const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
+    fundedUsers: 0,
+    noFundUsers: 0,
+    totalFunds: 0,
     activeTraders: 0,
-    totalRevenue: 0,
     totalPayouts: 0,
+    totalPayoutAmount: 0,
+    totalRevenue: 0,
   });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  const fetchStats = async () => {
+    try {
+      setError('');
+      setLoading(true);
+      const response = await fetch('/api/admin/stats', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch stats: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      setStats({
+        totalUsers: data.totalUsers || 0,
+        fundedUsers: data.fundedUsers || 0,
+        noFundUsers: data.noFundUsers || 0,
+        totalFunds: data.totalFunds || 0,
+        activeTraders: data.activeTraders || 0,
+        totalPayouts: data.totalPayouts || 0,
+        totalPayoutAmount: data.totalPayoutAmount || 0,
+        totalRevenue: data.totalRevenue || 0,
+      });
+      setLastRefresh(new Date());
+    } catch (err: any) {
+      console.error('Error fetching dashboard stats:', err);
+      setError(err.message || 'Failed to load statistics');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setError('');
-        const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
-        const response = await fetch('/api/admin/stats', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch stats: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        setStats({
-          totalUsers: data.totalUsers || 0,
-          activeTraders: data.activeTraders || 0,
-          totalRevenue: data.totalRevenue || 0,
-          totalPayouts: data.totalPayoutAmount || 0,
-        });
-      } catch (err: any) {
-        console.error('Error fetching dashboard stats:', err);
-        setError(err.message || 'Failed to load statistics');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchStats();
+    
+    // Refresh stats every 30 seconds for real-time updates
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const statCards = [
     { label: 'Total Users', value: stats.totalUsers, icon: Users, color: 'blue' },
+    { label: 'Funded Users', value: stats.fundedUsers, icon: DollarSign, color: 'emerald' },
+    { label: 'No Fund Users', value: stats.noFundUsers, icon: AlertTriangle, color: 'orange' },
+    { label: 'Total Funds', value: `₹${stats.totalFunds.toLocaleString('en-IN')}`, icon: CreditCard, color: 'purple' },
     { label: 'Active Traders', value: stats.activeTraders, icon: Activity, color: 'green' },
-    { label: 'Total Revenue', value: `₹${stats.totalRevenue.toLocaleString()}`, icon: DollarSign, color: 'emerald' },
-    { label: 'Total Payouts', value: `₹${stats.totalPayouts.toLocaleString()}`, icon: CreditCard, color: 'purple' },
+    { label: 'Total Revenue', value: `₹${stats.totalRevenue.toLocaleString('en-IN')}`, icon: BarChart3, color: 'cyan' },
   ];
 
   if (loading) {
@@ -94,7 +113,7 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {statCards.map((card, idx) => {
           const Icon = card.icon;
           const colorClass = {
@@ -102,6 +121,8 @@ export const AdminDashboard: React.FC = () => {
             green: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
             emerald: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400',
             purple: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+            orange: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400',
+            cyan: 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400',
           }[card.color as keyof typeof colorClass];
 
           return (
@@ -122,13 +143,24 @@ export const AdminDashboard: React.FC = () => {
                   <Icon size={24} />
                 </div>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-500 mt-4 flex items-center gap-1">
-                <TrendingUp size={14} className="text-green-600 dark:text-green-400" />
-                +12% from last month
-              </p>
             </div>
           );
         })}
+      </div>
+
+      {/* Refresh Button & Last Update */}
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-600 dark:text-slate-400">
+          {lastRefresh && `Last updated: ${lastRefresh.toLocaleTimeString()}`}
+        </div>
+        <button
+          onClick={fetchStats}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
       </div>
 
       {/* Activity Section */}

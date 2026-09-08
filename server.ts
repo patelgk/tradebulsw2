@@ -1070,7 +1070,7 @@ app.post('/api/admin/payouts/:id/reject', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin: get dashboard statistics
+// Admin: get dashboard statistics with funding data
 app.get('/api/admin/stats', async (req, res) => {
   try {
     const uid = (req.query.uid as string) || (req.body && req.body.uid);
@@ -1078,6 +1078,13 @@ app.get('/api/admin/stats', async (req, res) => {
     if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
     
     const totalUsers = await User.countDocuments();
+    const fundedUsers = await User.countDocuments({ balance: { $gt: 0 } });
+    const noFundUsers = await User.countDocuments({ balance: { $eq: 0 } });
+    
+    const totalFundsAgg = await User.aggregate([
+      { $group: { _id: null, total: { $sum: '$balance' } } }
+    ]);
+    
     const activeTraders = await User.countDocuments({ accountStatus: 'active' });
     const totalPayouts = await Payout.countDocuments({ status: 'paid' });
     const totalPayoutAmount = await Payout.aggregate([
@@ -1091,6 +1098,9 @@ app.get('/api/admin/stats', async (req, res) => {
     
     res.json({
       totalUsers,
+      fundedUsers,
+      noFundUsers,
+      totalFunds: (totalFundsAgg[0]?.total || 0),
       activeTraders,
       totalPayouts,
       totalPayoutAmount: (totalPayoutAmount[0]?.total || 0),
@@ -1100,8 +1110,238 @@ app.get('/api/admin/stats', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin: get all users (with pagination)
-app.get('/api/admin/users', async (req, res) => {
+// Admin: get all transactions/payments
+app.get('/api/admin/payments', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+    const statusFilter = req.query.status as string;
+    
+    let filter: any = { type: { $in: ['challenge_purchase', 'deposit'] } };
+    if (statusFilter && statusFilter !== 'all') {
+      filter.status = statusFilter;
+    }
+    
+    const payments = await Transaction.find(filter).skip(skip).limit(limit).sort({ time: -1 });
+    const total = await Transaction.countDocuments(filter);
+    
+    // Enrich with user data
+    const enriched = await Promise.all(payments.map(async (p: any) => {
+      const user = await User.findOne({ uid: p.userId });
+      return {
+        ...p.toObject(),
+        userName: user?.name || 'N/A',
+        userEmail: user?.email || 'N/A',
+      };
+    }));
+    
+    res.json({
+      payments: enriched,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: approve payment and update user balance
+app.post('/api/admin/payments/:id/approve', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const payment = await Transaction.findById(req.params.id);
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+    if (payment.status !== 'pending') return res.status(400).json({ error: 'Payment already processed' });
+    
+    const user = await User.findOne({ uid: payment.userId });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    // Update payment status
+    payment.status = 'approved';
+    await payment.save();
+    
+    // Update user balance
+    const amountToAdd = payment.amount || payment.capital || 0;
+    const balanceBefore = user.balance || 0;
+    user.balance = (user.balance || 0) + amountToAdd;
+    await user.save();
+    
+    // Log to FundHistory
+    await new (require('./db.js').FundHistory)({
+      userId: payment.userId,
+      type: 'approve',
+      amount: amountToAdd,
+      balanceBefore,
+      balanceAfter: user.balance,
+      reason: 'Payment approved by admin',
+      referenceId: payment._id,
+      adminId: uid,
+    }).save();
+    
+    // Log to AdminAction
+    await new (require('./db.js').AdminAction)({
+      adminId: uid,
+      action: 'approve_payment',
+      targetType: 'Transaction',
+      targetId: payment._id,
+      details: { userId: payment.userId, amount: amountToAdd },
+    }).save();
+    
+    res.json({ success: true, payment, newBalance: user.balance });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: reject payment
+app.post('/api/admin/payments/:id/reject', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const payment = await Transaction.findById(req.params.id);
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+    if (payment.status !== 'pending') return res.status(400).json({ error: 'Payment already processed' });
+    
+    payment.status = 'rejected';
+    await payment.save();
+    
+    // Log to AdminAction
+    await new (require('./db.js').AdminAction)({
+      adminId: uid,
+      action: 'reject_payment',
+      targetType: 'Transaction',
+      targetId: payment._id,
+      details: { userId: payment.userId, reason: req.body.reason },
+    }).save();
+    
+    res.json({ success: true, payment });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: get all payouts
+app.get('/api/admin/payouts-list', async (req, res) => {
+  try {
+    const uid = (req.query.uid as string) || (req.body && req.body.uid);
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+    const statusFilter = req.query.status as string;
+    
+    let filter: any = {};
+    if (statusFilter && statusFilter !== 'all') {
+      filter.status = statusFilter;
+    }
+    
+    const payouts = await Payout.find(filter).skip(skip).limit(limit).sort({ requestedAt: -1 });
+    const total = await Payout.countDocuments(filter);
+    
+    // Enrich with user data
+    const enriched = await Promise.all(payouts.map(async (p: any) => {
+      const partner = await User.findOne({ uid: p.partnerId });
+      return {
+        ...p.toObject(),
+        partnerName: partner?.name || 'N/A',
+        partnerEmail: partner?.email || 'N/A',
+      };
+    }));
+    
+    res.json({
+      payouts: enriched,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: approve payout
+app.post('/api/admin/payouts/:id/approve-payout', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const payout = await Payout.findById(req.params.id);
+    if (!payout) return res.status(404).json({ error: 'Payout not found' });
+    if (payout.status !== 'pending') return res.status(400).json({ error: 'Payout already processed' });
+    
+    payout.status = 'processing';
+    await payout.save();
+    
+    // Log to AdminAction
+    await new (require('./db.js').AdminAction)({
+      adminId: uid,
+      action: 'approve_payout',
+      targetType: 'Payout',
+      targetId: payout._id,
+      details: { partnerId: payout.partnerId, amount: payout.amount },
+    }).save();
+    
+    res.json({ success: true, payout });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: mark payout as paid
+app.post('/api/admin/payouts/:id/mark-paid-new', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const payout = await Payout.findById(req.params.id);
+    if (!payout) return res.status(404).json({ error: 'Payout not found' });
+    
+    payout.status = 'paid';
+    payout.processedAt = new Date();
+    payout.transactionRef = req.body.transactionRef || payout.transactionRef;
+    await payout.save();
+    
+    // Log to AdminAction
+    await new (require('./db.js').AdminAction)({
+      adminId: uid,
+      action: 'mark_payout_paid',
+      targetType: 'Payout',
+      targetId: payout._id,
+      details: { partnerId: payout.partnerId, amount: payout.amount, transactionRef: payout.transactionRef },
+    }).save();
+    
+    res.json({ success: true, payout });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: reject payout
+app.post('/api/admin/payouts/:id/reject-payout', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const payout = await Payout.findById(req.params.id);
+    if (!payout) return res.status(404).json({ error: 'Payout not found' });
+    
+    payout.status = 'rejected';
+    payout.processedAt = new Date();
+    payout.adminNote = req.body.reason || '';
+    await payout.save();
+    
+    // Log to AdminAction
+    await new (require('./db.js').AdminAction)({
+      adminId: uid,
+      action: 'reject_payout',
+      targetType: 'Payout',
+      targetId: payout._id,
+      details: { partnerId: payout.partnerId, reason: req.body.reason },
+    }).save();
+    
+    res.json({ success: true, payout });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
   try {
     const uid = (req.query.uid as string) || (req.body && req.body.uid);
     const currentUser = uid ? await User.findOne({ uid }) : null;
