@@ -1342,6 +1342,9 @@ app.post('/api/admin/payouts/:id/reject-payout', async (req, res) => {
     res.json({ success: true, payout });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
+
+// Admin: get all users (with pagination)
+app.get('/api/admin/users', async (req, res) => {
   try {
     const uid = (req.query.uid as string) || (req.body && req.body.uid);
     const currentUser = uid ? await User.findOne({ uid }) : null;
