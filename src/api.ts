@@ -284,6 +284,20 @@ export const api = {
   async rejectPayout(id: string, uid: string, adminNote?: string) {
     return safeFetch(`${API_BASE}/admin/payouts/${id}/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid, adminNote }) });
   },
+  async editUserFund(userId: string, uid: string, newBalance: number, reason?: string) {
+    return safeFetch(`${API_BASE}/admin/users/${userId}/edit-fund`, { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ uid, newBalance, reason })
+    });
+  },
+  async deleteUserPermanent(userId: string, uid: string, reason?: string) {
+    return safeFetch(`${API_BASE}/admin/users/${userId}/delete`, { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ uid, reason, confirmPassword: 'DELETE_CONFIRM' })
+    });
+  },
   async adminLogin(mobile: string, password: string) {
     return safeFetch(`${API_BASE}/auth/admin-login`, {
       method: 'POST',

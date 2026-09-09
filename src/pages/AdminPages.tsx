@@ -120,6 +120,12 @@ export const AdminClients: React.FC = () => {
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'funded' | 'no-fund'>('all');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [editingClient, setEditingClient] = useState<string | null>(null);
+  const [editBalance, setEditBalance] = useState<number>(0);
+  const [editReason, setEditReason] = useState('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
 
   useEffect(() => {
     fetchClients();
@@ -187,6 +193,75 @@ export const AdminClients: React.FC = () => {
       case 'admin': return 'bg-primary/10 text-primary';
       case 'partner': return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400';
       default: return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400';
+    }
+  };
+
+  const handleEditFund = async (clientId: string, client: ClientData) => {
+    if (!editBalance && editBalance !== 0) {
+      alert('Please enter a balance amount');
+      return;
+    }
+    if (!window.confirm(`Change ${client.email}'s balance from ₹${client.balance} to ₹${editBalance}?`)) return;
+    
+    try {
+      setActionLoading(clientId);
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      const response = await fetch(`/api/admin/users/${clientId}/edit-fund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          uid: user.uid, 
+          newBalance: editBalance, 
+          reason: editReason || 'Admin adjustment'
+        }),
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to update balance');
+      }
+      
+      setEditingClient(null);
+      setEditBalance(0);
+      setEditReason('');
+      await fetchClients();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update user balance');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async (clientId: string, client: ClientData) => {
+    if (!window.confirm(`Are you SURE you want to permanently delete ${client.email}? This cannot be undone.`)) return;
+    
+    try {
+      setActionLoading(clientId);
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      const response = await fetch(`/api/admin/users/${clientId}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          uid: user.uid, 
+          reason: deleteReason || 'Admin deletion',
+          confirmPassword: 'DELETE_CONFIRM'
+        }),
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete user');
+      }
+      
+      setShowDeleteConfirm(null);
+      setDeleteReason('');
+      await fetchClients();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete user');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -351,17 +426,74 @@ export const AdminClients: React.FC = () => {
                             <div className="md:col-span-3">
                               <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-2">Quick Actions</p>
                               <div className="flex gap-2">
-                                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
-                                  <Eye size={14} />
-                                  View Details
+                                <button 
+                                  onClick={() => {
+                                    setEditingClient(client._id);
+                                    setEditBalance(client.balance);
+                                    setEditReason('');
+                                  }}
+                                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                >
+                                  <DollarSign size={14} />
+                                  Edit Balance
                                 </button>
-                                {client.accountStatus !== 'suspended' && (
-                                  <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors">
-                                    <Ban size={14} />
-                                    Suspend
-                                  </button>
-                                )}
+                                <button 
+                                  onClick={() => {
+                                    if (client.role === 'admin') {
+                                      alert('Cannot delete admin users');
+                                      return;
+                                    }
+                                    setShowDeleteConfirm(client._id);
+                                    setDeleteReason('');
+                                  }}
+                                  disabled={client.role === 'admin'}
+                                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  <Ban size={14} />
+                                  Delete Permanently
+                                </button>
                               </div>
+
+                              {/* Edit Balance Form */}
+                              {editingClient === client._id && (
+                                <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-900/50">
+                                  <h4 className="font-bold text-blue-900 dark:text-blue-200 mb-3">Edit Balance</h4>
+                                  <div className="space-y-3">
+                                    <div>
+                                      <label className="block text-xs font-bold text-blue-900 dark:text-blue-200 mb-1">Current Balance</label>
+                                      <input type="text" disabled value={`₹${client.balance.toLocaleString('en-IN')}`} className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-bold text-blue-900 dark:text-blue-200 mb-1">New Balance</label>
+                                      <input type="number" value={editBalance} onChange={(e) => setEditBalance(parseFloat(e.target.value) || 0)} placeholder="Enter new balance" className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-white" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-bold text-blue-900 dark:text-blue-200 mb-1">Reason (Optional)</label>
+                                      <input type="text" value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="e.g., Deposit, Refund" className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-900 dark:text-white" />
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button onClick={() => handleEditFund(client._id, client)} disabled={actionLoading === client._id} className="flex-1 px-3 py-2 text-sm font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 transition-colors">{actionLoading === client._id ? 'Saving...' : 'Save Changes'}</button>
+                                      <button onClick={() => setEditingClient(null)} className="flex-1 px-3 py-2 text-sm font-bold bg-slate-300 dark:bg-slate-700 text-slate-900 dark:text-white rounded hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors">Cancel</button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Delete Confirmation */}
+                              {showDeleteConfirm === client._id && (
+                                <div className="mt-4 bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-900/50">
+                                  <h4 className="font-bold text-red-900 dark:text-red-200 mb-2">Confirm Permanent Deletion</h4>
+                                  <p className="text-sm text-red-800 dark:text-red-300 mb-3">You are about to permanently delete <strong>{client.email}</strong>. This cannot be undone.</p>
+                                  <div className="mb-3">
+                                    <label className="block text-xs font-bold text-red-900 dark:text-red-200 mb-1">Deletion Reason (Optional)</label>
+                                    <input type="text" value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} placeholder="e.g., Fraudulent, User request" className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900/50 rounded text-slate-900 dark:text-white" />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleDeleteUser(client._id, client)} disabled={actionLoading === client._id} className="flex-1 px-3 py-2 text-sm font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 transition-colors">{actionLoading === client._id ? 'Deleting...' : 'Yes, Delete'}</button>
+                                    <button onClick={() => setShowDeleteConfirm(null)} className="flex-1 px-3 py-2 text-sm font-bold bg-slate-300 dark:bg-slate-700 text-slate-900 dark:text-white rounded hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors">Cancel</button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>

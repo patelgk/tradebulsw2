@@ -1434,6 +1434,122 @@ app.post('/api/admin/users', async (req, res) => {
   }
 });
 
+// Admin: edit user fund/balance
+app.post('/api/admin/users/:userId/edit-fund', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const userId = req.params.userId;
+    const { newBalance, reason } = req.body;
+    
+    if (typeof newBalance !== 'number' || newBalance < 0) {
+      return res.status(400).json({ error: 'Invalid balance amount' });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const oldBalance = user.balance;
+    const balanceChange = newBalance - oldBalance;
+    
+    // Update user balance
+    user.balance = newBalance;
+    await user.save();
+    
+    // Log to FundHistory
+    await FundHistory.create({
+      userId: user.uid,
+      type: 'adjust',
+      amount: balanceChange,
+      balanceBefore: oldBalance,
+      balanceAfter: newBalance,
+      reason: reason || 'Admin adjustment',
+      adminId: uid,
+      createdAt: new Date(),
+    });
+    
+    // Log to AdminAction
+    await AdminAction.create({
+      adminId: uid,
+      action: 'edit_fund',
+      targetType: 'User',
+      targetId: user._id,
+      details: { userId: user.uid, userEmail: user.email, oldBalance, newBalance, balanceChange, reason },
+    });
+    
+    console.log(`[Admin Edit Fund] Admin ${uid} changed user ${user.email} balance from ${oldBalance} to ${newBalance}`);
+    
+    res.json({ 
+      success: true, 
+      user: { uid: user.uid, email: user.email, balance: user.balance },
+      change: { oldBalance, newBalance, difference: balanceChange }
+    });
+  } catch (err: any) { 
+    console.error('[Admin Edit Fund] ERROR:', err.message);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+// Admin: delete user permanently
+app.post('/api/admin/users/:userId/delete', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const userId = req.params.userId;
+    const { reason, confirmPassword } = req.body;
+    
+    if (confirmPassword !== 'DELETE_CONFIRM') {
+      return res.status(400).json({ error: 'Deletion not confirmed. Pass confirmPassword="DELETE_CONFIRM"' });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    if (user.role === 'admin') {
+      return res.status(403).json({ error: 'Cannot delete admin users' });
+    }
+    
+    const deletedUserInfo = {
+      uid: user.uid,
+      email: user.email,
+      name: user.name,
+      balance: user.balance,
+    };
+    
+    // Delete user
+    await User.findByIdAndDelete(userId);
+    
+    // Delete related data
+    await Trade.deleteMany({ userId: user.uid });
+    await FundHistory.deleteMany({ userId: user.uid });
+    await Transaction.deleteMany({ userId: user.uid });
+    
+    // Log deletion to AdminAction
+    await AdminAction.create({
+      adminId: uid,
+      action: 'delete_user',
+      targetType: 'User',
+      targetId: userId,
+      details: { ...deletedUserInfo, reason },
+    });
+    
+    console.log(`[Admin Delete User] Admin ${uid} deleted user ${user.email} (${user.uid})`);
+    
+    res.json({ 
+      success: true, 
+      message: 'User deleted permanently',
+      deletedUser: deletedUserInfo
+    });
+  } catch (err: any) { 
+    console.error('[Admin Delete User] ERROR:', err.message);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
 // Admin: get all transactions (with pagination)
 app.get('/api/admin/transactions', async (req, res) => {
   try {
