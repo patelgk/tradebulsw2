@@ -130,6 +130,9 @@ const transactionSchema = new mongoose.Schema({
   challengeName: String,
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   time: { type: Date, default: Date.now },
+  approvedAt: Date,
+  rejectedAt: Date,
+  rejectionReason: String,
 });
 
 const challengePurchaseSchema = new mongoose.Schema({

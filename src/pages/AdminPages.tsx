@@ -513,182 +513,522 @@ export const AdminClients: React.FC = () => {
   );
 };
 
+// Payment interface
+interface PaymentData {
+  _id: string;
+  userId: string;
+  type: string;
+  amount: number;
+  paymentMethod: string;
+  paymentReference: string;
+  status: string;
+  time: string;
+  userName: string;
+  userEmail: string;
+  invoiceNumber?: string;
+  challengeName?: string;
+  planName?: string;
+}
+
+interface StatusCounts {
+  all: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+}
+
 export const AdminPayments: React.FC = () => {
-  const [payments, setPayments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<PaymentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [statusCounts, setStatusCounts] = useState<StatusCounts>({ all: 0, pending: 0, approved: 0, rejected: 0 });
+  
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentData | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showApproveConfirm, setShowApproveConfirm] = useState<string | null>(null);
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
-
   useEffect(() => {
     fetchPayments();
-  }, [filterStatus]);
+  }, [filterStatus, page, searchTerm]);
 
   const fetchPayments = async () => {
     try {
       setLoading(true);
       setError('');
       const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
       const response = await fetch(`/api/admin/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: user.uid, status: filterStatus }),
+        body: JSON.stringify({ uid: user.uid, status: filterStatus, page, limit: 20, search: searchTerm }),
         credentials: 'include',
       });
-      if (!response.ok) throw new Error('Failed to fetch payments');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to fetch payments');
+      }
+      
       const data = await response.json();
       setPayments(data.payments || []);
+      setTotalPages(data.pagination?.pages || 1);
+      setStatusCounts(data.statusCounts || { all: 0, pending: 0, approved: 0, rejected: 0 });
     } catch (err: any) {
-      setError(err.message);
+      console.error('Error fetching payments:', err);
+      setError(err.message || 'Failed to load payments');
     } finally {
       setLoading(false);
     }
   };
 
   const handleApprove = async (paymentId: string) => {
-    if (!window.confirm('Approve this payment?')) return;
+    if (!window.confirm('Are you sure you want to approve this payment? The amount will be added to the user\'s balance.')) return;
+    
     try {
       setActionLoading(paymentId);
+      setError('');
       const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
       const response = await fetch(`/api/admin/payments/${paymentId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid: user.uid }),
         credentials: 'include',
       });
-      if (!response.ok) throw new Error('Failed to approve payment');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to approve payment');
+      }
+      
+      const result = await response.json();
+      console.log('Payment approved:', result);
+      
+      // Close modal and refresh
+      setShowDetailsModal(false);
+      setShowApproveConfirm(null);
       await fetchPayments();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to approve payment');
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleReject = async (paymentId: string) => {
+    if (!rejectReason.trim()) {
+      setError('Please provide a rejection reason');
+      return;
+    }
+    
+    if (!window.confirm('Are you sure you want to reject this payment? The user will NOT receive the funds.')) return;
+    
     try {
       setActionLoading(paymentId);
+      setError('');
       const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
       const response = await fetch(`/api/admin/payments/${paymentId}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid: user.uid, reason: rejectReason }),
         credentials: 'include',
       });
-      if (!response.ok) throw new Error('Failed to reject payment');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to reject payment');
+      }
+      
+      const result = await response.json();
+      console.log('Payment rejected:', result);
+      
+      // Close modal and refresh
       setShowRejectModal(null);
       setRejectReason('');
+      setShowDetailsModal(false);
       await fetchPayments();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to reject payment');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const stats = {
-    pending: payments.filter(p => p.status === 'pending').length,
-    approved: payments.filter(p => p.status === 'approved').length,
-    rejected: payments.filter(p => p.status === 'rejected').length,
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'approved': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+      case 'rejected': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+      default: return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400';
+    }
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'challenge_purchase': return 'Challenge Purchase';
+      case 'deposit': return 'Deposit';
+      default: return type;
+    }
   };
 
   if (loading && payments.length === 0) {
-    return <div className="flex justify-center p-8"><div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" /></div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <CreditCard size={28} className="text-primary" />
             Payments & Deposits
           </h1>
-          <p className="text-slate-600 dark:text-slate-400 mt-1">Manage user payment approvals</p>
+          <p className="text-slate-600 dark:text-slate-400 mt-1">Manage user payment requests and approvals</p>
         </div>
-        <button onClick={fetchPayments} disabled={loading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50">
-          <RefreshCw size={16} className={`inline ${loading ? 'animate-spin' : ''}`} /> Refresh
+        <button 
+          onClick={() => fetchPayments()} 
+          disabled={loading} 
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors font-medium"
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          Refresh
         </button>
       </div>
 
-      {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-lg text-red-700 dark:text-red-400">{error}</div>}
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-red-900 dark:text-red-200">Error</p>
+            <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+          </div>
+        </div>
+      )}
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg"><div className="text-2xl font-bold text-blue-600">{stats.pending}</div><div className="text-sm text-blue-700 dark:text-blue-300">Pending</div></div>
-        <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg"><div className="text-2xl font-bold text-green-600">{stats.approved}</div><div className="text-sm text-green-700 dark:text-green-300">Approved</div></div>
-        <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg"><div className="text-2xl font-bold text-red-600">{stats.rejected}</div><div className="text-sm text-red-700 dark:text-red-300">Rejected</div></div>
+      {/* Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+          <div className="text-sm font-medium text-slate-600 dark:text-slate-400">All</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-white mt-2">{statusCounts.all}</div>
+        </div>
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-900/50">
+          <div className="text-sm font-medium text-blue-600 dark:text-blue-400">Pending</div>
+          <div className="text-2xl font-bold text-blue-700 dark:text-blue-300 mt-2">{statusCounts.pending}</div>
+        </div>
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-900/50">
+          <div className="text-sm font-medium text-green-600 dark:text-green-400">Approved</div>
+          <div className="text-2xl font-bold text-green-700 dark:text-green-300 mt-2">{statusCounts.approved}</div>
+        </div>
+        <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-900/50">
+          <div className="text-sm font-medium text-red-600 dark:text-red-400">Rejected</div>
+          <div className="text-2xl font-bold text-red-700 dark:text-red-300 mt-2">{statusCounts.rejected}</div>
+        </div>
       </div>
 
-      <div className="flex gap-2">
+      {/* Search Bar */}
+      <div className="flex gap-3">
+        <input
+          type="text"
+          placeholder="Search by name, email, or reference..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1);
+          }}
+          className="flex-1 px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+      </div>
+
+      {/* Filter Buttons */}
+      <div className="flex gap-2 flex-wrap">
         {(['all', 'pending', 'approved', 'rejected'] as const).map(status => (
-          <button key={status} onClick={() => setFilterStatus(status)} className={`px-4 py-2 rounded-lg font-medium text-sm ${filterStatus === status ? 'bg-primary text-white' : 'bg-slate-200 dark:bg-slate-800'}`}>
+          <button
+            key={status}
+            onClick={() => {
+              setFilterStatus(status);
+              setPage(1);
+            }}
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+              filterStatus === status
+                ? 'bg-primary text-white'
+                : 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
             {status.charAt(0).toUpperCase() + status.slice(1)}
           </button>
         ))}
       </div>
 
+      {/* Payments Table */}
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-800">
-            <tr className="border-b">
-              <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">Amount</th>
-              <th className="px-4 py-3 text-left">Date</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.map(payment => (
-              <React.Fragment key={payment._id}>
-                <tr className="border-b hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="px-4 py-3">{payment.userEmail}</td>
-                  <td className="px-4 py-3 font-semibold">₹{(payment.amount || 0).toLocaleString('en-IN')}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{new Date(payment.time).toLocaleDateString()}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${payment.status === 'pending' ? 'bg-blue-100 text-blue-700' : payment.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {payment.status.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {payment.status === 'pending' && (
-                      <div className="flex gap-2 justify-center">
-                        <button onClick={() => handleApprove(payment._id)} disabled={actionLoading === payment._id} className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50">Approve</button>
-                        <button onClick={() => setShowRejectModal(payment._id)} disabled={actionLoading === payment._id} className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:opacity-50">Reject</button>
-                      </div>
-                    )}
-                    <button onClick={() => setExpandedId(expandedId === payment._id ? null : payment._id)} className="text-primary hover:underline text-xs">Details</button>
-                  </td>
+        {payments.length === 0 ? (
+          <div className="p-8 text-center">
+            <CreditCard size={32} className="mx-auto text-slate-300 dark:text-slate-700 mb-3" />
+            <p className="text-slate-600 dark:text-slate-400">No payments found</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Amount</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Reference</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Status</th>
+                  <th className="px-6 py-3 text-center text-xs font-bold text-slate-900 dark:text-white uppercase">Actions</th>
                 </tr>
-                {expandedId === payment._id && (
-                  <tr className="bg-slate-50 dark:bg-slate-800/50 border-b">
-                    <td colSpan={5} className="px-4 py-4">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><span className="font-semibold">Name:</span> {payment.userName}</div>
-                        <div><span className="font-semibold">Type:</span> {payment.type}</div>
-                        <div><span className="font-semibold">Reference:</span> {payment.paymentReference || 'N/A'}</div>
-                        <div><span className="font-semibold">Plan:</span> {payment.planName || 'N/A'}</div>
+              </thead>
+              <tbody>
+                {payments.map(payment => (
+                  <tr key={payment._id} className="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-6 py-4 text-sm font-mono text-slate-600 dark:text-slate-300">{payment.userEmail}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{payment.userName}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{getTypeLabel(payment.type)}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">₹{(payment.amount).toLocaleString('en-IN')}</td>
+                    <td className="px-6 py-4 text-sm font-mono text-slate-600 dark:text-slate-400">{payment.paymentReference}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{new Date(payment.time).toLocaleDateString('en-IN')}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold capitalize ${getStatusColor(payment.status)}`}>
+                        {payment.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedPayment(payment);
+                            setShowDetailsModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        >
+                          <Eye size={14} />
+                          View
+                        </button>
+                        {payment.status === 'pending' && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setSelectedPayment(payment);
+                                setShowApproveConfirm(payment._id);
+                              }}
+                              disabled={actionLoading === payment._id}
+                              className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors"
+                            >
+                              ✓ Approve
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedPayment(payment);
+                                setShowRejectModal(true);
+                              }}
+                              disabled={actionLoading === payment._id}
+                              className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors"
+                            >
+                              ✕ Reject
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {showRejectModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-lg max-w-md w-full">
-            <h3 className="text-lg font-bold mb-4">Reject Payment</h3>
-            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason for rejection..." className="w-full p-2 border rounded-lg dark:bg-slate-800 dark:text-white mb-4" />
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => { setShowRejectModal(null); setRejectReason(''); }} className="px-4 py-2 bg-slate-300 dark:bg-slate-700 rounded-lg">Cancel</button>
-              <button onClick={() => handleReject(showRejectModal)} disabled={actionLoading === showRejectModal} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50">Reject</button>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-600 dark:text-slate-400">
+            Page {page} of {totalPages}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Details Modal */}
+      {showDetailsModal && selectedPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
+            <div className="sticky top-0 bg-slate-50 dark:bg-slate-800 p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Payment Details</h2>
+              <button onClick={() => setShowDetailsModal(false)} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">✕</button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* User Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">User Email</p>
+                  <p className="font-mono text-sm text-slate-900 dark:text-white">{selectedPayment.userEmail}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">User Name</p>
+                  <p className="text-sm text-slate-900 dark:text-white">{selectedPayment.userName}</p>
+                </div>
+              </div>
+
+              {/* Payment Info */}
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
+                <div>
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Amount</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">₹{(selectedPayment.amount).toLocaleString('en-IN')}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Payment Type</p>
+                  <p className="text-sm text-slate-900 dark:text-white">{getTypeLabel(selectedPayment.type)}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Reference/UTR</p>
+                  <p className="text-sm font-mono text-slate-900 dark:text-white">{selectedPayment.paymentReference}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Status</p>
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold capitalize ${getStatusColor(selectedPayment.status)}`}>
+                    {selectedPayment.status}
+                  </span>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Date</p>
+                  <p className="text-sm text-slate-900 dark:text-white">{new Date(selectedPayment.time).toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+
+              {selectedPayment.challengeName && (
+                <div>
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Challenge</p>
+                  <p className="text-sm text-slate-900 dark:text-white">{selectedPayment.challengeName}</p>
+                </div>
+              )}
+
+              {selectedPayment.invoiceNumber && (
+                <div>
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">Invoice</p>
+                  <p className="text-sm font-mono text-slate-900 dark:text-white">{selectedPayment.invoiceNumber}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            {selectedPayment.status === 'pending' && (
+              <div className="bg-slate-50 dark:bg-slate-800 p-6 border-t border-slate-200 dark:border-slate-700 flex gap-3 justify-end">
+                <button onClick={() => setShowDetailsModal(false)} className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 font-medium transition-colors">Close</button>
+                <button onClick={() => {
+                  setShowApproveConfirm(selectedPayment._id);
+                }} disabled={actionLoading === selectedPayment._id} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50 transition-colors">Approve</button>
+                <button onClick={() => {
+                  setShowRejectModal(true);
+                }} disabled={actionLoading === selectedPayment._id} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50 transition-colors">Reject</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Approve Confirmation Dialog */}
+      {showApproveConfirm && selectedPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Confirm Approval</h3>
+            <p className="text-slate-600 dark:text-slate-400 mb-4">
+              You are about to approve this payment for <strong>{selectedPayment.userEmail}</strong>
+            </p>
+            <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 mb-6">
+              <p className="text-sm text-slate-600 dark:text-slate-400">Amount to add to balance:</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">₹{(selectedPayment.amount).toLocaleString('en-IN')}</p>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              This action will credit the amount to the user's account and cannot be undone. Make sure all details are correct.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowApproveConfirm(null)}
+                className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleApprove(selectedPayment._id)}
+                disabled={actionLoading === selectedPayment._id}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50 transition-colors flex items-center gap-2"
+              >
+                {actionLoading === selectedPayment._id ? '...' : '✓ Approve Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Dialog */}
+      {showRejectModal && selectedPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Reject Payment</h3>
+            <p className="text-slate-600 dark:text-slate-400 mb-4">
+              Rejecting payment for <strong>{selectedPayment.userEmail}</strong>
+            </p>
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 mb-4 border border-red-200 dark:border-red-900/50">
+              <p className="text-sm text-red-700 dark:text-red-300">The user will NOT receive these funds (₹{(selectedPayment.amount).toLocaleString('en-IN')}). Please provide a reason for rejection.</p>
+            </div>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Enter reason for rejection (required)..."
+              className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary mb-6 resize-none"
+              rows={4}
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowRejectModal(false);
+                  setRejectReason('');
+                }}
+                className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleReject(selectedPayment._id)}
+                disabled={actionLoading === selectedPayment._id || !rejectReason.trim()}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50 transition-colors flex items-center gap-2"
+              >
+                {actionLoading === selectedPayment._id ? '...' : '✕ Reject Payment'}
+              </button>
             </div>
           </div>
         </div>

@@ -1159,33 +1159,84 @@ app.post('/api/admin/payments', async (req, res) => {
     if (currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
     
     const page = parseInt(req.body?.page || req.query.page as string) || 1;
-    const limit = parseInt(req.body?.limit || req.query.limit as string) || 20;
+    const limit = parseInt(req.body?.limit || req.query.limit as string) || 50;
     const skip = (page - 1) * limit;
     const statusFilter = req.body?.status || req.query.status as string;
+    const searchTerm = req.body?.search as string;
     
     let filter: any = { type: { $in: ['challenge_purchase', 'deposit'] } };
     if (statusFilter && statusFilter !== 'all') {
       filter.status = statusFilter;
     }
     
-    const payments = await Transaction.find(filter).skip(skip).limit(limit).sort({ time: -1 });
-    const total = await Transaction.countDocuments(filter);
+    // If search term provided, need to search by user name/email or reference
+    let payments = [];
+    let total = 0;
+    
+    if (searchTerm && searchTerm.trim()) {
+      // Find matching users first
+      const users = await User.find({
+        $or: [
+          { name: { $regex: searchTerm, $options: 'i' } },
+          { email: { $regex: searchTerm, $options: 'i' } }
+        ]
+      }).select('uid');
+      
+      const userIds = users.map(u => u.uid);
+      const searchFilter = {
+        ...filter,
+        $or: [
+          { userId: { $in: userIds } },
+          { paymentReference: { $regex: searchTerm, $options: 'i' } },
+          { invoiceNumber: { $regex: searchTerm, $options: 'i' } }
+        ]
+      };
+      
+      payments = await Transaction.find(searchFilter).skip(skip).limit(limit).sort({ time: -1 });
+      total = await Transaction.countDocuments(searchFilter);
+    } else {
+      payments = await Transaction.find(filter).skip(skip).limit(limit).sort({ time: -1 });
+      total = await Transaction.countDocuments(filter);
+    }
     
     // Enrich with user data
     const enriched = await Promise.all(payments.map(async (p: any) => {
       const user = await User.findOne({ uid: p.userId });
       return {
-        ...p.toObject(),
+        _id: p._id,
+        userId: p.userId,
+        type: p.type,
+        amount: p.amount || 0,
+        paymentMethod: p.paymentMethod || 'Card/UPI',
+        paymentReference: p.paymentReference || p.invoiceNumber || 'N/A',
+        status: p.status,
+        time: p.time,
         userName: user?.name || 'N/A',
         userEmail: user?.email || 'N/A',
+        invoiceNumber: p.invoiceNumber,
+        challengeName: p.challengeName,
+        planName: p.planName,
       };
     }));
     
+    // Count by status
+    const allPayments = await Transaction.find(filter);
+    const statusCounts = {
+      all: allPayments.length,
+      pending: allPayments.filter(p => p.status === 'pending').length,
+      approved: allPayments.filter(p => p.status === 'approved').length,
+      rejected: allPayments.filter(p => p.status === 'rejected').length,
+    };
+    
     res.json({
       payments: enriched,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      statusCounts
     });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { 
+    console.error('[Admin Payments] ERROR:', err.message);
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 // Admin: approve payment and update user balance
@@ -1195,73 +1246,137 @@ app.post('/api/admin/payments/:id/approve', async (req, res) => {
     const currentUser = uid ? await User.findOne({ uid }) : null;
     if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
     
-    const payment = await Transaction.findById(req.params.id);
-    if (!payment) return res.status(404).json({ error: 'Payment not found' });
-    if (payment.status !== 'pending') return res.status(400).json({ error: 'Payment already processed' });
+    const paymentId = req.params.id;
+    console.log(`[Admin Approve] Approving payment: ${paymentId} by admin: ${uid}`);
+    
+    const payment = await Transaction.findById(paymentId);
+    if (!payment) {
+      console.log(`[Admin Approve] Payment not found: ${paymentId}`);
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+    
+    if (payment.status !== 'pending') {
+      console.log(`[Admin Approve] Payment already processed: ${paymentId} (status: ${payment.status})`);
+      return res.status(400).json({ error: 'Payment already processed', currentStatus: payment.status });
+    }
     
     const user = await User.findOne({ uid: payment.userId });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      console.log(`[Admin Approve] User not found: ${payment.userId}`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const amountToAdd = payment.amount || payment.capital || 0;
+    console.log(`[Admin Approve] Adding ₹${amountToAdd} to user ${user.email}, old balance: ₹${user.balance}`);
     
     // Update payment status
     payment.status = 'approved';
+    payment.approvedAt = new Date();
     await payment.save();
     
     // Update user balance
-    const amountToAdd = payment.amount || payment.capital || 0;
     const balanceBefore = user.balance || 0;
-    user.balance = (user.balance || 0) + amountToAdd;
+    user.balance = balanceBefore + amountToAdd;
     await user.save();
     
+    console.log(`[Admin Approve] New balance: ₹${user.balance}`);
+    
     // Log to FundHistory
-    await new (require('./db.js').FundHistory)({
+    await FundHistory.create({
       userId: payment.userId,
-      type: 'approve',
+      type: 'credit',
       amount: amountToAdd,
       balanceBefore,
       balanceAfter: user.balance,
-      reason: 'Payment approved by admin',
-      referenceId: payment._id,
+      reason: `Payment approved: ${payment.type}`,
+      referenceId: payment._id.toString(),
       adminId: uid,
-    }).save();
+      createdAt: new Date(),
+    });
     
     // Log to AdminAction
-    await new (require('./db.js').AdminAction)({
+    await AdminAction.create({
       adminId: uid,
       action: 'approve_payment',
       targetType: 'Transaction',
-      targetId: payment._id,
-      details: { userId: payment.userId, amount: amountToAdd },
-    }).save();
+      targetId: payment._id.toString(),
+      details: { userId: payment.userId, userEmail: user.email, amount: amountToAdd, paymentId },
+      createdAt: new Date(),
+    });
     
-    res.json({ success: true, payment, newBalance: user.balance });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+    console.log(`[Admin Approve] SUCCESS - Payment approved, balance updated, logs created`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Payment approved and balance updated',
+      payment: {
+        _id: payment._id,
+        status: payment.status,
+        amount: amountToAdd
+      },
+      userNewBalance: user.balance
+    });
+  } catch (err: any) { 
+    console.error('[Admin Approve] ERROR:', err.message);
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 // Admin: reject payment
 app.post('/api/admin/payments/:id/reject', async (req, res) => {
   try {
     const uid = req.body.uid;
+    const reason = req.body.reason || 'No reason provided';
     const currentUser = uid ? await User.findOne({ uid }) : null;
     if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
     
-    const payment = await Transaction.findById(req.params.id);
-    if (!payment) return res.status(404).json({ error: 'Payment not found' });
-    if (payment.status !== 'pending') return res.status(400).json({ error: 'Payment already processed' });
+    const paymentId = req.params.id;
+    console.log(`[Admin Reject] Rejecting payment: ${paymentId} by admin: ${uid}`);
     
+    const payment = await Transaction.findById(paymentId);
+    if (!payment) {
+      console.log(`[Admin Reject] Payment not found: ${paymentId}`);
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+    
+    if (payment.status !== 'pending') {
+      console.log(`[Admin Reject] Payment already processed: ${paymentId} (status: ${payment.status})`);
+      return res.status(400).json({ error: 'Payment already processed', currentStatus: payment.status });
+    }
+    
+    // Update payment status
     payment.status = 'rejected';
+    payment.rejectionReason = reason;
+    payment.rejectedAt = new Date();
     await payment.save();
     
+    console.log(`[Admin Reject] Payment rejected with reason: ${reason}`);
+    
     // Log to AdminAction
-    await new (require('./db.js').AdminAction)({
+    await AdminAction.create({
       adminId: uid,
       action: 'reject_payment',
       targetType: 'Transaction',
-      targetId: payment._id,
-      details: { userId: payment.userId, reason: req.body.reason },
-    }).save();
+      targetId: payment._id.toString(),
+      details: { userId: payment.userId, paymentId, reason },
+      createdAt: new Date(),
+    });
     
-    res.json({ success: true, payment });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+    console.log(`[Admin Reject] SUCCESS - Payment rejected, reason logged`);
+    
+    res.json({ 
+      success: true,
+      message: 'Payment rejected',
+      payment: {
+        _id: payment._id,
+        status: payment.status,
+        reason: reason
+      }
+    });
+  } catch (err: any) { 
+    console.error('[Admin Reject] ERROR:', err.message);
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 // Admin: get all payouts
@@ -1475,7 +1590,7 @@ app.post('/api/admin/users/:userId/edit-fund', async (req, res) => {
       adminId: uid,
       action: 'edit_fund',
       targetType: 'User',
-      targetId: user._id,
+      targetId: user._id.toString(),
       details: { userId: user.uid, userEmail: user.email, oldBalance, newBalance, balanceChange, reason },
     });
     
