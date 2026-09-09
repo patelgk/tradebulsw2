@@ -1071,32 +1071,64 @@ app.post('/api/admin/payouts/:id/reject', async (req, res) => {
 });
 
 // Admin: get dashboard statistics with funding data
-app.get('/api/admin/stats', async (req, res) => {
+app.post('/api/admin/stats', async (req, res) => {
   try {
-    const uid = (req.query.uid as string) || (req.body && req.body.uid);
-    const currentUser = uid ? await User.findOne({ uid }) : null;
-    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const uid = req.body?.uid || (req.query.uid as string);
+    console.log('[Admin Stats] Request uid:', uid);
+    
+    if (!uid) {
+      console.log('[Admin Stats] ERROR: No uid provided');
+      return res.status(401).json({ error: 'Unauthenticated' });
+    }
+    
+    const currentUser = await User.findOne({ uid });
+    console.log('[Admin Stats] Found user:', currentUser ? { uid: currentUser.uid, role: currentUser.role, email: currentUser.email } : 'NOT FOUND');
+    
+    if (!currentUser) {
+      console.log('[Admin Stats] ERROR: User not found');
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    if (currentUser.role !== 'admin') {
+      console.log('[Admin Stats] ERROR: User role is', currentUser.role, 'not admin');
+      return res.status(403).json({ error: 'Admin required' });
+    }
+    
+    console.log('[Admin Stats] Admin verified, fetching statistics...');
     
     const totalUsers = await User.countDocuments();
+    console.log('[Admin Stats] Total users:', totalUsers);
+    
     const fundedUsers = await User.countDocuments({ balance: { $gt: 0 } });
+    console.log('[Admin Stats] Funded users (balance > 0):', fundedUsers);
+    
     const noFundUsers = await User.countDocuments({ balance: { $eq: 0 } });
+    console.log('[Admin Stats] No fund users (balance = 0):', noFundUsers);
     
     const totalFundsAgg = await User.aggregate([
       { $group: { _id: null, total: { $sum: '$balance' } } }
     ]);
+    console.log('[Admin Stats] Total funds aggregation:', totalFundsAgg);
     
     const activeTraders = await User.countDocuments({ accountStatus: 'active' });
+    console.log('[Admin Stats] Active traders:', activeTraders);
+    
     const totalPayouts = await Payout.countDocuments({ status: 'paid' });
+    console.log('[Admin Stats] Total paid payouts:', totalPayouts);
+    
     const totalPayoutAmount = await Payout.aggregate([
       { $match: { status: 'paid' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
+    console.log('[Admin Stats] Total payout amount:', totalPayoutAmount);
+    
     const totalRevenue = await Transaction.aggregate([
       { $match: { type: 'challenge_purchase', status: 'successful' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
+    console.log('[Admin Stats] Total revenue:', totalRevenue);
     
-    res.json({
+    const response = {
       totalUsers,
       fundedUsers,
       noFundUsers,
@@ -1106,21 +1138,30 @@ app.get('/api/admin/stats', async (req, res) => {
       totalPayoutAmount: (totalPayoutAmount[0]?.total || 0),
       totalRevenue: (totalRevenue[0]?.total || 0),
       timestamp: new Date()
-    });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+    };
+    
+    console.log('[Admin Stats] SUCCESS: Sending response', response);
+    res.json(response);
+  } catch (err: any) { 
+    console.error('[Admin Stats] EXCEPTION:', err.message);
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 // Admin: get all transactions/payments
-app.get('/api/admin/payments', async (req, res) => {
+app.post('/api/admin/payments', async (req, res) => {
   try {
-    const uid = (req.query.uid as string) || (req.body && req.body.uid);
-    const currentUser = uid ? await User.findOne({ uid }) : null;
-    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const uid = req.body?.uid || (req.query.uid as string);
+    if (!uid) return res.status(401).json({ error: 'Unauthenticated' });
     
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const currentUser = await User.findOne({ uid });
+    if (!currentUser) return res.status(401).json({ error: 'User not found' });
+    if (currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const page = parseInt(req.body?.page || req.query.page as string) || 1;
+    const limit = parseInt(req.body?.limit || req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
-    const statusFilter = req.query.status as string;
+    const statusFilter = req.body?.status || req.query.status as string;
     
     let filter: any = { type: { $in: ['challenge_purchase', 'deposit'] } };
     if (statusFilter && statusFilter !== 'all') {
@@ -1224,16 +1265,19 @@ app.post('/api/admin/payments/:id/reject', async (req, res) => {
 });
 
 // Admin: get all payouts
-app.get('/api/admin/payouts-list', async (req, res) => {
+app.post('/api/admin/payouts-list', async (req, res) => {
   try {
-    const uid = (req.query.uid as string) || (req.body && req.body.uid);
-    const currentUser = uid ? await User.findOne({ uid }) : null;
-    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const uid = req.body?.uid || (req.query.uid as string);
+    if (!uid) return res.status(401).json({ error: 'Unauthenticated' });
     
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const currentUser = await User.findOne({ uid });
+    if (!currentUser) return res.status(401).json({ error: 'User not found' });
+    if (currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const page = parseInt(req.body?.page || req.query.page as string) || 1;
+    const limit = parseInt(req.body?.limit || req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
-    const statusFilter = req.query.status as string;
+    const statusFilter = req.body?.status || req.query.status as string;
     
     let filter: any = {};
     if (statusFilter && statusFilter !== 'all') {
@@ -1344,24 +1388,50 @@ app.post('/api/admin/payouts/:id/reject-payout', async (req, res) => {
 });
 
 // Admin: get all users (with pagination)
-app.get('/api/admin/users', async (req, res) => {
+app.post('/api/admin/users', async (req, res) => {
   try {
-    const uid = (req.query.uid as string) || (req.body && req.body.uid);
-    const currentUser = uid ? await User.findOne({ uid }) : null;
-    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    const uid = req.body?.uid || (req.query.uid as string);
+    console.log('[Admin Users] Request uid:', uid);
     
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 1000; // Load up to 1000 users per request
+    if (!uid) {
+      console.log('[Admin Users] ERROR: No uid provided');
+      return res.status(401).json({ error: 'Unauthenticated' });
+    }
+    
+    const currentUser = await User.findOne({ uid });
+    console.log('[Admin Users] Found user:', currentUser ? { uid: currentUser.uid, role: currentUser.role } : 'NOT FOUND');
+    
+    if (!currentUser) {
+      console.log('[Admin Users] ERROR: User not found');
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    if (currentUser.role !== 'admin') {
+      console.log('[Admin Users] ERROR: User role is', currentUser.role, 'not admin');
+      return res.status(403).json({ error: 'Admin required' });
+    }
+    
+    const page = parseInt(req.body?.page || req.query.page as string) || 1;
+    const limit = parseInt(req.body?.limit || req.query.limit as string) || 1000;
     const skip = (page - 1) * limit;
     
+    console.log('[Admin Users] Fetching users: page', page, 'limit', limit, 'skip', skip);
+    
     const users = await User.find().select('uid email name accountStatus role createdAt balance').skip(skip).limit(limit).sort({ createdAt: -1 });
+    console.log('[Admin Users] Found', users.length, 'users');
+    console.log('[Admin Users] Sample user:', users[0] ? { uid: users[0].uid, email: users[0].email, balance: users[0].balance, role: users[0].role } : 'none');
+    
     const total = await User.countDocuments();
+    console.log('[Admin Users] Total users in database:', total);
     
     res.json({
       users,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { 
+    console.error('[Admin Users] EXCEPTION:', err.message);
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 // Admin: get all transactions (with pagination)

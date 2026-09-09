@@ -133,10 +133,11 @@ export const AdminClients: React.FC = () => {
       // Get admin user from localStorage
       const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
       
-      // Fetch all users with high limit
-      const response = await fetch(`/api/admin/users?page=1&limit=10000&uid=${user.uid}`, {
-        method: 'GET',
+      // Fetch all users with POST request sending uid in body
+      const response = await fetch(`/api/admin/users`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, page: 1, limit: 10000 }),
         credentials: 'include',
       });
 
@@ -398,7 +399,11 @@ export const AdminPayments: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await fetch(`/api/admin/payments?status=${filterStatus}`, {
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      const response = await fetch(`/api/admin/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, status: filterStatus }),
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch payments');
@@ -578,7 +583,11 @@ export const AdminPayouts: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await fetch(`/api/admin/payouts-list?status=${filterStatus}`, {
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      const response = await fetch(`/api/admin/payouts-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, status: filterStatus }),
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch payouts');

@@ -36,16 +36,20 @@ export const AdminDashboard: React.FC = () => {
     try {
       setError('');
       setLoading(true);
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
       const response = await fetch('/api/admin/stats', {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ uid: user.uid }),
         credentials: 'include',
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch stats: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to fetch stats: ${response.statusText}`);
       }
       
       const data = await response.json();
