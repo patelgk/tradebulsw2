@@ -122,15 +122,16 @@ export const AdminClients: React.FC = () => {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   useEffect(() => {
-    fetchClients(1);
+    fetchClients();
   }, [filterType]);
 
-  const fetchClients = async (page: number) => {
+  const fetchClients = async () => {
     try {
       setLoading(true);
       setError('');
       
-      const response = await fetch(`/api/admin/users?page=${page}&limit=20`, {
+      // Fetch all users with high limit
+      const response = await fetch(`/api/admin/users?page=1&limit=10000`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -152,8 +153,10 @@ export const AdminClients: React.FC = () => {
 
       setClients(filteredUsers);
       setPagination({
-        ...data.pagination,
-        total: filterType === 'all' ? data.pagination.total : filteredUsers.length,
+        page: 1,
+        limit: filteredUsers.length,
+        total: data.pagination.total,
+        pages: 1,
       });
       setLastRefresh(new Date());
     } catch (err: any) {
@@ -254,7 +257,7 @@ export const AdminClients: React.FC = () => {
         </button>
         <div className="flex-1" />
         <button
-          onClick={() => fetchClients(1)}
+          onClick={() => fetchClients()}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
         >
@@ -368,42 +371,7 @@ export const AdminClients: React.FC = () => {
       </div>
 
       {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-slate-600 dark:text-slate-400">
-            Page {pagination.page} of {pagination.pages} • Showing {clients.length} of {pagination.total} clients
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => fetchClients(pagination.page - 1)}
-              disabled={pagination.page === 1}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-50 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
-            >
-              Previous
-            </button>
-            {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((page) => (
-              <button
-                key={page}
-                onClick={() => fetchClients(page)}
-                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  pagination.page === page
-                    ? 'bg-primary text-white'
-                    : 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-700'
-                }`}
-              >
-                {page}
-              </button>
-            ))}
-            <button
-              onClick={() => fetchClients(pagination.page + 1)}
-              disabled={pagination.page === pagination.pages}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-50 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Pagination removed - now loading all users at once */}
     </div>
   );
 };

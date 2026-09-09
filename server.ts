@@ -1351,7 +1351,7 @@ app.get('/api/admin/users', async (req, res) => {
     if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
     
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
+    const limit = parseInt(req.query.limit as string) || 1000; // Load up to 1000 users per request
     const skip = (page - 1) * limit;
     
     const users = await User.find().select('uid email name accountStatus role createdAt balance').skip(skip).limit(limit).sort({ createdAt: -1 });
