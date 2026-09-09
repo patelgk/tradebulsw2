@@ -130,15 +130,19 @@ export const AdminClients: React.FC = () => {
       setLoading(true);
       setError('');
       
+      // Get admin user from localStorage
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
       // Fetch all users with high limit
-      const response = await fetch(`/api/admin/users?page=1&limit=10000`, {
+      const response = await fetch(`/api/admin/users?page=1&limit=10000&uid=${user.uid}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch clients: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to fetch clients: ${response.statusText}`);
       }
 
       const data = await response.json();
