@@ -21,6 +21,8 @@ import LWChart from './components/LWChart';
 import OptionChain from './components/OptionChainProduction';
 import GlobalSearch from './components/GlobalSearch';
 import { AdminRouter, isAdminPath } from './components/AdminRouter';
+import TermsAndConditions from './components/TermsAndConditions';
+import RiskDisclosure from './components/RiskDisclosure';
 import { CandlestickChart, Briefcase, ReceiptText, User, UserPlus, Home, Trophy, Search, Bell, TrendingUp, TrendingDown, ChevronRight, Plus, Minus, ArrowUp, ArrowDown, LayoutDashboard, Wallet, Menu, X, ShieldCheck, Users, BarChart3, PieChart, Activity, Filter, ArrowRightLeft, Settings, Phone, Save, Trash2, Maximize2, ChevronLeft, Sun, Moon, Mail, AlertTriangle, CircleOff, Info, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
@@ -5571,8 +5573,12 @@ function App() {
 
   return (
     <>
-      {/* ADMIN ROUTES */}
-      {typeof window !== 'undefined' && isAdminPath(window.location.pathname) ? (
+      {/* RISK DISCLOSURE ROUTE */}
+      {typeof window !== 'undefined' && window.location.pathname === '/risk-disclaimer' ? (
+        <RiskDisclosure />
+      ) : typeof window !== 'undefined' && window.location.pathname === '/terms' ? (
+        <TermsAndConditions />
+      ) : typeof window !== 'undefined' && isAdminPath(window.location.pathname) ? (
         <AdminRouter
           user={user}
           onLoginSuccess={(userData) => {
