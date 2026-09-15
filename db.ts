@@ -103,6 +103,18 @@ const challengeSchema = new mongoose.Schema({
   daily_dd: Number,
   tag: String,
   recommended: Boolean,
+  // Extended fields for risk management
+  leverage: { type: Number, default: 1 },
+  profit_split: { type: Number, default: 0 },
+  min_trading_days: { type: Number, default: 0 },
+  max_trading_days: { type: Number, default: 365 },
+  max_loss_amount: { type: Number, default: null },
+  daily_loss_limit: { type: Number, default: null },
+  position_size_limit: { type: Number, default: null },
+  max_open_positions: { type: Number, default: null },
+  status: { type: String, enum: ['active', 'inactive', 'archived'], default: 'active' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
 });
 
 const ruleSchema = new mongoose.Schema({
@@ -206,6 +218,25 @@ const notificationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+const riskManagementSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true, index: true },
+  // User-specific risk overrides (null = use challenge defaults)
+  max_dd: { type: Number, default: null },
+  daily_dd: { type: Number, default: null },
+  max_loss_amount: { type: Number, default: null },
+  daily_loss_limit: { type: Number, default: null },
+  position_size_limit: { type: Number, default: null },
+  max_open_positions: { type: Number, default: null },
+  leverage_limit: { type: Number, default: null },
+  trading_permissions: { type: String, enum: ['unrestricted', 'restricted', 'suspended'], default: 'unrestricted' },
+  custom_risk_rules: String,
+  risk_status: { type: String, enum: ['normal', 'restricted', 'suspended'], default: 'normal' },
+  adminNote: String,
+  adminId: String,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
 export const User = mongoose.model('User', userSchema);
 export const Partner = mongoose.model('Partner', partnerSchema);
 export const Referral = mongoose.model('Referral', referralSchema);
@@ -213,6 +244,7 @@ export const Commission = mongoose.model('Commission', commissionSchema);
 export const Payout = mongoose.model('Payout', payoutSchema);
 export const Trade = mongoose.model('Trade', tradeSchema);
 export const Challenge = mongoose.model('Challenge', challengeSchema);
+export const RiskManagement = mongoose.model('RiskManagement', riskManagementSchema);
 export const Rule = mongoose.model('Rule', ruleSchema);
 export const Setting = mongoose.model('Setting', settingSchema);
 export const Transaction = mongoose.model('Transaction', transactionSchema);

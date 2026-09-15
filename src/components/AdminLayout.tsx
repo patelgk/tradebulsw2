@@ -9,7 +9,8 @@
 import React, { useState } from 'react';
 import {
   Menu, X, LayoutDashboard, Users, CreditCard, DollarSign, 
-  UserCheck, LifeBuoy, Megaphone, Bell, Settings, LogOut, Home
+  UserCheck, LifeBuoy, Megaphone, Bell, Settings, LogOut, Home,
+  BarChart3, AlertTriangle
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -34,6 +35,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ user, onLogout, childr
     { label: 'Clients', path: '/admin/clients', icon: <UserCheck size={20} /> },
     { label: 'Payments', path: '/admin/payments', icon: <CreditCard size={20} /> },
     { label: 'Payouts', path: '/admin/payouts', icon: <DollarSign size={20} /> },
+    { label: 'Challenges', path: '/admin/challenges', icon: <BarChart3 size={20} /> },
+    { label: 'Risk Management', path: '/admin/risk-management', icon: <AlertTriangle size={20} /> },
     { label: 'Partners', path: '/admin/partners', icon: <Users size={20} /> },
     { label: 'Support', path: '/admin/support', icon: <LifeBuoy size={20} /> },
     { label: 'Marketing', path: '/admin/marketing', icon: <Megaphone size={20} /> },

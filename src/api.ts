@@ -87,9 +87,51 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+  async updateChallenge(id: string, data: any) {
+    return safeFetch(`${API_BASE}/challenges/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+  async patchChallenge(id: string, data: any) {
+    return safeFetch(`${API_BASE}/challenges/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
   async deleteChallenge(id: string) {
     return safeFetch(`${API_BASE}/challenges/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  // Risk Management
+  async getRiskSettings(userId: string, uid: string) {
+    return safeFetch(`${API_BASE}/admin/risk-management/${userId}?uid=${uid}`);
+  },
+  async updateRiskSettings(userId: string, data: any) {
+    return safeFetch(`${API_BASE}/admin/risk-management/${userId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+  async deleteRiskSettings(userId: string, uid: string) {
+    return safeFetch(`${API_BASE}/admin/risk-management/${userId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid }),
+    });
+  },
+
+  // Account Status Management
+  async toggleUserStatus(userId: string, newStatus: string, uid: string, reason?: string) {
+    return safeFetch(`${API_BASE}/admin/users/${userId}/toggle-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, newStatus, reason }),
     });
   },
 

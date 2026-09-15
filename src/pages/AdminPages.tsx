@@ -27,6 +27,7 @@ interface ClientData {
   uid: string;
   email: string;
   name: string;
+  phoneNumber?: string;
   accountStatus: string;
   role: string;
   createdAt: string;
@@ -265,6 +266,37 @@ export const AdminClients: React.FC = () => {
     }
   };
 
+  const handleToggleAccountStatus = async (clientId: string, newStatus: string, client: ClientData, reason: string) => {
+    try {
+      setActionLoading(`status-${clientId}`);
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
+      const response = await fetch(`/api/admin/users/${clientId}/toggle-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          uid: user.uid, 
+          newStatus, 
+          reason
+        }),
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to update account status');
+      }
+      
+      await fetchClients();
+      setError('');
+    } catch (err: any) {
+      setError(err.message || 'Failed to toggle account status');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (loading && clients.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -367,6 +399,7 @@ export const AdminClients: React.FC = () => {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Email</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Phone</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Role</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase">Balance</th>
@@ -380,6 +413,7 @@ export const AdminClients: React.FC = () => {
                     <tr className="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                       <td className="px-6 py-4 text-sm font-mono text-slate-600 dark:text-slate-300">{client.email}</td>
                       <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{client.name || 'N/A'}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{client.phoneNumber || 'N/A'}</td>
                       <td className="px-6 py-4">
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold capitalize ${getStatusColor(client.accountStatus)}`}>
                           {client.accountStatus}
@@ -409,11 +443,15 @@ export const AdminClients: React.FC = () => {
                     {/* Expanded Details */}
                     {expandedClient === client._id && (
                       <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                        <td colSpan={7} className="px-6 py-6">
+                        <td colSpan={8} className="px-6 py-6">
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                             <div>
                               <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-2">User ID</p>
                               <p className="font-mono text-sm text-slate-900 dark:text-white break-all">{client.uid}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-2">Phone Number</p>
+                              <p className="text-sm text-slate-900 dark:text-white">{client.phoneNumber || 'N/A'}</p>
                             </div>
                             <div>
                               <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-2">Account Status</p>
@@ -425,7 +463,7 @@ export const AdminClients: React.FC = () => {
                             </div>
                             <div className="md:col-span-3">
                               <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-2">Quick Actions</p>
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 flex-wrap">
                                 <button 
                                   onClick={() => {
                                     setEditingClient(client._id);
@@ -436,6 +474,31 @@ export const AdminClients: React.FC = () => {
                                 >
                                   <DollarSign size={14} />
                                   Edit Balance
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    if (client.accountStatus === 'active') {
+                                      if (!window.confirm(`Deactivate ${client.email}? They won't be able to trade.`)) return;
+                                      handleToggleAccountStatus(client._id, 'inactive', client, 'Admin deactivation');
+                                    } else {
+                                      if (!window.confirm(`Activate ${client.email}? They will be able to trade.`)) return;
+                                      handleToggleAccountStatus(client._id, 'active', client, 'Admin activation');
+                                    }
+                                  }}
+                                  disabled={actionLoading === `status-${client._id}`}
+                                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                    client.accountStatus === 'active'
+                                      ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/50'
+                                      : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                                  } disabled:opacity-50`}
+                                >
+                                  {actionLoading === `status-${client._id}` ? (
+                                    <>Updating...</>
+                                  ) : (
+                                    <>
+                                      {client.accountStatus === 'active' ? '🔴 Deactivate' : '🟢 Activate'}
+                                    </>
+                                  )}
                                 </button>
                                 <button 
                                   onClick={() => {
@@ -1236,6 +1299,654 @@ export const AdminPartners: React.FC = () => (
   />
 );
 
+export const AdminChallenges: React.FC = () => {
+  const [challenges, setChallenges] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingChallenge, setEditingChallenge] = useState<any>(null);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    price: 0,
+    capital: 0,
+    profit_target: 0,
+    max_dd: 0,
+    daily_dd: 0,
+    tag: '',
+    recommended: false,
+    leverage: 1,
+    profit_split: 0,
+    min_trading_days: 0,
+    max_trading_days: 365,
+    max_loss_amount: null,
+    daily_loss_limit: null,
+    position_size_limit: null,
+    max_open_positions: null,
+    status: 'active',
+  });
+
+  useEffect(() => {
+    fetchChallenges();
+  }, []);
+
+  const fetchChallenges = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await fetch('/api/challenges');
+      if (!response.ok) throw new Error('Failed to fetch challenges');
+      const data = await response.json();
+      setChallenges(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load challenges');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddChallenge = async () => {
+    if (!formData.name.trim()) {
+      setError('Challenge name is required');
+      return;
+    }
+    if (formData.price <= 0) {
+      setError('Price must be greater than 0');
+      return;
+    }
+
+    try {
+      setActionLoading('add');
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+
+      const response = await fetch('/api/challenges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, uid: user.uid }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create challenge');
+      }
+
+      setShowAddModal(false);
+      setFormData({
+        name: '',
+        price: 0,
+        capital: 0,
+        profit_target: 0,
+        max_dd: 0,
+        daily_dd: 0,
+        tag: '',
+        recommended: false,
+        leverage: 1,
+        profit_split: 0,
+        min_trading_days: 0,
+        max_trading_days: 365,
+        max_loss_amount: null,
+        daily_loss_limit: null,
+        position_size_limit: null,
+        max_open_positions: null,
+        status: 'active',
+      });
+      await fetchChallenges();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create challenge');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleEditChallenge = async () => {
+    if (!formData.name.trim()) {
+      setError('Challenge name is required');
+      return;
+    }
+
+    try {
+      setActionLoading('edit');
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+
+      const response = await fetch(`/api/challenges/${editingChallenge._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, uid: user.uid }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to update challenge');
+      }
+
+      setShowEditModal(false);
+      setEditingChallenge(null);
+      await fetchChallenges();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update challenge');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteChallenge = async (id: string, name: string) => {
+    if (!window.confirm(`Delete challenge "${name}"? This cannot be undone.`)) return;
+
+    try {
+      setActionLoading(id);
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+
+      const response = await fetch(`/api/challenges/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete challenge');
+      }
+
+      await fetchChallenges();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete challenge');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleStatus = async (challenge: any) => {
+    try {
+      setActionLoading(challenge._id);
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      const newStatus = challenge.status === 'active' ? 'inactive' : 'active';
+
+      const response = await fetch(`/api/challenges/${challenge._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, uid: user.uid }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to update challenge status');
+      }
+
+      await fetchChallenges();
+    } catch (err: any) {
+      setError(err.message || 'Failed to toggle status');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  if (loading && challenges.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <BarChart3 size={28} className="text-primary" />
+            Challenge Management
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400 mt-1">Manage trading challenges and risk parameters</p>
+        </div>
+        <button
+          onClick={() => {
+            setShowAddModal(true);
+            setFormData({
+              name: '',
+              price: 0,
+              capital: 0,
+              profit_target: 0,
+              max_dd: 0,
+              daily_dd: 0,
+              tag: '',
+              recommended: false,
+              leverage: 1,
+              profit_split: 0,
+              min_trading_days: 0,
+              max_trading_days: 365,
+              max_loss_amount: null,
+              daily_loss_limit: null,
+              position_size_limit: null,
+              max_open_positions: null,
+              status: 'active',
+            });
+          }}
+          className="px-4 py-2 bg-primary text-white font-bold rounded-lg hover:bg-emerald-600 transition-colors"
+        >
+          + Add Challenge
+        </button>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="p-4 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {/* Challenges Table */}
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+        {challenges.length === 0 ? (
+          <div className="p-8 text-center text-slate-600 dark:text-slate-400">
+            No challenges found. Create your first challenge to get started.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Price</th>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Capital</th>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Max DD %</th>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Status</th>
+                  <th className="px-6 py-3 text-center text-sm font-bold text-slate-900 dark:text-white">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {challenges.map((challenge) => (
+                  <tr key={challenge._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-6 py-4 text-slate-900 dark:text-white font-semibold">{challenge.name}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400">₹{challenge.price?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400">₹{challenge.capital?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{challenge.max_dd}%</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
+                          challenge.status === 'active'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                        }`}
+                      >
+                        {challenge.status || 'active'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center space-x-2">
+                      <button
+                        onClick={() => {
+                          setEditingChallenge(challenge);
+                          setFormData(challenge);
+                          setShowEditModal(true);
+                        }}
+                        className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+                        disabled={actionLoading === challenge._id}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleToggleStatus(challenge)}
+                        className="px-3 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600 transition-colors"
+                        disabled={actionLoading === challenge._id}
+                      >
+                        {challenge.status === 'active' ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteChallenge(challenge._id, challenge.name)}
+                        className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+                        disabled={actionLoading === challenge._id}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Add Challenge Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Add New Challenge</h2>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Challenge Name *</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                    placeholder="e.g., Gold Challenge"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Price *</label>
+                  <input
+                    type="number"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Trading Capital *</label>
+                  <input
+                    type="number"
+                    value={formData.capital}
+                    onChange={(e) => setFormData({ ...formData, capital: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Profit Target %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.profit_target}
+                    onChange={(e) => setFormData({ ...formData, profit_target: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Max Drawdown %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.max_dd}
+                    onChange={(e) => setFormData({ ...formData, max_dd: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Daily Drawdown %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.daily_dd}
+                    onChange={(e) => setFormData({ ...formData, daily_dd: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Leverage</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.leverage}
+                    onChange={(e) => setFormData({ ...formData, leverage: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Profit Split %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.profit_split}
+                    onChange={(e) => setFormData({ ...formData, profit_split: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Min Trading Days</label>
+                  <input
+                    type="number"
+                    value={formData.min_trading_days}
+                    onChange={(e) => setFormData({ ...formData, min_trading_days: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Max Trading Days</label>
+                  <input
+                    type="number"
+                    value={formData.max_trading_days}
+                    onChange={(e) => setFormData({ ...formData, max_trading_days: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Tag</label>
+                  <input
+                    type="text"
+                    value={formData.tag}
+                    onChange={(e) => setFormData({ ...formData, tag: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                    placeholder="e.g., Beginner, Advanced"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="recommended"
+                  checked={formData.recommended}
+                  onChange={(e) => setFormData({ ...formData, recommended: e.target.checked })}
+                  className="rounded"
+                />
+                <label htmlFor="recommended" className="text-slate-900 dark:text-white">
+                  Recommended Challenge
+                </label>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddChallenge}
+                disabled={actionLoading === 'add'}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+              >
+                {actionLoading === 'add' ? 'Creating...' : 'Create Challenge'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Challenge Modal */}
+      {showEditModal && editingChallenge && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Edit Challenge</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Challenge Name</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Price</label>
+                  <input
+                    type="number"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Trading Capital</label>
+                  <input
+                    type="number"
+                    value={formData.capital}
+                    onChange={(e) => setFormData({ ...formData, capital: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Profit Target %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.profit_target}
+                    onChange={(e) => setFormData({ ...formData, profit_target: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Max Drawdown %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.max_dd}
+                    onChange={(e) => setFormData({ ...formData, max_dd: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Daily Drawdown %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.daily_dd}
+                    onChange={(e) => setFormData({ ...formData, daily_dd: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Leverage</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.leverage}
+                    onChange={(e) => setFormData({ ...formData, leverage: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Profit Split %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.profit_split}
+                    onChange={(e) => setFormData({ ...formData, profit_split: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Min Trading Days</label>
+                  <input
+                    type="number"
+                    value={formData.min_trading_days}
+                    onChange={(e) => setFormData({ ...formData, min_trading_days: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Max Trading Days</label>
+                  <input
+                    type="number"
+                    value={formData.max_trading_days}
+                    onChange={(e) => setFormData({ ...formData, max_trading_days: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Tag</label>
+                  <input
+                    type="text"
+                    value={formData.tag}
+                    onChange={(e) => setFormData({ ...formData, tag: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="recommended-edit"
+                  checked={formData.recommended}
+                  onChange={(e) => setFormData({ ...formData, recommended: e.target.checked })}
+                  className="rounded"
+                />
+                <label htmlFor="recommended-edit" className="text-slate-900 dark:text-white">
+                  Recommended Challenge
+                </label>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditChallenge}
+                disabled={actionLoading === 'edit'}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+              >
+                {actionLoading === 'edit' ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const AdminSupport: React.FC = () => (
   <AdminPageTemplate
     title="Support"
@@ -1267,3 +1978,407 @@ export const AdminSettings: React.FC = () => (
     icon={<Settings size={24} />}
   />
 );
+
+
+export const AdminRiskManagement: React.FC = () => {
+  const [clients, setClients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [showRiskModal, setShowRiskModal] = useState(false);
+  
+  const [riskSettings, setRiskSettings] = useState({
+    max_dd: null as number | null,
+    daily_dd: null as number | null,
+    max_loss_amount: null as number | null,
+    daily_loss_limit: null as number | null,
+    position_size_limit: null as number | null,
+    max_open_positions: null as number | null,
+    leverage_limit: null as number | null,
+    trading_permissions: 'unrestricted',
+    risk_status: 'normal',
+    custom_risk_rules: '',
+  });
+
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
+      const response = await fetch(`/api/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, page: 1, limit: 10000 }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch clients');
+      const data = await response.json();
+      setClients(data.users || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load clients');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openRiskSettings = async (client: any) => {
+    try {
+      setActionLoading('loading-risk');
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
+      const response = await fetch(`/api/admin/risk-management/${client._id}?uid=${user.uid}`);
+      if (!response.ok) throw new Error('Failed to fetch risk settings');
+      
+      const settings = await response.json();
+      setSelectedClient(client);
+      setRiskSettings({
+        max_dd: settings.max_dd || null,
+        daily_dd: settings.daily_dd || null,
+        max_loss_amount: settings.max_loss_amount || null,
+        daily_loss_limit: settings.daily_loss_limit || null,
+        position_size_limit: settings.position_size_limit || null,
+        max_open_positions: settings.max_open_positions || null,
+        leverage_limit: settings.leverage_limit || null,
+        trading_permissions: settings.trading_permissions || 'unrestricted',
+        risk_status: settings.risk_status || 'normal',
+        custom_risk_rules: settings.custom_risk_rules || '',
+      });
+      setShowRiskModal(true);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load risk settings');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const saveRiskSettings = async () => {
+    if (!selectedClient) return;
+
+    try {
+      setActionLoading('save-risk');
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
+      const response = await fetch(`/api/admin/risk-management/${selectedClient._id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...riskSettings, uid: user.uid }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save risk settings');
+      }
+
+      setShowRiskModal(false);
+      setSelectedClient(null);
+      alert('Risk settings updated successfully');
+    } catch (err: any) {
+      setError(err.message || 'Failed to save risk settings');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const resetToDefaults = async () => {
+    if (!window.confirm('Reset this user\'s risk settings to challenge defaults?')) return;
+
+    try {
+      setActionLoading('reset-risk');
+      setError('');
+      const user = JSON.parse(localStorage.getItem('trader_user') || '{}');
+      
+      const response = await fetch(`/api/admin/risk-management/${selectedClient._id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) throw new Error('Failed to reset risk settings');
+
+      setShowRiskModal(false);
+      setSelectedClient(null);
+      alert('Risk settings reset to challenge defaults');
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset risk settings');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const filteredClients = clients.filter(c => 
+    c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading && clients.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <AlertTriangle size={28} className="text-primary" />
+          User Risk Management
+        </h1>
+        <p className="text-slate-600 dark:text-slate-400 mt-1">Configure individual risk parameters per user/account</p>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="p-4 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {/* Search */}
+      <div className="bg-white dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-800">
+        <input
+          type="text"
+          placeholder="Search by email or name..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+        />
+      </div>
+
+      {/* Clients Table */}
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+        {filteredClients.length === 0 ? (
+          <div className="p-8 text-center text-slate-600 dark:text-slate-400">
+            {searchTerm ? 'No matching clients found' : 'No clients found'}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Email</th>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Challenge</th>
+                  <th className="px-6 py-3 text-left text-sm font-bold text-slate-900 dark:text-white">Status</th>
+                  <th className="px-6 py-3 text-center text-sm font-bold text-slate-900 dark:text-white">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredClients.map((client) => (
+                  <tr key={client._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-6 py-4 text-slate-900 dark:text-white">{client.email}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{client.name || '-'}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{client.currentChallengeName || '-'}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
+                          client.accountStatus === 'active'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                        }`}
+                      >
+                        {client.accountStatus}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => openRiskSettings(client)}
+                        disabled={actionLoading?.startsWith('loading') || actionLoading === 'save-risk'}
+                        className="px-4 py-2 bg-primary text-white text-sm rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading === 'loading-risk' ? 'Loading...' : 'Configure Risk'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Risk Settings Modal */}
+      {showRiskModal && selectedClient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-900">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Risk Settings</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{selectedClient.email}</p>
+              </div>
+              <button
+                onClick={() => setShowRiskModal(false)}
+                className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Current Challenge Info */}
+              <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg">
+                <h3 className="font-bold text-slate-900 dark:text-white mb-3">Current Challenge</h3>
+                <p className="text-slate-600 dark:text-slate-400">
+                  {selectedClient.currentChallengeName || 'No challenge assigned'}
+                </p>
+              </div>
+
+              {/* Risk Settings */}
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-900 dark:text-white">Custom Risk Parameters</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400">Leave blank to use challenge defaults</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Max Overall Drawdown %</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={riskSettings.max_dd ?? ''}
+                      onChange={(e) => setRiskSettings({ ...riskSettings, max_dd: e.target.value ? parseFloat(e.target.value) : null })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                      placeholder="e.g., 10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Daily Drawdown %</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={riskSettings.daily_dd ?? ''}
+                      onChange={(e) => setRiskSettings({ ...riskSettings, daily_dd: e.target.value ? parseFloat(e.target.value) : null })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                      placeholder="e.g., 5"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Max Loss Amount (₹)</label>
+                    <input
+                      type="number"
+                      value={riskSettings.max_loss_amount ?? ''}
+                      onChange={(e) => setRiskSettings({ ...riskSettings, max_loss_amount: e.target.value ? parseFloat(e.target.value) : null })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                      placeholder="e.g., 50000"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Daily Loss Limit (₹)</label>
+                    <input
+                      type="number"
+                      value={riskSettings.daily_loss_limit ?? ''}
+                      onChange={(e) => setRiskSettings({ ...riskSettings, daily_loss_limit: e.target.value ? parseFloat(e.target.value) : null })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                      placeholder="e.g., 10000"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Position Size Limit (₹)</label>
+                    <input
+                      type="number"
+                      value={riskSettings.position_size_limit ?? ''}
+                      onChange={(e) => setRiskSettings({ ...riskSettings, position_size_limit: e.target.value ? parseFloat(e.target.value) : null })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                      placeholder="e.g., 100000"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Max Open Positions</label>
+                    <input
+                      type="number"
+                      value={riskSettings.max_open_positions ?? ''}
+                      onChange={(e) => setRiskSettings({ ...riskSettings, max_open_positions: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                      placeholder="e.g., 5"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Leverage Limit</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={riskSettings.leverage_limit ?? ''}
+                      onChange={(e) => setRiskSettings({ ...riskSettings, leverage_limit: e.target.value ? parseFloat(e.target.value) : null })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                      placeholder="e.g., 1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Risk Status</label>
+                    <select
+                      value={riskSettings.risk_status}
+                      onChange={(e) => setRiskSettings({ ...riskSettings, risk_status: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="restricted">Restricted</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2">Custom Risk Rules / Notes</label>
+                  <textarea
+                    value={riskSettings.custom_risk_rules}
+                    onChange={(e) => setRiskSettings({ ...riskSettings, custom_risk_rules: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 dark:text-white"
+                    placeholder="Add any custom risk rules or admin notes here..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-between sticky bottom-0 bg-white dark:bg-slate-900">
+              <button
+                onClick={resetToDefaults}
+                disabled={actionLoading === 'reset-risk'}
+                className="px-4 py-2 border border-orange-300 text-orange-700 dark:border-orange-600 dark:text-orange-400 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors disabled:opacity-50"
+              >
+                {actionLoading === 'reset-risk' ? 'Resetting...' : 'Reset to Challenge Defaults'}
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowRiskModal(false)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveRiskSettings}
+                  disabled={actionLoading === 'save-risk'}
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading === 'save-risk' ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+

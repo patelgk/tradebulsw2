@@ -22,7 +22,7 @@ import * as dotenv from "dotenv";
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
 import nodemailer from "nodemailer";
-import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction, ChallengePurchase, FundHistory, AdminAction, ChallengeStatus, TradingAccount, Notification, Partner, Referral, Commission, Payout } from "./db.js";
+import { connectDB, Setting, User, Trade, Challenge, Rule, Transaction, ChallengePurchase, FundHistory, AdminAction, ChallengeStatus, TradingAccount, Notification, Partner, Referral, Commission, Payout, RiskManagement } from "./db.js";
 import dhanRoutes from "./routes/dhanRoutes.js";
 import dhanDiagnosticRoutes from "./routes/dhanDiagnosticRoutes.js";
 import { MarketFeedManager } from "./services/marketFeedManager.js";
@@ -522,7 +522,7 @@ const requireDbConnection: express.RequestHandler = (_req, res, next) => {
 };
 
 app.use(
-  ["/api/users", "/api/auth", "/api/trades", "/api/challenges", "/api/rules", "/api/settings", "/api/transactions"],
+  ["/api/users", "/api/auth", "/api/trades", "/api/challenges", "/api/rules", "/api/settings", "/api/transactions", "/api/admin/risk-management"],
   requireDbConnection
 );
 
@@ -533,6 +533,15 @@ app.post("/api/withdraw", requireDbConnection, async (req, res) => {
     if (!userId || !amount) return res.status(400).json({ error: "userId and amount required" });
     const user = await User.findOne({ uid: userId });
     if (!user) return res.status(404).json({ error: "User not found" });
+    
+    // Check if user account is active
+    if (user.accountStatus !== 'active') {
+      return res.status(403).json({ 
+        error: `Account is ${user.accountStatus}. Withdrawals are not allowed.`,
+        accountStatus: user.accountStatus
+      });
+    }
+    
     if (user.balance < amount) return res.status(400).json({ error: "Insufficient balance" });
     await User.findOneAndUpdate({ uid: userId }, { $inc: { balance: -amount } });
     const tx = new Transaction({ userId, type: "withdrawal", amount, time: new Date() });
@@ -742,13 +751,114 @@ app.post("/api/auth/forgot-password", async (req, res) => {
 app.get("/api/trades", async (req, res) => {
   try {
     const filter = req.query.userId ? { userId: req.query.userId as string } : {};
-    res.json(await Trade.find(filter).sort({ time: -1 }));
+    
+    // If fetching for a specific user, check if they're active (for UI purposes)
+    if (filter.userId) {
+      const user = await User.findOne({ _id: filter.userId });
+      if (user && user.accountStatus !== 'active') {
+        // Still return trades but include account status so UI can show warning
+        const trades = await Trade.find(filter).sort({ time: -1 });
+        return res.json({ 
+          trades,
+          accountStatus: user.accountStatus,
+          warning: `Account is ${user.accountStatus}. Trading is disabled.`
+        });
+      }
+    }
+    
+    const trades = await Trade.find(filter).sort({ time: -1 });
+    res.json(Array.isArray(trades) ? { trades } : trades);
   } catch { res.status(500).json({ error: "Failed to fetch trades" }); }
 });
 
 app.post("/api/trades", async (req, res) => {
-  try { res.json(await new Trade(req.body).save()); }
-  catch { res.status(500).json({ error: "Failed to create trade" }); }
+  try {
+    const { userId } = req.body;
+    
+    // Get user and their current account data
+    const user = await User.findOne({ _id: userId });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if user account is active
+    if (user.accountStatus !== 'active') {
+      return res.status(403).json({ 
+        error: `Account is ${user.accountStatus}. Trading is not allowed.`,
+        accountStatus: user.accountStatus
+      });
+    }
+
+    // Get user's risk settings (custom override) or challenge defaults
+    let riskSettings = await RiskManagement.findOne({ userId });
+    let challengeRisk = null;
+
+    if (user.currentChallengeName) {
+      challengeRisk = await Challenge.findOne({ name: user.currentChallengeName });
+    }
+
+    // Determine effective risk limits (custom overrides challenge defaults)
+    const effectiveMaxDd = riskSettings?.max_dd ?? challengeRisk?.max_dd;
+    const effectiveDailyDd = riskSettings?.daily_dd ?? challengeRisk?.daily_dd;
+    const effectiveMaxLoss = riskSettings?.max_loss_amount ?? challengeRisk?.max_loss_amount;
+    const effectiveDailyLossLimit = riskSettings?.daily_loss_limit ?? challengeRisk?.daily_loss_limit;
+    const effectivePositionSize = riskSettings?.position_size_limit ?? challengeRisk?.position_size_limit;
+    const effectiveMaxOpenPositions = riskSettings?.max_open_positions ?? challengeRisk?.max_open_positions;
+    const effectiveLeverage = riskSettings?.leverage_limit ?? challengeRisk?.leverage ?? 1;
+
+    // Check if user is trading-restricted or suspended
+    if (riskSettings?.risk_status === 'suspended') {
+      return res.status(403).json({ error: "Trading is suspended for this account due to risk management" });
+    }
+
+    if (riskSettings?.risk_status === 'restricted') {
+      // Log warning but allow trading with restrictions
+      console.warn(`[Risk] User ${userId} trading while restricted`);
+    }
+
+    // Calculate current stats
+    const openTrades = await Trade.find({ userId, status: 'Open' });
+    const totalOpenPositions = openTrades.length;
+
+    // Check max open positions
+    if (effectiveMaxOpenPositions && totalOpenPositions >= effectiveMaxOpenPositions) {
+      return res.status(400).json({ 
+        error: `Maximum open positions (${effectiveMaxOpenPositions}) reached` 
+      });
+    }
+
+    // Check position size against limit
+    const tradeSize = (req.body.qty || 0) * (req.body.price || 0);
+    if (effectivePositionSize && tradeSize > effectivePositionSize) {
+      return res.status(400).json({ 
+        error: `Trade size (₹${tradeSize.toFixed(2)}) exceeds position size limit (₹${effectivePositionSize})` 
+      });
+    }
+
+    // Calculate current drawdown
+    let totalPnl = 0;
+    let dayStartBalance = user.balance;
+    openTrades.forEach(t => {
+      totalPnl += t.pnl || 0;
+    });
+
+    const currentDrawdown = dayStartBalance > 0 ? Math.abs(totalPnl) / dayStartBalance * 100 : 0;
+
+    // Check overall drawdown
+    if (effectiveMaxDd && currentDrawdown >= effectiveMaxDd) {
+      return res.status(400).json({ 
+        error: `Current drawdown (${currentDrawdown.toFixed(2)}%) at or exceeds maximum allowed (${effectiveMaxDd}%)` 
+      });
+    }
+
+    // Save the trade if all checks pass
+    const trade = await new Trade(req.body).save();
+
+    res.json(trade);
+  } catch (err: any) {
+    console.error("[Trade] Error creating trade:", err);
+    res.status(500).json({ error: err.message || "Failed to create trade" });
+  }
 });
 
 app.put("/api/trades/:id", async (req, res) => {
@@ -771,9 +881,162 @@ app.post("/api/challenges", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to upsert challenge" }); }
 });
 
+app.put("/api/challenges/:id", async (req, res) => {
+  try {
+    const { uid } = req.body;
+    const user = await User.findOne({ uid });
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+    }
+
+    const challenge = await Challenge.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    
+    // Audit log
+    await recordAdminAction(uid, 'update_challenge', 'Challenge', req.params.id, {
+      challengeName: challenge?.name,
+      changes: req.body,
+    });
+
+    res.json(challenge);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update challenge" });
+  }
+});
+
+app.patch("/api/challenges/:id", async (req, res) => {
+  try {
+    const { uid, ...updateData } = req.body;
+    const user = await User.findOne({ uid });
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+    }
+
+    const challenge = await Challenge.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    
+    // Audit log
+    await recordAdminAction(uid, 'patch_challenge', 'Challenge', req.params.id, {
+      challengeName: challenge?.name,
+      changes: updateData,
+    });
+
+    res.json(challenge);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to patch challenge" });
+  }
+});
+
 app.delete("/api/challenges/:id", async (req, res) => {
-  try { await Challenge.findByIdAndDelete(req.params.id); res.json({ success: true }); }
-  catch { res.status(500).json({ error: "Failed to delete challenge" }); }
+  try {
+    const { uid } = req.body || {};
+    const user = uid ? await User.findOne({ uid }) : null;
+    if (user && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+    }
+
+    const challenge = await Challenge.findById(req.params.id);
+    await Challenge.findByIdAndDelete(req.params.id);
+    
+    // Audit log
+    if (user) {
+      await recordAdminAction(uid, 'delete_challenge', 'Challenge', req.params.id, {
+        challengeName: challenge?.name,
+      });
+    }
+
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Failed to delete challenge" }); }
+});
+
+// ─── Risk Management ───────────────────────────────────────────────────────────
+
+app.get("/api/admin/risk-management/:userId", async (req, res) => {
+  try {
+    const { uid } = req.query;
+    const adminUser = await User.findOne({ uid });
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+    }
+
+    const riskSettings = await RiskManagement.findOne({ userId: req.params.userId }) || {
+      userId: req.params.userId,
+      max_dd: null,
+      daily_dd: null,
+      max_loss_amount: null,
+      daily_loss_limit: null,
+      position_size_limit: null,
+      max_open_positions: null,
+      leverage_limit: null,
+      trading_permissions: 'unrestricted',
+      risk_status: 'normal',
+    };
+
+    res.json(riskSettings);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch risk settings" });
+  }
+});
+
+app.post("/api/admin/risk-management/:userId", async (req, res) => {
+  try {
+    const { uid, ...riskData } = req.body;
+    const adminUser = await User.findOne({ uid });
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+    }
+
+    const userId = req.params.userId;
+    
+    // Check if user exists
+    const userExists = await User.findOne({ _id: userId });
+    if (!userExists) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get old values for audit trail
+    const oldSettings = await RiskManagement.findOne({ userId });
+
+    // Update or create risk settings
+    const updated = await RiskManagement.findOneAndUpdate(
+      { userId },
+      { ...riskData, adminId: uid, updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+
+    // Audit log
+    await recordAdminAction(uid, 'update_risk_settings', 'RiskManagement', userId, {
+      oldValues: oldSettings,
+      newValues: riskData,
+      changedFields: Object.keys(riskData),
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to update risk settings" });
+  }
+});
+
+app.delete("/api/admin/risk-management/:userId", async (req, res) => {
+  try {
+    const { uid } = req.body;
+    const adminUser = await User.findOne({ uid });
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+    }
+
+    const userId = req.params.userId;
+    const oldSettings = await RiskManagement.findOne({ userId });
+    
+    await RiskManagement.deleteOne({ userId });
+
+    // Audit log
+    await recordAdminAction(uid, 'delete_risk_settings', 'RiskManagement', userId, {
+      deletedValues: oldSettings,
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete risk settings" });
+  }
 });
 
 // ─── Rules ────────────────────────────────────────────────────────────────────
@@ -1532,7 +1795,7 @@ app.post('/api/admin/users', async (req, res) => {
     
     console.log('[Admin Users] Fetching users: page', page, 'limit', limit, 'skip', skip);
     
-    const users = await User.find().select('uid email name accountStatus role createdAt balance').skip(skip).limit(limit).sort({ createdAt: -1 });
+    const users = await User.find().select('uid email name phoneNumber accountStatus role createdAt balance').skip(skip).limit(limit).sort({ createdAt: -1 });
     console.log('[Admin Users] Found', users.length, 'users');
     console.log('[Admin Users] Sample user:', users[0] ? { uid: users[0].uid, email: users[0].email, balance: users[0].balance, role: users[0].role } : 'none');
     
@@ -1661,6 +1924,68 @@ app.post('/api/admin/users/:userId/delete', async (req, res) => {
     });
   } catch (err: any) { 
     console.error('[Admin Delete User] ERROR:', err.message);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+// Admin: toggle user account status (activate/deactivate)
+app.post('/api/admin/users/:userId/toggle-status', async (req, res) => {
+  try {
+    const uid = req.body.uid;
+    const currentUser = uid ? await User.findOne({ uid }) : null;
+    if (!currentUser || currentUser.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    
+    const userId = req.params.userId;
+    const { newStatus, reason } = req.body;
+    
+    // Validate status
+    if (!['active', 'inactive'].includes(newStatus)) {
+      return res.status(400).json({ error: 'Invalid status. Must be "active" or "inactive"' });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    if (user.role === 'admin') {
+      return res.status(403).json({ error: 'Cannot change status of admin users' });
+    }
+    
+    const oldStatus = user.accountStatus;
+    
+    // Update account status
+    user.accountStatus = newStatus;
+    await user.save();
+    
+    // Log to AdminAction
+    await AdminAction.create({
+      adminId: uid,
+      action: newStatus === 'active' ? 'activate_user' : 'deactivate_user',
+      targetType: 'User',
+      targetId: user._id.toString(),
+      details: {
+        userId: user.uid,
+        userEmail: user.email,
+        oldStatus,
+        newStatus,
+        reason: reason || (newStatus === 'active' ? 'User activated' : 'User deactivated'),
+      },
+    });
+    
+    console.log(`[Admin Toggle Status] Admin ${uid} changed user ${user.email} status from ${oldStatus} to ${newStatus}`);
+    
+    res.json({ 
+      success: true, 
+      message: `User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`,
+      user: { 
+        uid: user.uid, 
+        email: user.email, 
+        accountStatus: user.accountStatus,
+        balance: user.balance
+      },
+      change: { oldStatus, newStatus }
+    });
+  } catch (err: any) { 
+    console.error('[Admin Toggle Status] ERROR:', err.message);
     res.status(500).json({ error: err.message }); 
   }
 });
