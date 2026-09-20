@@ -5443,7 +5443,7 @@ function App() {
 
   const handleBuyChallenge = async (plan: Plan) => {
     if (!user) return;
-    const paymentLink = 'https://page.smepay.in/@gsktrading/transaction/dkyr3dw';
+    const paymentLink = 'https://razorpay.me/@proprupee1804';
 
     try {
       await api.addTransaction({
