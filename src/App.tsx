@@ -4424,6 +4424,28 @@ function App() {
     checkAuth();
   }, []);
 
+  // Initialize Microsoft Clarity Analytics
+  // Clarity will only initialize if VITE_CLARITY_PROJECT_ID is set in .env
+  // and user has given consent for analytics tracking
+  useEffect(() => {
+    import('./services/clarity').then(module => {
+      const clarityService = module.default;
+      clarityService.init();
+    }).catch(err => {
+      console.warn('Failed to load Clarity service:', err);
+    });
+  }, []);
+
+  // Track page views when user navigates between tabs (SPA route change)
+  useEffect(() => {
+    import('./services/clarity').then(module => {
+      const clarityService = module.default;
+      clarityService.trackPageView(activeTab);
+    }).catch(err => {
+      console.debug('Clarity page view tracking unavailable:', err);
+    });
+  }, [activeTab]);
+
   const handleLogout = () => {
     localStorage.removeItem('trader_user');
     setUser(null);
@@ -5460,6 +5482,20 @@ function App() {
         invoiceNumber: `INV-${Date.now()}`,
         status: 'pending'
       });
+      
+      // Track challenge purchase event in Clarity Analytics
+      import('./services/clarity').then(module => {
+        const clarityService = module.default;
+        clarityService.trackEvent('challenge_purchase_initiated', {
+          challengeName: plan.name,
+          fundingAmount: plan.capital,
+          challengeFee: plan.price,
+          planId: plan.id,
+        });
+      }).catch(() => {
+        // Clarity tracking not available, continue anyway
+      });
+      
       window.open(paymentLink, '_blank');
       showToast('Payment Successful. Your challenge is under review. Once approved, your funded account will be activated.');
     } catch (error) {
