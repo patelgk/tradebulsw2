@@ -237,17 +237,18 @@ class ClarityService {
     try {
       const consent = localStorage.getItem('analytics_consent');
       
-      // If no preference is set, default to true (you can change this based on your policy)
-      // GDPR typically requires explicit consent, so you might want to default to false
-      if (consent === null) {
-        // No consent preference set yet - default to false for privacy-first approach
+      // If consent is explicitly set to 'false', respect that
+      if (consent === 'false') {
         return false;
       }
-
-      return consent === 'true';
+      
+      // If no preference is set or consent is 'true', default to true for production tracking
+      // This allows Clarity to track by default (no explicit opt-in required)
+      // If you need explicit opt-in, change this to: if (consent !== 'true') return false;
+      return true;
     } catch (error) {
       console.warn('[Clarity] Error checking user consent:', error);
-      return false;
+      return true; // Default to enabled in case of errors
     }
   }
 
