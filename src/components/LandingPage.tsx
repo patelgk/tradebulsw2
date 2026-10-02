@@ -241,9 +241,9 @@ const Header = ({
             <button onClick={onLoginClick} className={secondaryButton}>
             {isLoggedIn ? 'Dashboard' : 'Login'}
           </button>
-          <button onClick={onLoginClick} className={primaryButton}>
-            Start Challenge <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </button>
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={primaryButton}>
+            Funding Ke Liye Apply Karein <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </a>
         </div>
 
         <button
@@ -269,9 +269,9 @@ const Header = ({
                   {label}
                 </a>
               ))}
-              <button onClick={onLoginClick} className={primaryButton}>
-                {isLoggedIn ? 'Go to Dashboard' : 'Start Challenge'}
-              </button>
+              <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={primaryButton}>
+                Funding Ke Liye Apply Karein
+              </a>
             </div>
           </motion.div>
         )}
@@ -301,13 +301,13 @@ const Hero = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLogged
           A professional prop trading platform with real-time charts, advanced analytics, risk controls, and funding plans built for serious traders.
         </p>
         <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-          <button onClick={onLoginClick} className={primaryButton}>
-            {isLoggedIn ? 'Go to Dashboard' : 'Start Challenge'}
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={primaryButton}>
+            Funding Ke Liye Apply Karein
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </button>
-          <button onClick={onLoginClick} className={secondaryButton}>
-            View Platform <MonitorSmartphone className="h-4 w-4" />
-          </button>
+          </a>
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={secondaryButton}>
+            Trading Skills Evaluate Karwayein <MonitorSmartphone className="h-4 w-4" />
+          </a>
         </div>
         <div className="mt-10 flex flex-wrap gap-3 text-xs font-bold text-slate-400">
           {['No fake candles', 'Live Dhan-ready stack', 'Risk-first dashboard'].map((item) => (
@@ -489,9 +489,9 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
                 </div>
               ))}
             </div>
-            <button onClick={onLoginClick} className={cx(primaryButton, 'mt-8 w-full')}>
-              Buy Challenge
-            </button>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={cx(primaryButton, 'mt-8 w-full')}>
+              Funding Ke Liye Apply Karein
+            </a>
           </motion.div>
         ))}
       </div>
@@ -733,12 +733,12 @@ const FinalCTA = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLo
       <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-6xl">Ready to Trade With a Professional Funding Plan?</h2>
       <p className="mx-auto mt-5 max-w-2xl text-slate-200">Start the challenge flow or return to the dashboard using the existing app routes and authentication.</p>
       <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-        <button onClick={onLoginClick} className={primaryButton}>
-          Start Challenge <ArrowRight className="h-4 w-4" />
-        </button>
-        <button onClick={onLoginClick} className={secondaryButton}>
-          {isLoggedIn ? 'Login to Dashboard' : 'Login to Dashboard'}
-        </button>
+        <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={primaryButton}>
+          Funding Ke Liye Apply Karein <ArrowRight className="h-4 w-4" />
+        </a>
+        <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={secondaryButton}>
+          Trading Skills Evaluate Karwayein
+        </a>
       </div>
     </motion.div>
   </section>
