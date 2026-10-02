@@ -23,6 +23,7 @@ import GlobalSearch from './components/GlobalSearch';
 import { AdminRouter, isAdminPath } from './components/AdminRouter';
 import TermsAndConditions from './components/TermsAndConditions';
 import RiskDisclosure from './components/RiskDisclosure';
+import { WhatIsProprupeePage, HowProprupeeWorksPage, TraderEvaluationPage, FundingProgramPage, FaqPage } from './components/SeoInfoPages';
 import { CandlestickChart, Briefcase, ReceiptText, User, UserPlus, Home, Trophy, Search, Bell, TrendingUp, TrendingDown, ChevronRight, Plus, Minus, ArrowUp, ArrowDown, LayoutDashboard, Wallet, Menu, X, ShieldCheck, Users, BarChart3, PieChart, Activity, Filter, ArrowRightLeft, Settings, Phone, Save, Trash2, Maximize2, ChevronLeft, Sun, Moon, Mail, AlertTriangle, CircleOff, Info, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
@@ -5615,13 +5616,24 @@ function App() {
     }
   }
 
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '') || '/' : '/';
+
   return (
     <>
-      {/* RISK DISCLOSURE ROUTE */}
-      {typeof window !== 'undefined' && window.location.pathname === '/risk-disclaimer' ? (
+      {typeof window !== 'undefined' && currentPath === '/risk-disclaimer' ? (
         <RiskDisclosure />
-      ) : typeof window !== 'undefined' && window.location.pathname === '/terms' ? (
+      ) : typeof window !== 'undefined' && currentPath === '/terms' ? (
         <TermsAndConditions />
+      ) : typeof window !== 'undefined' && currentPath === '/what-is-proprupee' ? (
+        <WhatIsProprupeePage />
+      ) : typeof window !== 'undefined' && currentPath === '/how-proprupee-works' ? (
+        <HowProprupeeWorksPage />
+      ) : typeof window !== 'undefined' && currentPath === '/trader-evaluation' ? (
+        <TraderEvaluationPage />
+      ) : typeof window !== 'undefined' && currentPath === '/funding-program' ? (
+        <FundingProgramPage />
+      ) : typeof window !== 'undefined' && currentPath === '/faq' ? (
+        <FaqPage />
       ) : typeof window !== 'undefined' && isAdminPath(window.location.pathname) ? (
         <AdminRouter
           user={user}

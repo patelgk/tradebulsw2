@@ -295,10 +295,10 @@ const Hero = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLogged
           Real-time prop trading workspace
         </div>
         <h1 className="max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.07em] text-white sm:text-6xl lg:text-7xl xl:text-[5.6rem]">
-          Get Funded. Trade Smarter. Scale Without Limits.
+          Indian Prop Firm for Traders
         </h1>
         <p className="mt-7 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
-          A professional prop trading platform with real-time charts, advanced analytics, risk controls, and funding plans built for serious traders.
+          Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program. Learn how Proprupee works and apply for trader evaluation.
         </p>
         <div className="mt-9 flex flex-col gap-3 sm:flex-row">
           <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={primaryButton}>
@@ -310,7 +310,7 @@ const Hero = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLogged
           </a>
         </div>
         <div className="mt-10 flex flex-wrap gap-3 text-xs font-bold text-slate-400">
-          {['No fake candles', 'Live Dhan-ready stack', 'Risk-first dashboard'].map((item) => (
+          {['NIFTY & BANKNIFTY', 'Trader evaluation', 'Funding program'].map((item) => (
             <span key={item} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-300" />
               {item}
@@ -323,6 +323,70 @@ const Hero = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLogged
     </div>
   </section>
 );
+
+const InfoSections = () => {
+  const sections = [
+    {
+      id: 'what-is-proprupee',
+      title: 'What is Proprupee?',
+      body: 'Proprupee is a trader funding and evaluation platform for traders in India. It evaluates trading skill, strategy, and risk discipline, and provides eligible traders access to its funding program when they meet the program conditions.',
+    },
+    {
+      id: 'how-proprupee-works',
+      title: 'How Proprupee Works',
+      body: 'Traders choose a challenge, trade within the rules, and pass the evaluation process to become eligible for funding. The platform focuses on measured performance, structured rules, and disciplined risk management.',
+    },
+    {
+      id: 'trader-evaluation',
+      title: 'Trader Evaluation',
+      body: 'The evaluation compares performance against profit targets and risk thresholds. Daily loss limits, maximum drawdown, and consistent execution are key parts of how Proprupee measures a trader’s readiness.',
+    },
+    {
+      id: 'funding-program',
+      title: 'Funding Program',
+      body: 'Proprupee offers challenge plans with different funding amounts and profit splits. Once eligible, traders may access a funded account structure based on the selected challenge and current policy terms.',
+    },
+    {
+      id: 'who-can-apply',
+      title: 'Who Can Apply?',
+      body: 'The platform is designed for traders who are comfortable with structured rules, risk management, and disciplined execution. Traders should review the selection criteria, challenge details, and program terms before applying.',
+    },
+    {
+      id: 'trading-rules-risk-management',
+      title: 'Trading Rules & Risk Management',
+      body: 'The challenge rules vary by plan, but they generally include payout-related conditions, profit targets, daily loss limits, and max drawdown rules. These controls help traders understand the risk framework before they begin evaluation.',
+    },
+  ];
+
+  return (
+    <section className="bg-[#07111d] px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <motion.div {...sectionMotion} className="mb-12 max-w-3xl">
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">What traders need to know</p>
+          <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">The Indian prop firm journey, explained clearly.</h2>
+        </motion.div>
+
+        <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
+          {sections.map((section, index) => (
+            <motion.article
+              key={section.id}
+              {...sectionMotion}
+              transition={{ duration: 0.55, delay: index * 0.05 }}
+              id={section.id}
+              className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6"
+            >
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-300/10 text-emerald-200">
+                <BarChart3 className="h-5 w-5" />
+              </div>
+              <h3 className="text-2xl font-black tracking-[-0.04em] text-white">{section.title}</h3>
+              <p className="mt-3 text-base leading-8 text-slate-300">{section.body}</p>
+            </motion.article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
 
 const Stats = () => {
   const stats = [
@@ -370,7 +434,7 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
     tradingDays: 'Unlimited',
     payout: '15 Days',
     featured: index === 1 || plan.recommended === true, // Second plan is featured, or if marked recommended
-    badge: plan.recommended ? 'Most Popular' : index === 2 ? 'Best Value' : null,
+    badge: plan.recommended ? 'Popular' : index === 2 ? 'Featured' : null,
     _id: plan._id || plan.id, // Store the ID for reference
   })) : [
     // Fallback hardcoded plans if no database plans available
@@ -400,7 +464,7 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
       tradingDays: 'Unlimited',
       payout: '15 Days',
       featured: true,
-      badge: 'Most Popular',
+      badge: 'Popular',
     },
     {
       name: 'Elite Challenge',
@@ -414,7 +478,7 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
       tradingDays: 'Unlimited',
       payout: '15 Days',
       featured: false,
-      badge: 'Best Value',
+      badge: 'Featured',
     },
     {
       name: 'Titan Challenge',
@@ -677,12 +741,14 @@ const Testimonials = () => {
 const FAQ = () => {
   const [openIndex, setOpenIndex] = useState(0);
   const items = [
-    ['How does the challenge work?', 'Complete the evaluation by achieving the profit target while staying within the drawdown rules.'],
-    ['How do I receive a funded account?', 'Once you successfully complete the evaluation and pass the review process, your funded account will be activated.'],
-    ['When do payouts occur?', 'Every 15 days, subject to the platform\'s payout policy.'],
-    ['Can I purchase multiple challenges?', 'Yes.'],
-    ['Can I use the platform on mobile?', 'Yes. The landing page and dashboard shell are responsive, with layouts optimized for desktop, tablet, and mobile usage.'],
-    ['How secure is the platform?', 'The platform is designed for a premium experience with secure account handling and encrypted data flows for wallet and trading actions.'],
+    ['What is Proprupee?', 'Proprupee is a trader funding and evaluation platform for traders in India. It evaluates traders based on their trading skill, strategy, and risk management, and provides eligible traders access to its funding program when they meet the program conditions.'],
+    ['What is a prop firm in India?', 'A prop firm in India is a platform or firm that allows traders to access capital through a structured evaluation process. Traders are assessed on performance and risk compliance, and eligible participants may receive access to a funded account under program rules.'],
+    ['How does Proprupee\'s trader evaluation work?', 'The evaluation measures performance against a profit target while requiring traders to follow risk rules. Daily loss limits and maximum drawdown are part of the process, and traders must remain within those rules to remain eligible for funding consideration.'],
+    ['Who can apply for Proprupee?', 'Proprupee is intended for traders who are comfortable with risk management and structured rules. Traders should apply through the existing challenge or application flow and ensure they understand the platform\'s evaluation and funding policies before participating.'],
+    ['How does the Proprupee funding program work?', 'The funding program is available to eligible traders who pass the evaluation and meet the challenge requirements. Funding size, profit split, and payout terms vary by challenge and are shown during the selection process.'],
+    ['What are the trading rules?', 'Trading rules vary by challenge, but the core framework includes profit targets, daily loss limits, and maximum drawdown limits. These rules are designed to measure consistency and encourage disciplined trading rather than excessive risk-taking.'],
+    ['What are the risks of prop trading?', 'Prop trading carries several risks, including market volatility, leverage, exposure to losses, execution issues, and invalidation if a trader breaches the challenge rules. Proprupee\'s risk disclosure explains these risks in detail and traders should review it before applying.'],
+    ['How can I apply for Proprupee?', 'You can apply through the challenge or funding form available on the Proprupee website. After selecting a challenge, you follow the platform\'s evaluation process and review the associated rules before starting to trade.'],
   ];
 
   return (
@@ -762,10 +828,11 @@ const Footer = ({ onLoginClick, onOpenPolicy }: { onLoginClick: () => void; onOp
       <div>
         <p className="text-xs font-bold text-white uppercase tracking-widest mb-4">Platform</p>
         <ul className="space-y-2.5 text-xs text-slate-400">
-          <li><button onClick={() => onOpenPolicy('about')} className="hover:text-white transition">About Us</button></li>
-          <li><button onClick={() => onOpenPolicy('pricing')} className="hover:text-white transition">Pricing Plans</button></li>
-          <li><button onClick={() => onOpenPolicy('contact')} className="hover:text-white transition">Contact Support</button></li>
-          <li><button onClick={onLoginClick} className="hover:text-white transition">Trader Login</button></li>
+          <li><a href="/what-is-proprupee" className="hover:text-white transition">What is Proprupee?</a></li>
+          <li><a href="/how-proprupee-works" className="hover:text-white transition">How Proprupee Works</a></li>
+          <li><a href="/trader-evaluation" className="hover:text-white transition">Trader Evaluation</a></li>
+          <li><a href="/funding-program" className="hover:text-white transition">Funding Program</a></li>
+          <li><a href="/faq" className="hover:text-white transition">FAQ</a></li>
         </ul>
       </div>
 
@@ -793,21 +860,15 @@ const Footer = ({ onLoginClick, onOpenPolicy }: { onLoginClick: () => void; onOp
     <div className="mx-auto max-w-7xl pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
       <p>© {new Date().getFullYear()} {APP_NAME}. All rights reserved.</p>
       <div className="flex flex-wrap gap-4 font-bold text-slate-300">
-        <button onClick={() => onOpenPolicy('about')} className="hover:text-white transition">About</button>
+        <a href="/what-is-proprupee" className="hover:text-white transition">About</a>
         <span className="text-white/20">|</span>
-        <button onClick={() => onOpenPolicy('pricing')} className="hover:text-white transition">Pricing</button>
+        <a href="/funding-program" className="hover:text-white transition">Funding</a>
         <span className="text-white/20">|</span>
-        <button onClick={() => onOpenPolicy('contact')} className="hover:text-white transition">Contact</button>
-        <span className="text-white/20">|</span>
-        <button onClick={() => onOpenPolicy('privacy')} className="hover:text-white transition">Privacy Policy</button>
+        <a href="/faq" className="hover:text-white transition">FAQ</a>
         <span className="text-white/20">|</span>
         <a href="/terms" className="hover:text-white transition">Terms & Conditions</a>
         <span className="text-white/20">|</span>
         <a href="/risk-disclaimer" className="hover:text-white transition">Risk Disclosure</a>
-        <span className="text-white/20">|</span>
-        <button onClick={() => onOpenPolicy('refund')} className="hover:text-white transition">Refund & Cancellation</button>
-        <span className="text-white/20">|</span>
-        <button onClick={() => onOpenPolicy('disclaimer')} className="hover:text-white transition">Disclaimer</button>
       </div>
     </div>
   </footer>
@@ -1003,6 +1064,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       />
       <main>
         <Hero onLoginClick={onLoginClick} isLoggedIn={isLoggedIn} />
+        <InfoSections />
         <Stats />
         <FundingPlans onLoginClick={onLoginClick} plans={plans} />
         <PlatformPreview />
