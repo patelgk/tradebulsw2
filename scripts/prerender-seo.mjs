@@ -1,17 +1,20 @@
 /**
  * Post-build prerender script for Proprupee SEO pages.
  *
- * After `vite build`, reads dist/index.html as a template and generates
- * one static HTML file per public SEO route — each with its own:
- *   - <title>
- *   - <meta name="description">
- *   - <link rel="canonical">
- *   - Open Graph tags (og:title, og:description, og:url, og:image)
- *   - Twitter Card tags (twitter:title, twitter:description, twitter:image)
- *   - Page-specific JSON-LD structured data
+ * Runs AFTER `vite build`. Reads dist/index.html as a template, replaces
+ * placeholder comments with page-specific meta tags, and writes one static
+ * HTML file per public SEO route into dist/.
  *
- * All files share the same JS/CSS bundle references from the Vite build,
- * so client-side hydration works identically for every route.
+ * Each generated page contains:
+ *   - Correct <title>
+ *   - Correct <meta name="description">
+ *   - Self-referencing <link rel="canonical">
+ *   - Correct OG tags (og:title, og:description, og:url, og:image)
+ *   - Correct Twitter Card tags
+ *   - Page-specific JSON-LD structured data
+ *   - Shared Vite JS/CSS bundles (identical to index.html)
+ *
+ * Usage: node scripts/prerender-seo.mjs
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,16 +27,11 @@ const DIST_DIR = path.resolve(__dirname, '..', 'dist');
 // Page metadata — single source of truth
 // ---------------------------------------------------------------------------
 interface PageMeta {
-  /** URL path relative to root (e.g. "/faq") */
   path: string;
-  /** Document title shown in browser tab & SERP */
   title: string;
-  /** Meta description for search engines */
   description: string;
-  /** OG / Twitter image */
   image: string;
-  /** Schema.org @type value */
-  schemaType: 'WebPage' | 'FAQPage' | 'AboutPage' | 'TermsOfAddress';
+  schemaType: string;
 }
 
 const BASE_URL = 'https://proprupee.com';
@@ -99,69 +97,54 @@ const PAGES: PageMeta[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// HTML generators
+// Helpers
 // ---------------------------------------------------------------------------
 function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function replaceInTemplate(html: string, replacements: Record<string, string>): string {
+function urlFor(page: PageMeta): string {
+  return page.path === '/' ? BASE_URL : `${BASE_URL}${page.path}`;
+}
+
+// ---------------------------------------------------------------------------
+// Replace placeholders in template HTML
+// ---------------------------------------------------------------------------
+function applyTemplate(html: string, page: PageMeta): string {
+  const u = urlFor(page);
+  const replacements: Record<string, string> = {
+    '<!--SEO:TITLE-->': `<title>${escapeXml(page.title)}</title>\n`,
+    '<!--SEO:CANONICAL-->': `<link rel="canonical" href="${u}" />\n`,
+    '<!--SEO:OG-TITLE-->': `<meta property="og:title" content="${escapeXml(page.title)}" />\n`,
+    '<!--SEO:OG-DESC-->': `<meta property="og:description" content="${escapeXml(page.description)}" />\n`,
+    '<!--SEO:OG-URL-->': `<meta property="og:url" content="${u}" />\n`,
+    '<!--SEO:OG-IMAGE-->': `<meta property="og:image" content="${page.image}" />\n`,
+    '<!--SEO:TWITTER-TITLE-->': `<meta name="twitter:title" content="${escapeXml(page.title)}" />\n`,
+    '<!--SEO:TWITTER-DESC-->': `<meta name="twitter:description" content="${escapeXml(page.description)}" />\n`,
+    '<!--SEO:TWITTER-IMAGE-->': `<meta name="twitter:image" content="${page.image}" />\n`,
+  };
   let result = html;
-  for (const [key, value] of Object.entries(replacements)) {
-    // Replace only the FIRST occurrence of each placeholder pattern
-    const placeholder = `<!--SEO:${key}-->`;
-    result = result.replace(placeholder, value);
+  for (const [ph, rep] of Object.entries(replacements)) {
+    result = result.split(ph).join(rep);
   }
   return result;
 }
 
-/** Inject a page-specific JSON-LD block into the HTML. */
+// ---------------------------------------------------------------------------
+// Inject page-specific JSON-LD (replaces the <!--SEO:JSONLD--> placeholder)
+// ---------------------------------------------------------------------------
 function injectJsonLd(html: string, page: PageMeta): string {
-  const typeLabel = page.schemaType === 'FAQPage' ? 'FAQPage' : 'WebPage';
-  const jsonLd = `{
-    "@context": "https://schema.org",
-    "@type": "${typeLabel}",
-    "name": "${escapeXml(page.title)}",
-    "url": "${page.path === '/' ? BASE_URL : `${BASE_URL}${page.path}`}",
-    "description": "${escapeXml(page.description)}",
-    "image": "${page.image}",
-    "publisher": {
-      "@type": "Organization",
-      "name": "Proprupee",
-      "url": "${BASE_URL}"
-    }
-  }`;
-  // Insert after the existing JSON-LD blocks (before Google tag)
-  const insertionPoint = html.indexOf('<!-- Google tag -->');
-  if (insertionPoint !== -1) {
-    return html.slice(0, insertionPoint) + `<script type="application/ld+json">\n${jsonLd}\n</script>\n` + html.slice(insertionPoint);
-  }
-  // Fallback: insert before closing </head>
-  return html.replace('</head>', `  <script type="application/ld+json">\n${jsonLd}\n</script>\n</head>`);
-}
-
-// ---------------------------------------------------------------------------
-// Template placeholders used in index.html
-// These are replaced during build to produce per-page HTML.
-// ---------------------------------------------------------------------------
-function createReplacements(page: PageMeta): Record<string, string> {
-  const url = page.path === '/' ? BASE_URL : `${BASE_URL}${page.path}`;
-  return {
-    'SEO:TITLE': `<title>${escapeXml(page.title)}</title>\n`,
-    'SEO:DESC': `<meta name="description" content="${escapeXml(page.description)}" />\n`,
-    'SEO:CANONICAL': `<link rel="canonical" href="${url}" />\n`,
-    'SEO:OG-TITLE': `<meta property="og:title" content="${escapeXml(page.title)}" />\n`,
-    'SEO:OG-DESC': `<meta property="og:description" content="${escapeXml(page.description)}" />\n`,
-    'SEO:OG-URL': `<meta property="og:url" content="${url}" />\n`,
-    'SEO:OG-IMAGE': `<meta property="og:image" content="${page.image}" />\n`,
-    'SEO:TWITTER-TITLE': `<meta name="twitter:title" content="${escapeXml(page.title)}" />\n`,
-    'SEO:TWITTER-DESC': `<meta name="twitter:description" content="${escapeXml(page.description)}" />\n`,
-    'SEO:TWITTER-IMAGE': `<meta name="twitter:image" content="${page.image}" />\n`,
-  };
+  const jsonLd = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': page.schemaType,
+    name: page.title,
+    url: urlFor(page),
+    description: page.description,
+    image: page.image,
+    publisher: { '@type': 'Organization', name: 'Proprupee', url: BASE_URL },
+  });
+  const replacement = `  <script type="application/ld+json">\n${jsonLd}\n  </script>\n`;
+  return html.split('<!--SEO:JSONLD-->').join(replacement);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,38 +160,34 @@ function main(): void {
 
   const template = fs.readFileSync(templateUrl, 'utf-8');
 
-  // Verify all placeholders exist in the template
-  const requiredPlaceholders = ['SEO:TITLE', 'SEO:DESC', 'SEO:CANONICAL',
-    'SEO:OG-TITLE', 'SEO:OG-DESC', 'SEO:OG-URL', 'SEO:OG-IMAGE',
-    'SEO:TWITTER-TITLE', 'SEO:TWITTER-DESC', 'SEO:TWITTER-IMAGE'];
-  for (const ph of requiredPlaceholders) {
+  // Verify all placeholders exist
+  const required = ['SEO:TITLE', 'SEO:CANONICAL', 'SEO:OG-TITLE', 'SEO:OG-DESC',
+    'SEO:OG-URL', 'SEO:OG-IMAGE', 'SEO:TWITTER-TITLE', 'SEO:TWITTER-DESC',
+    'SEO:TWITTER-IMAGE', 'SEO:JSONLD'];
+  for (const ph of required) {
     if (!template.includes(`<!--${ph}-->`)) {
-      console.error(`[prerender-seo] ERROR: Missing placeholder <!--${ph}--> in index.html template.`);
+      console.error(`[prerender-seo] ERROR: Missing placeholder <!--${ph}--> in index.html.`);
       process.exit(1);
     }
   }
 
   let created = 0;
-
   for (const page of PAGES) {
-    const replacements = createReplacements(page);
-    let html = replaceInTemplate(template, replacements);
-
-    // Inject page-specific JSON-LD
+    let html = applyTemplate(template, page);
     html = injectJsonLd(html, page);
 
-    // Determine output filename
-    const dirName = page.path === '/' ? '' : page.path.replace(/^\//, '');
-    const outDir = path.join(DIST_DIR, ...(dirName ? dirName.split('/') : []));
+    // Write to: dist/{path-without-leading-slash}/index.html or dist/index.html
+    const dirName = page.path === '/' ? '' : page.path.replace(/^\//, '').split('/').slice(0, -1).join('/');
+    const outDir = dirName ? path.join(DIST_DIR, dirName) : DIST_DIR;
     const outFile = path.join(outDir, 'index.html');
 
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(outFile, html, 'utf-8');
-    console.log(`[prerender-seo] ✓ ${page.path === '/' ? '/' : `/${dirName}/`} (${html.length} bytes)`);
+    console.log(`[prerender-seo] ✓ ${page.path} → ${outDir.endsWith('dist') ? 'dist/' : `dist/${dirName}/`}index.html`);
     created++;
   }
 
-  console.log(`[prerender-seo] Done. ${created} SEO pages generated in dist/.`);
+  console.log(`[prerender-seo] Done. ${created} SEO pages generated.\n`);
 }
 
 main();
