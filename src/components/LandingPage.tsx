@@ -269,7 +269,16 @@ const Header = ({
                   {label}
                 </a>
               ))}
-              <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={primaryButton}>
+
+              {/* ── Login button — same handler as desktop ── */}
+              <button
+                onClick={() => { setMenuOpen(false); onLoginClick(); }}
+                className={secondaryButton + ' w-full justify-center'}
+              >
+                {isLoggedIn ? 'Dashboard' : 'Login'}
+              </button>
+
+              <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={primaryButton + ' w-full justify-center'}>
                 Funding Ke Liye Apply Karein
               </a>
             </div>
