@@ -912,6 +912,32 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.title = 'Proprupee | Prop Firm & Trader Funding Platform in India';
+
+    let descTag = document.querySelector('meta[name="description"]');
+    if (!descTag) {
+      descTag = document.createElement('meta');
+      descTag.setAttribute('name', 'description');
+      document.head.appendChild(descTag);
+    }
+    descTag.setAttribute('content', 'Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program. Learn how Proprupee works and apply for trader evaluation.');
+
+    let robotsTag = document.querySelector('meta[name="robots"]');
+    if (!robotsTag) {
+      robotsTag = document.createElement('meta');
+      robotsTag.setAttribute('name', 'robots');
+      document.head.appendChild(robotsTag);
+    }
+    robotsTag.setAttribute('content', 'index, follow');
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) {
+      canonicalLink.setAttribute('href', 'https://www.proprupee.com/');
+    }
+  }, []);
+
   const handleDismissInterview = () => {
     setShowInterviewModal(false);
     try {

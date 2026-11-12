@@ -52,7 +52,7 @@ const TermsAndConditions: React.FC = () => {
     }
     const canonicalLink = document.querySelector('link[rel="canonical"]');
     if (canonicalLink) {
-      canonicalLink.setAttribute('href', 'https://proprupee.com/terms');
+      canonicalLink.setAttribute('href', 'https://www.proprupee.com/terms-and-conditions');
     }
   }, []);
 

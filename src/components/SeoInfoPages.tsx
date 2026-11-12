@@ -54,7 +54,7 @@ interface SeoPageProps {
 
 const SeoPageLayout: React.FC<SeoPageProps> = ({ title, description, heading, intro, sections }) => {
   useEffect(() => {
-    setSeoTags(title, description, `https://proprupee.com${window.location.pathname}`);
+    setSeoTags(title, description, `https://www.proprupee.com${window.location.pathname}`);
   }, [title, description]);
 
   return (

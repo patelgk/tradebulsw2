@@ -5624,6 +5624,8 @@ function App() {
         <RiskDisclosure />
       ) : typeof window !== 'undefined' && currentPath === '/terms' ? (
         <TermsAndConditions />
+      ) : typeof window !== 'undefined' && currentPath === '/terms-and-conditions' ? (
+        <TermsAndConditions />
       ) : typeof window !== 'undefined' && currentPath === '/what-is-proprupee' ? (
         <WhatIsProprupeePage />
       ) : typeof window !== 'undefined' && currentPath === '/how-proprupee-works' ? (

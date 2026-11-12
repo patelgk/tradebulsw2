@@ -46,7 +46,7 @@ const RiskDisclosure: React.FC = () => {
     }
     const canonicalLink = document.querySelector('link[rel="canonical"]');
     if (canonicalLink) {
-      canonicalLink.setAttribute('href', 'https://proprupee.com/risk-disclaimer');
+      canonicalLink.setAttribute('href', 'https://www.proprupee.com/risk-disclaimer');
     }
   }, []);
 
