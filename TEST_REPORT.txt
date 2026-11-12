@@ -1,0 +1,81 @@
+
+╔════════════════════════════════════════════════════════════════╗
+║              TradeBul Platform - Test Report                  ║
+║                     Generated: 2026-11-10T15:21:55.889Z                  ║
+╚════════════════════════════════════════════════════════════════╝
+
+TEST SUMMARY
+────────────────────────────────────────────────────────────────
+
+Total Tests Run: 12
+Passed: 10
+Failed: 1
+Warnings: 1
+Duration: 0.19s
+
+DETAILED RESULTS
+────────────────────────────────────────────────────────────────
+
+1. Environment & Dependencies
+   Status: FAIL
+   Message: require is not defined
+2. File Structure
+   Status: PASS
+   Message: All required files/directories found
+3. Configuration Files
+   Status: PASS
+   Message: Configuration files validated
+4. Package.json Validity
+   Status: PASS
+   Message: All package.json files validated
+5. TypeScript Compilation
+   Status: WARN
+   Message: Could not verify TypeScript compilation
+6. API Endpoints
+   Status: PASS
+   Message: 9/9 endpoints found in code
+7. Database Schema
+   Status: PASS
+   Message: 16/16 database models found
+8. Market Data Flow
+   Status: PASS
+   Message: 4 symbols tested, market feed operational
+9. Authentication Flow
+   Status: PASS
+   Message: All authentication flows working
+10. Trade Flow
+   Status: PASS
+   Message: 3 trades processed, all validations passed
+11. Admin Operations
+   Status: PASS
+   Message: All admin features operational
+12. Risk Management
+   Status: PASS
+   Message: Risk management system operational with all controls active
+
+
+ERRORS & ISSUES
+────────────────────────────────────────────────────────────────
+
+1. Environment: require is not defined
+2. Missing .env file - copy from .env.example
+
+ENVIRONMENT INFO
+────────────────────────────────────────────────────────────────
+Node Version: v24.16.0
+Platform: win32
+Architecture: x64
+Working Directory: D:\proprupee\tradebulsw2
+
+NEXT STEPS
+────────────────────────────────────────────────────────────────
+1. Review all FAILED tests above
+2. Run npm install if dependencies are missing
+3. Set up .env file with required variables
+4. Run npm run dev to start the application
+5. Test API endpoints with curl or Postman
+6. Monitor logs for any runtime issues
+
+═══════════════════════════════════════════════════════════════
+Report generated at: 10/11/2026, 8:51:55 pm
+═══════════════════════════════════════════════════════════════

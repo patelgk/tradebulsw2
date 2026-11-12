@@ -50,10 +50,10 @@ const sectionMotion = {
 } as const;
 
 const primaryButton =
-  'group inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-300 via-lime-300 to-cyan-300 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_20px_70px_rgba(45,212,191,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_90px_rgba(45,212,191,0.4)] active:translate-y-0';
+  'group inline-flex items-center justify-center gap-2 rounded-full bg-[#A31C18] px-6 py-3 text-sm font-black text-white shadow-[0_20px_70px_rgba(163,28,24,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#c0211c] hover:shadow-[0_24px_90px_rgba(163,28,24,0.50)] active:translate-y-0';
 
 const secondaryButton =
-  'inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-300/60 hover:bg-white/[0.1] active:translate-y-0';
+  'inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-[#A31C18]/60 hover:bg-[#A31C18]/10 active:translate-y-0';
 
 const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ');
 
@@ -64,7 +64,7 @@ const GlassCard = ({
   children: React.ReactNode;
   className?: string;
 }) => (
-  <div className={cx('rounded-[2rem] border border-white/10 bg-white/[0.055] shadow-2xl shadow-black/20 backdrop-blur-2xl', className)}>
+  <div className={cx('rounded-[2rem] border border-white/10 bg-[#161d1d]/80 shadow-2xl shadow-black/40 backdrop-blur-2xl', className)}>
     {children}
   </div>
 );
@@ -86,9 +86,9 @@ const CandlestickPreview = ({ compact = false }: { compact?: boolean }) => {
   ];
 
   return (
-    <div className={cx('relative overflow-hidden rounded-3xl border border-white/10 bg-[#081019]', compact ? 'h-48 sm:h-56' : 'h-[280px] sm:h-[320px] md:h-[390px]')}>
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[size:42px_42px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_18%,rgba(16,185,129,0.22),transparent_34%),radial-gradient(circle_at_24%_82%,rgba(6,182,212,0.16),transparent_30%)]" />
+    <div className={cx('relative overflow-hidden rounded-3xl border border-white/10 bg-[#0d1414]', compact ? 'h-48 sm:h-56' : 'h-[280px] sm:h-[320px] md:h-[390px]')}>
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:42px_42px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_18%,rgba(163,28,24,0.18),transparent_34%),radial-gradient(circle_at_24%_82%,rgba(31,122,46,0.14),transparent_30%)]" />
       <svg className="absolute inset-x-0 bottom-10 h-40 w-full opacity-70" viewBox="0 0 760 180" preserveAspectRatio="none">
         <path
           d="M0 132 C74 100 92 118 140 86 C202 43 242 96 298 72 C354 48 388 22 438 55 C500 96 536 80 592 42 C638 12 686 32 760 18"
@@ -102,13 +102,13 @@ const CandlestickPreview = ({ compact = false }: { compact?: boolean }) => {
         />
         <defs>
           <linearGradient id="landing-chart-line" x1="0" x2="1">
-            <stop offset="0%" stopColor="#22c55e" />
-            <stop offset="55%" stopColor="#67e8f9" />
-            <stop offset="100%" stopColor="#bef264" />
+            <stop offset="0%" stopColor="#1f7a2e" />
+            <stop offset="55%" stopColor="#A31C18" />
+            <stop offset="100%" stopColor="#c0211c" />
           </linearGradient>
           <linearGradient id="landing-chart-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#22c55e" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+            <stop offset="0%" stopColor="#A31C18" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#A31C18" stopOpacity="0" />
           </linearGradient>
         </defs>
       </svg>
@@ -126,25 +126,25 @@ const CandlestickPreview = ({ compact = false }: { compact?: boolean }) => {
             <span
               className={cx(
                 'absolute w-full max-w-[18px] rounded-md shadow-lg',
-                candle.up ? 'bg-emerald-400 shadow-emerald-400/20' : 'bg-rose-400 shadow-rose-400/20'
+                candle.up ? 'bg-[#1f7a2e] shadow-green-900/40' : 'bg-[#A31C18] shadow-red-900/40'
               )}
               style={{ top: candle.y, height: candle.body }}
             />
           </motion.div>
         ))}
       </div>
-      <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-bold text-white backdrop-blur-xl">
-        <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.9)]" />
+      <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-black/50 px-3 py-2 text-[11px] font-bold text-white backdrop-blur-xl">
+        <span className="h-2 w-2 rounded-full bg-[#A31C18] shadow-[0_0_18px_rgba(163,28,24,0.9)]" />
         Live NIFTY 50
       </div>
       <div className="absolute bottom-5 left-5 right-5 grid grid-cols-3 gap-3">
         {[
-          ['Equity', '₹12.5L', 'text-emerald-300'],
-          ['Risk Used', '3.8%', 'text-cyan-200'],
-          ['Today', '+₹18,420', 'text-lime-300'],
+          ['Equity', '₹12.5L', 'text-[#4ade80]'],
+          ['Risk Used', '3.8%', 'text-slate-200'],
+          ['Today', '+₹18,420', 'text-[#A31C18]'],
         ].map(([label, value, color]) => (
-          <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.07] p-3 backdrop-blur-xl">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{label}</p>
+          <div key={label} className="rounded-2xl border border-white/10 bg-[#121717]/80 p-3 backdrop-blur-xl">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">{label}</p>
             <p className={cx('mt-1 text-sm font-black md:text-base', color)}>{value}</p>
           </div>
         ))}
@@ -160,37 +160,37 @@ const HeroDashboardMockup = () => (
     transition={{ duration: 0.85, delay: 0.2, ease: 'easeOut' }}
     className="relative mx-auto max-w-2xl lg:mx-0"
   >
-    <div className="absolute -left-10 top-16 hidden rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm font-black text-emerald-200 shadow-2xl shadow-emerald-500/20 backdrop-blur-xl sm:block">
+    <div className="absolute -left-10 top-16 hidden rounded-2xl border border-[#1f7a2e]/30 bg-[#1f7a2e]/10 px-4 py-3 text-sm font-black text-green-200 shadow-2xl shadow-green-900/20 backdrop-blur-xl sm:block">
       +₹24,880 Profit
     </div>
-    <div className="absolute -right-8 bottom-24 hidden rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm font-black text-rose-200 shadow-2xl shadow-rose-500/10 backdrop-blur-xl md:block">
+    <div className="absolute -right-8 bottom-24 hidden rounded-2xl border border-[#A31C18]/30 bg-[#A31C18]/10 px-4 py-3 text-sm font-black text-red-200 shadow-2xl shadow-red-900/10 backdrop-blur-xl md:block">
       Risk Cut: -1.2%
     </div>
     <GlassCard className="relative overflow-hidden p-3">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(34,197,94,0.18),transparent_28%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,0.14),transparent_30%)]" />
-      <div className="relative rounded-[1.65rem] border border-white/10 bg-slate-950/80 p-4">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(163,28,24,0.14),transparent_28%),radial-gradient(circle_at_90%_20%,rgba(31,122,46,0.12),transparent_30%)]" />
+      <div className="relative rounded-[1.65rem] border border-white/10 bg-[#121717]/90 p-4">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-emerald-200/70">{APP_NAME} Terminal</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#A31C18]/80">{APP_NAME} Terminal</p>
             <h3 className="mt-1 text-lg font-black text-white">Challenge Dashboard</h3>
           </div>
           <div className="flex gap-1.5">
-            <span className="h-3 w-3 rounded-full bg-rose-400" />
-            <span className="h-3 w-3 rounded-full bg-amber-300" />
-            <span className="h-3 w-3 rounded-full bg-emerald-300" />
+            <span className="h-3 w-3 rounded-full bg-[#A31C18]" />
+            <span className="h-3 w-3 rounded-full bg-amber-400" />
+            <span className="h-3 w-3 rounded-full bg-[#1f7a2e]" />
           </div>
         </div>
         <div className="grid gap-4 lg:grid-cols-[1fr_180px]">
           <CandlestickPreview />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
             {([
-              ['P&L', '+₹42,650', TrendingUp, 'text-emerald-300'],
-              ['Win Rate', '68.4%', Trophy, 'text-lime-300'],
-              ['Active Traders', '12,842', Globe, 'text-cyan-200'],
+              ['P&L', '+₹42,650', TrendingUp, 'text-[#4ade80]'],
+              ['Win Rate', '68.4%', Trophy, 'text-[#A31C18]'],
+              ['Active Traders', '12,842', Globe, 'text-slate-300'],
             ] satisfies Array<[string, string, LucideIcon, string]>).map(([label, value, CardIcon, color]) => {
               return (
-                <div key={label} className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
+                <div key={label} className="rounded-3xl border border-white/10 bg-[#1c2424]/60 p-4">
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#A31C18]/15">
                     <CardIcon className={cx('h-5 w-5', color)} />
                   </div>
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</p>
@@ -223,7 +223,7 @@ const Header = ({
   ];
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#050812]/78 backdrop-blur-2xl">
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#121717]/85 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <button onClick={onLogoClick} className="text-sm font-black uppercase tracking-[0.22em] text-white">
           {APP_NAME}
@@ -231,14 +231,14 @@ const Header = ({
 
         <nav className="hidden items-center gap-7 md:flex">
           {links.map(([label, href]) => (
-            <a key={label} href={href} className="text-xs font-black uppercase tracking-[0.22em] text-slate-400 transition-colors hover:text-emerald-200">
+            <a key={label} href={href} className="text-xs font-black uppercase tracking-[0.22em] text-slate-400 transition-colors hover:text-[#A31C18]">
               {label}
             </a>
           ))}
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-            <button onClick={onLoginClick} className={secondaryButton}>
+          <button onClick={onLoginClick} className={secondaryButton}>
             {isLoggedIn ? 'Dashboard' : 'Login'}
           </button>
           <a href="https://docs.google.com/forms/d/e/1FAIpQLScIB_sa20lXFdEs0TI50vFPplAszzOLfTO2fZbME6I4OKNlog/viewform?usp=header" target="_blank" rel="noopener noreferrer" className={primaryButton}>
@@ -261,7 +261,7 @@ const Header = ({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="border-t border-white/10 bg-[#060914] px-4 py-5 md:hidden"
+            className="border-t border-white/10 bg-[#121717] px-4 py-5 md:hidden"
           >
             <div className="flex flex-col gap-3">
               {links.map(([label, href]) => (
@@ -282,15 +282,15 @@ const Header = ({
 
 const Hero = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLoggedIn?: boolean }) => (
   <section className="relative overflow-hidden px-4 pb-20 pt-32 sm:px-6 lg:px-8 lg:pb-28 lg:pt-40">
-    <div className="absolute inset-0 bg-[#050812]" />
-    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(circle_at_center,black,transparent_78%)]" />
-    <div className="absolute -left-32 top-20 h-80 w-80 rounded-full bg-emerald-400/20 blur-[110px]" />
-    <div className="absolute -right-24 top-0 h-96 w-96 rounded-full bg-cyan-400/20 blur-[130px]" />
-    <div className="absolute bottom-0 left-1/2 h-72 w-[38rem] -translate-x-1/2 rounded-full bg-lime-300/10 blur-[120px]" />
+    <div className="absolute inset-0 bg-[#121717]" />
+    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(circle_at_center,black,transparent_78%)]" />
+    <div className="absolute -left-32 top-20 h-80 w-80 rounded-full bg-[#A31C18]/15 blur-[110px]" />
+    <div className="absolute -right-24 top-0 h-96 w-96 rounded-full bg-[#1f7a2e]/12 blur-[130px]" />
+    <div className="absolute bottom-0 left-1/2 h-72 w-[38rem] -translate-x-1/2 rounded-full bg-[#A31C18]/8 blur-[120px]" />
 
     <div className="relative mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[0.92fr_1.08fr]">
       <motion.div initial="hidden" animate="visible" transition={{ duration: 0.75, ease: 'easeOut' }} variants={fadeUp}>
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.24em] text-emerald-200">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#A31C18]/30 bg-[#A31C18]/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.24em] text-red-200">
           <Sparkles className="h-4 w-4" />
           Real-time prop trading workspace
         </div>
@@ -312,7 +312,7 @@ const Hero = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLogged
         <div className="mt-10 flex flex-wrap gap-3 text-xs font-bold text-slate-400">
           {['NIFTY & BANKNIFTY', 'Trader evaluation', 'Funding program'].map((item) => (
             <span key={item} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+              <CheckCircle2 className="h-4 w-4 text-[#1f7a2e]" />
               {item}
             </span>
           ))}
@@ -359,10 +359,10 @@ const InfoSections = () => {
   ];
 
   return (
-    <section className="bg-[#07111d] px-4 py-20 sm:px-6 lg:px-8">
+    <section className="bg-[#0d1414] px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <motion.div {...sectionMotion} className="mb-12 max-w-3xl">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">What traders need to know</p>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-[#A31C18]">What traders need to know</p>
           <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">The Indian prop firm journey, explained clearly.</h2>
         </motion.div>
 
@@ -373,9 +373,9 @@ const InfoSections = () => {
               {...sectionMotion}
               transition={{ duration: 0.55, delay: index * 0.05 }}
               id={section.id}
-              className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6"
+              className="rounded-[2rem] border border-white/10 bg-[#161d1d]/60 p-6"
             >
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-300/10 text-emerald-200">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#A31C18]/15 text-[#A31C18]">
                 <BarChart3 className="h-5 w-5" />
               </div>
               <h3 className="text-2xl font-black tracking-[-0.04em] text-white">{section.title}</h3>
@@ -397,7 +397,7 @@ const Stats = () => {
   ] satisfies Array<[string, string, LucideIcon]>;
 
   return (
-    <section className="relative border-y border-white/10 bg-[#08111d] px-4 py-8 sm:px-6 lg:px-8">
+    <section className="relative border-y border-white/10 bg-[#121717] px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-7xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map(([value, label, StatIcon], index) => {
           return (
@@ -405,9 +405,9 @@ const Stats = () => {
               key={label}
               {...sectionMotion}
               transition={{ duration: 0.55, delay: index * 0.06 }}
-              className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl"
+              className="rounded-3xl border border-white/10 bg-[#161d1d]/70 p-5 backdrop-blur-xl"
             >
-              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-300/10 text-emerald-200">
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#A31C18]/15 text-[#A31C18]">
                 <StatIcon className="h-5 w-5" />
               </div>
               <p className="text-2xl font-black text-white md:text-3xl">{value}</p>
@@ -499,10 +499,10 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
   const plans = transformedPlans;
 
   return (
-    <section id="plans" className="relative overflow-hidden bg-[#050812] px-4 py-24 sm:px-6 lg:px-8">
-      <div className="absolute right-0 top-20 h-96 w-96 rounded-full bg-amber-400/10 blur-[130px]" />
+    <section id="plans" className="relative overflow-hidden bg-[#121717] px-4 py-24 sm:px-6 lg:px-8">
+      <div className="absolute right-0 top-20 h-96 w-96 rounded-full bg-[#A31C18]/8 blur-[130px]" />
       <motion.div {...sectionMotion} className="relative mx-auto max-w-4xl text-center">
-        <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-300">Trading Challenges</p>
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-[#A31C18]">Trading Challenges</p>
         <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Simple challenge plans, fast approval.</h2>
         <p className="mt-5 text-slate-400">Pick the plan that fits your style, pay with the same gateway, and wait for approval to start trading.</p>
       </motion.div>
@@ -516,12 +516,12 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
             className={cx(
               'relative rounded-[2rem] border p-6 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-2',
               plan.featured
-                ? 'border-amber-300/40 bg-gradient-to-b from-amber-300/16 to-white/[0.055] shadow-[0_35px_110px_rgba(245,158,11,0.18)]'
-                : 'border-white/10 bg-white/[0.045]'
+                ? 'border-[#A31C18]/50 bg-gradient-to-b from-[#A31C18]/14 to-[#161d1d]/80 shadow-[0_35px_110px_rgba(163,28,24,0.22)]'
+                : 'border-white/10 bg-[#161d1d]/60'
             )}
           >
             {plan.badge && (
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-amber-300 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-950">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-[#A31C18] px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white">
                 {plan.badge}
               </div>
             )}
@@ -530,7 +530,7 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
                 <h3 className="text-xl font-black text-white">{plan.name}</h3>
                 <p className="mt-1 text-sm text-slate-400">Funding: {plan.amount}</p>
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-amber-200">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#A31C18]/15 text-[#A31C18]">
                 <Trophy className="h-6 w-6" />
               </div>
             </div>
@@ -547,7 +547,7 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
                 ['Trading Days', plan.tradingDays],
                 ['Payout Cycle', plan.payout],
               ].map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between rounded-2xl bg-white/[0.045] px-4 py-3">
+                <div key={label} className="flex items-center justify-between rounded-2xl bg-[#121717]/80 px-4 py-3">
                   <span className="text-slate-400">{label}</span>
                   <span className="font-black text-white">{value}</span>
                 </div>
@@ -564,12 +564,12 @@ const FundingPlans = ({ onLoginClick, plans: dbPlans = [] }: { onLoginClick: () 
 };
 
 const PlatformPreview = () => (
-  <section id="platform" className="relative overflow-hidden bg-[#07101b] px-4 py-24 sm:px-6 lg:px-8">
-    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/50 to-transparent" />
+  <section id="platform" className="relative overflow-hidden bg-[#0d1414] px-4 py-24 sm:px-6 lg:px-8">
+    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#A31C18]/50 to-transparent" />
     <motion.div {...sectionMotion} className="mx-auto max-w-7xl">
       <div className="mb-12 grid gap-6 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Platform Preview</p>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-[#A31C18]">Platform Preview</p>
           <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">A trading desk that feels connected to your real workflow.</h2>
         </div>
         <p className="max-w-2xl text-slate-400 lg:ml-auto">
@@ -578,13 +578,13 @@ const PlatformPreview = () => (
       </div>
 
       <GlassCard className="overflow-hidden p-3">
-        <div className="grid gap-3 rounded-[1.75rem] bg-slate-950/75 p-3 lg:grid-cols-[220px_1fr_280px]">
+        <div className="grid gap-3 rounded-[1.75rem] bg-[#121717]/90 p-3 lg:grid-cols-[220px_1fr_280px]">
           <div className="space-y-3">
             {['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'SENSEX'].map((symbol, index) => (
-              <div key={symbol} className="rounded-3xl border border-white/10 bg-white/[0.055] p-4">
+              <div key={symbol} className="rounded-3xl border border-white/10 bg-[#1c2424]/60 p-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-black text-white">{symbol}</p>
-                  <span className={cx('text-xs font-bold', index % 2 === 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                  <span className={cx('text-xs font-bold', index % 2 === 0 ? 'text-[#4ade80]' : 'text-[#A31C18]')}>
                     {index % 2 === 0 ? '+0.42%' : '-0.18%'}
                   </span>
                 </div>
@@ -596,31 +596,31 @@ const PlatformPreview = () => (
           <CandlestickPreview />
 
           <div className="grid gap-3">
-            <div className="rounded-3xl border border-white/10 bg-white/[0.055] p-4">
+            <div className="rounded-3xl border border-white/10 bg-[#1c2424]/60 p-4">
               <p className="mb-4 text-xs font-black uppercase tracking-[0.24em] text-slate-500">Option Chain</p>
               {[23300, 23350, 23400, 23450].map((strike, index) => (
-                <div key={strike} className="mb-2 grid grid-cols-3 gap-2 rounded-2xl bg-slate-950/60 px-3 py-2 text-xs">
-                  <span className="text-emerald-300">{(161 - index * 19).toFixed(2)}</span>
+                <div key={strike} className="mb-2 grid grid-cols-3 gap-2 rounded-2xl bg-[#121717]/80 px-3 py-2 text-xs">
+                  <span className="text-[#4ade80]">{(161 - index * 19).toFixed(2)}</span>
                   <span className="text-center font-black text-white">{strike}</span>
-                  <span className="text-right text-rose-300">{(105 + index * 22).toFixed(2)}</span>
+                  <span className="text-right text-[#A31C18]">{(105 + index * 22).toFixed(2)}</span>
                 </div>
               ))}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-3xl border border-white/10 bg-white/[0.055] p-4">
-                <Gauge className="mb-3 h-5 w-5 text-cyan-200" />
+              <div className="rounded-3xl border border-white/10 bg-[#1c2424]/60 p-4">
+                <Gauge className="mb-3 h-5 w-5 text-[#A31C18]" />
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Risk</p>
                 <p className="mt-1 text-xl font-black text-white">3.8%</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-white/[0.055] p-4">
-                <Target className="mb-3 h-5 w-5 text-emerald-200" />
+              <div className="rounded-3xl border border-white/10 bg-[#1c2424]/60 p-4">
+                <Target className="mb-3 h-5 w-5 text-[#1f7a2e]" />
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Target</p>
                 <p className="mt-1 text-xl font-black text-white">8.0%</p>
               </div>
             </div>
-            <div className="rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200">P&L Summary</p>
-              <p className="mt-2 text-3xl font-black text-emerald-200">+₹42,650</p>
+            <div className="rounded-3xl border border-[#1f7a2e]/30 bg-[#1f7a2e]/10 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-green-300">P&L Summary</p>
+              <p className="mt-2 text-3xl font-black text-green-300">+₹42,650</p>
             </div>
           </div>
         </div>
@@ -642,9 +642,9 @@ const Features = () => {
   ] satisfies Array<[string, string, LucideIcon]>;
 
   return (
-    <section id="features" className="bg-[#050812] px-4 py-24 sm:px-6 lg:px-8">
+    <section id="features" className="bg-[#121717] px-4 py-24 sm:px-6 lg:px-8">
       <motion.div {...sectionMotion} className="mx-auto max-w-3xl text-center">
-        <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">Features</p>
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-[#A31C18]">Features</p>
         <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Everything serious traders expect from a premium prop platform.</h2>
       </motion.div>
       <div className="mx-auto mt-14 grid max-w-7xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -654,9 +654,9 @@ const Features = () => {
               key={title}
               {...sectionMotion}
               transition={{ duration: 0.55, delay: index * 0.045 }}
-              className="group rounded-[1.75rem] border border-white/10 bg-white/[0.045] p-6 transition-all duration-300 hover:-translate-y-2 hover:border-emerald-300/30 hover:bg-white/[0.07]"
+              className="group rounded-[1.75rem] border border-white/10 bg-[#161d1d]/60 p-6 transition-all duration-300 hover:-translate-y-2 hover:border-[#A31C18]/30 hover:bg-[#1c2424]/80"
             >
-              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.06] text-emerald-200 transition-transform duration-300 group-hover:scale-110">
+              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#A31C18]/12 text-[#A31C18] transition-transform duration-300 group-hover:scale-110">
                 <FeatureIcon className="h-6 w-6" />
               </div>
               <h3 className="text-lg font-black text-white">{title}</h3>
@@ -677,18 +677,18 @@ const HowItWorks = () => {
   ] satisfies Array<[string, string, LucideIcon]>;
 
   return (
-    <section className="bg-[#07101b] px-4 py-24 sm:px-6 lg:px-8">
+    <section className="bg-[#0d1414] px-4 py-24 sm:px-6 lg:px-8">
       <motion.div {...sectionMotion} className="mx-auto max-w-7xl">
         <div className="mb-14 max-w-3xl">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">How It Works</p>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-[#1f7a2e]">How It Works</p>
           <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Simple path. Professional discipline.</h2>
         </div>
         <div className="grid gap-5 lg:grid-cols-3">
           {steps.map(([title, desc, StepIcon], index) => {
             return (
-              <div key={title} className="relative rounded-[2rem] border border-white/10 bg-white/[0.045] p-7">
+              <div key={title} className="relative rounded-[2rem] border border-white/10 bg-[#161d1d]/60 p-7">
                 <div className="mb-8 flex items-center justify-between">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-300/10 text-emerald-200">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#A31C18]/15 text-[#A31C18]">
                     <StepIcon className="h-7 w-7" />
                   </div>
                   <span className="text-6xl font-black tracking-[-0.08em] text-white/[0.06]">0{index + 1}</span>
@@ -712,17 +712,17 @@ const Testimonials = () => {
   ];
 
   return (
-    <section className="bg-[#050812] px-4 py-24 sm:px-6 lg:px-8">
+    <section className="bg-[#121717] px-4 py-24 sm:px-6 lg:px-8">
       <motion.div {...sectionMotion} className="mx-auto max-w-3xl text-center">
-        <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">Social Proof</p>
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-[#A31C18]">Social Proof</p>
         <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Designed to feel trustworthy before the first trade.</h2>
         <p className="mt-5 text-sm text-slate-500">These are UI placeholder testimonials for layout only, not verified customer claims.</p>
       </motion.div>
       <div className="mx-auto mt-14 grid max-w-7xl gap-5 lg:grid-cols-3">
         {testimonials.map(([name, quote], index) => (
-          <motion.div key={`${name}-${index}`} {...sectionMotion} transition={{ duration: 0.55, delay: index * 0.08 }} className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-7">
+          <motion.div key={`${name}-${index}`} {...sectionMotion} transition={{ duration: 0.55, delay: index * 0.08 }} className="rounded-[2rem] border border-white/10 bg-[#161d1d]/60 p-7">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-emerald-300 to-cyan-300 text-sm font-black text-slate-950">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#A31C18] text-sm font-black text-white">
                 UI
               </div>
               <div>
@@ -752,23 +752,23 @@ const FAQ = () => {
   ];
 
   return (
-    <section id="faq" className="bg-[#07101b] px-4 py-24 sm:px-6 lg:px-8">
+    <section id="faq" className="bg-[#0d1414] px-4 py-24 sm:px-6 lg:px-8">
       <motion.div {...sectionMotion} className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.78fr_1.22fr]">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">FAQ</p>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-[#A31C18]">FAQ</p>
           <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">Questions traders ask before starting.</h2>
         </div>
         <div className="space-y-3">
           {items.map(([question, answer], index) => {
             const isOpen = openIndex === index;
             return (
-              <div key={question} className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.045]">
+              <div key={question} className="overflow-hidden rounded-3xl border border-white/10 bg-[#161d1d]/60">
                 <button
                   onClick={() => setOpenIndex(isOpen ? -1 : index)}
                   className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left"
                 >
                   <span className="font-black text-white">{question}</span>
-                  <ChevronDown className={cx('h-5 w-5 shrink-0 text-emerald-200 transition-transform', isOpen && 'rotate-180')} />
+                  <ChevronDown className={cx('h-5 w-5 shrink-0 text-[#A31C18] transition-transform', isOpen && 'rotate-180')} />
                 </button>
                 <AnimatePresence initial={false}>
                   {isOpen && (
@@ -792,10 +792,10 @@ const FAQ = () => {
 };
 
 const FinalCTA = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLoggedIn?: boolean }) => (
-  <section className="relative overflow-hidden bg-[#050812] px-4 py-24 sm:px-6 lg:px-8">
-    <div className="absolute inset-x-4 inset-y-16 rounded-[3rem] bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.34),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(34,211,238,0.24),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.025))]" />
+  <section className="relative overflow-hidden bg-[#121717] px-4 py-24 sm:px-6 lg:px-8">
+    <div className="absolute inset-x-4 inset-y-16 rounded-[3rem] bg-[radial-gradient(circle_at_20%_20%,rgba(163,28,24,0.22),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(31,122,46,0.14),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))]" />
     <motion.div {...sectionMotion} className="relative mx-auto max-w-4xl rounded-[2.5rem] border border-white/10 p-8 text-center backdrop-blur-2xl sm:p-12">
-      <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-100">Final Step</p>
+      <p className="text-xs font-black uppercase tracking-[0.28em] text-[#A31C18]">Final Step</p>
       <h2 className="mt-4 text-4xl font-black tracking-[-0.055em] text-white sm:text-6xl">Ready to Trade With a Professional Funding Plan?</h2>
       <p className="mx-auto mt-5 max-w-2xl text-slate-200">Start the challenge flow or return to the dashboard using the existing app routes and authentication.</p>
       <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
@@ -811,11 +811,11 @@ const FinalCTA = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLo
 );
 
 const Footer = ({ onLoginClick, onOpenPolicy }: { onLoginClick: () => void; onOpenPolicy: (type: 'about' | 'pricing' | 'contact' | 'privacy' | 'terms' | 'refund' | 'disclaimer') => void }) => (
-  <footer className="border-t border-white/10 bg-[#050812] px-4 py-16 sm:px-6 lg:px-8">
+  <footer className="border-t border-white/10 bg-[#0d1414] px-4 py-16 sm:px-6 lg:px-8">
     <div className="mx-auto max-w-7xl grid grid-cols-1 md:grid-cols-4 gap-10 pb-12 border-b border-white/10">
       <div className="space-y-4 md:col-span-1">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950 font-black text-lg">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#A31C18] text-white font-black text-lg">
             ₹
           </div>
           <span className="text-base font-black tracking-tight text-white">{APP_NAME}</span>

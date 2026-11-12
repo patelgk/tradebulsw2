@@ -1,14 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* ─── Brand Palette (from screenshot) ───────────────────────────────────────
+   Charcoal Black : #121717   → backgrounds
+   Forest Green   : #0B110C   → primary accent / active states
+   Crimson Red    : #A31C18   → CTAs / highlights / danger
+   ──────────────────────────────────────────────────────────────────────── */
+
 @theme {
   --font-sans: "Public Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --color-primary: #ec5b13;
-  --color-accent-neon: #39ff14;
-  --color-background-dark: #160d08;
-  --color-trading-up: #22c55e;
-  --color-trading-down: #ef4444;
+
+  /* Brand colors */
+  --color-primary:          #A31C18;   /* Crimson Red  – main CTA */
+  --color-primary-hover:    #c0211c;
+  --color-accent:           #1f7a2e;   /* Forest Green – active / accent */
+  --color-accent-dim:       #0B110C;   /* Forest Green dark */
+
+  --color-bg-base:          #121717;   /* Charcoal Black */
+  --color-bg-card:          #161d1d;
+  --color-bg-elevated:      #1c2424;
+
+  --color-trading-up:       #22c55e;
+  --color-trading-down:     #ef4444;
 }
 
 @layer base {
@@ -19,14 +33,14 @@
 
   html {
     color-scheme: dark !important;
-    background-color: #050812 !important;
+    background-color: #121717 !important;
     color: #f1f5f9 !important;
   }
 
   body {
-    background-color: #050812 !important;
+    background-color: #121717 !important;
     color: #f1f5f9 !important;
-    @apply bg-[#050812] text-slate-100 antialiased;
+    @apply bg-[#121717] text-slate-100 antialiased;
   }
 
   input,
@@ -34,48 +48,60 @@
   textarea,
   dialog {
     color-scheme: dark !important;
-    @apply bg-[#101722] text-slate-100 placeholder:text-slate-400 border-white/10;
+    @apply bg-[#1c2424] text-slate-100 placeholder:text-slate-500 border-white/10;
   }
 
   option {
-    @apply bg-[#101722] text-slate-100;
+    @apply bg-[#1c2424] text-slate-100;
   }
 }
 
 @layer utilities {
+  /* ── App background ── */
   .app-premium-bg {
     background:
-      radial-gradient(circle at 20% -10%, rgba(236, 91, 19, 0.16), transparent 34%),
-      radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.08), transparent 28%),
-      linear-gradient(180deg, #0a0d15 0%, #080a10 42%, #070a12 100%) !important;
+      radial-gradient(circle at 18% -8%,  rgba(163, 28, 24, 0.14), transparent 34%),
+      radial-gradient(circle at 92% 2%,   rgba(31, 122, 46, 0.10), transparent 28%),
+      linear-gradient(180deg, #0e1414 0%, #0c1212 42%, #0a1010 100%) !important;
   }
   .dark .app-premium-bg {
     background:
-      radial-gradient(circle at 20% -10%, rgba(236, 91, 19, 0.16), transparent 34%),
-      radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.08), transparent 28%),
-      linear-gradient(180deg, #0a0d15 0%, #080a10 42%, #070a12 100%) !important;
+      radial-gradient(circle at 18% -8%,  rgba(163, 28, 24, 0.14), transparent 34%),
+      radial-gradient(circle at 92% 2%,   rgba(31, 122, 46, 0.10), transparent 28%),
+      linear-gradient(180deg, #0e1414 0%, #0c1212 42%, #0a1010 100%) !important;
   }
+
+  /* ── Cards ── */
   .premium-card {
-    @apply rounded-[1.65rem] border border-white/10 bg-[#101722]/90 text-slate-100 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-xl transition-all duration-300;
+    @apply rounded-[1.65rem] border border-white/10 bg-[#161d1d]/90 text-slate-100
+           shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-xl transition-all duration-300;
   }
   .premium-card-hover {
-    @apply hover:-translate-y-0.5 hover:border-primary/35 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(236,91,19,0.16)];
+    @apply hover:-translate-y-0.5 hover:border-[#A31C18]/35
+           hover:shadow-[0_22px_70px_rgba(163,28,24,0.18)];
   }
   .premium-panel {
-    @apply rounded-[1.35rem] border border-white/10 bg-white/[0.045] text-slate-100 backdrop-blur-sm;
+    @apply rounded-[1.35rem] border border-white/10 bg-[#1c2424]/60 text-slate-100 backdrop-blur-sm;
   }
+
+  /* ── Chips ── */
   .premium-chip {
-    @apply rounded-2xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-black text-slate-300 shadow-sm transition-all duration-300 active:scale-95;
+    @apply rounded-2xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-black
+           text-slate-300 shadow-sm transition-all duration-300 active:scale-95;
   }
   .premium-chip-active {
-    @apply border-primary/50 bg-primary text-white shadow-lg shadow-primary/25;
+    @apply border-[#A31C18]/50 bg-[#A31C18] text-white shadow-lg shadow-[#A31C18]/25;
   }
+
+  /* ── Typography helpers ── */
   .premium-label {
     @apply text-[10px] font-black uppercase tracking-[0.18em] text-slate-400;
   }
   .premium-value {
     @apply font-black tracking-[-0.03em] text-white;
   }
+
+  /* ── Gradient separator line ── */
   .premium-gradient-line {
     @apply relative overflow-hidden;
   }
@@ -84,28 +110,32 @@
     position: absolute;
     inset: 0 0 auto 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(236, 91, 19, 0.65), rgba(34, 197, 94, 0.32), transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(163, 28, 24, 0.65),
+      rgba(31, 122, 46, 0.40),
+      transparent
+    );
   }
+
+  /* ── Buttons / actions ── */
   .premium-action {
-    @apply rounded-2xl font-black transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:active:scale-100;
+    @apply rounded-2xl font-black transition-all duration-300 active:scale-95
+           disabled:opacity-50 disabled:active:scale-100;
   }
+
+  /* ── Bottom nav ── */
   .premium-bottom-nav {
-    @apply border-t border-white/10 bg-[#090c14]/90 shadow-[0_-22px_70px_rgba(0,0,0,0.38)] backdrop-blur-2xl;
+    @apply border-t border-white/10 bg-[#0e1414]/90
+           shadow-[0_-22px_70px_rgba(0,0,0,0.42)] backdrop-blur-2xl;
   }
-  .hide-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-white/10 rounded-full;
-  }
+
+  /* ── Scrollbar utils ── */
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .custom-scrollbar::-webkit-scrollbar        { width: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track  { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb  { @apply bg-white/10 rounded-full; }
 }

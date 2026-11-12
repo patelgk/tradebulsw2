@@ -121,7 +121,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       const displayMessage = this.state.error?.message || "An unexpected error occurred.";
 
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-slate-50 dark:bg-[#160d08] text-center">
+        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-slate-50 dark:bg-[#121717] text-center">
           <div className="bg-red-500/10 p-6 rounded-3xl border border-red-500/20 max-w-md">
             <ShieldCheck className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold mb-2">Application Error</h2>
@@ -310,7 +310,7 @@ const Header = ({
         )}
         <button className="relative rounded-full border border-slate-200/80 bg-slate-100/80 p-2 text-slate-600 transition-colors hover:bg-slate-200 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-400 dark:hover:bg-white/10">
           <Bell className="w-5 h-5" />
-          <div className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-white dark:border-[#160d08]" />
+          <div className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-white dark:border-[#121717]" />
         </button>
       </div>
     </header>
@@ -439,7 +439,7 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
                 resetFormState();
                 setAuthMode('user');
               }}
-              className="w-full py-4 sm:py-6 bg-primary text-white font-black rounded-3xl shadow-xl shadow-primary/20 transition-all hover:bg-emerald-600 active:scale-95 uppercase tracking-[0.2em] text-xs sm:text-sm border-2 border-primary"
+              className="w-full py-4 sm:py-6 bg-primary text-white font-black rounded-3xl shadow-xl shadow-primary/20 transition-all hover:bg-[#c0211c] active:scale-95 uppercase tracking-[0.2em] text-xs sm:text-sm border-2 border-primary"
             >
               <div className="flex flex-col items-center gap-2">
                 <TrendingUp className="w-5 sm:w-6 h-5 sm:h-6" />
