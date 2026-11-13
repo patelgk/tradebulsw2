@@ -770,7 +770,7 @@ const RiskDisclosure: React.FC = () => {
 
                 <h4 className="font-bold text-white mt-6 mb-3">Related Documents</h4>
                 <ul className="space-y-2 text-slate-300">
-                  <li>• {renderSectionLink('/terms', 'Terms & Conditions')}</li>
+                  <li>• {renderSectionLink('/terms-and-conditions', 'Terms & Conditions')}</li>
                   <li>• {renderSectionLink('/privacy-policy', 'Privacy Policy')}</li>
                   <li>• {renderSectionLink('/refund-policy', 'Refund & Cancellation Policy')}</li>
                 </ul>

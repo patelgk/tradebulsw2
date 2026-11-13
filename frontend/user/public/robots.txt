@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /admin/
 Disallow: /api/
-Sitemap: https://proprupee.com/sitemap.xml
+Sitemap: https://www.proprupee.com/sitemap.xml

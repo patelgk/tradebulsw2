@@ -1,0 +1,18 @@
+# Proprupee | Prop Firm & Trader Funding Platform in India
+
+Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program in India.
+
+## Main sections
+
+- [What is Proprupee?](https://www.proprupee.com/what-is-proprupee): Introduction to the trader evaluation and funding platform.
+- [How Proprupee Works](https://www.proprupee.com/how-proprupee-works): Step-by-step challenge → evaluation → funding pathway.
+- [Trader Evaluation](https://www.proprupee.com/trader-evaluation): Evaluation metrics including profit target, daily loss limit, and maximum drawdown.
+- [Funding Program](https://www.proprupee.com/funding-program): Account sizes, profit splits (up to 90%), and payout terms.
+- [FAQ](https://www.proprupee.com/faq): Frequently asked questions about prop trading in India.
+
+## Key facts
+
+- Supports NIFTY, BANKNIFTY, FINNIFTY, and SENSEX indexes
+- Challenge fees: ₹9,999 – ₹99,999 across four account tiers
+- Profit splits up to 90% depending on challenge tier
+- Payout cycle: every 15 days

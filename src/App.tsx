@@ -24,6 +24,7 @@ import { AdminRouter, isAdminPath } from './components/AdminRouter';
 import TermsAndConditions from './components/TermsAndConditions';
 import RiskDisclosure from './components/RiskDisclosure';
 import { WhatIsProprupeePage, HowProprupeeWorksPage, TraderEvaluationPage, FundingProgramPage, FaqPage } from './components/SeoInfoPages';
+import { PrivacyPolicyPage, RefundCancellationPage } from './components/PolicyPages';
 import { CandlestickChart, Briefcase, ReceiptText, User, UserPlus, Home, Trophy, Search, Bell, TrendingUp, TrendingDown, ChevronRight, Plus, Minus, ArrowUp, ArrowDown, LayoutDashboard, Wallet, Menu, X, ShieldCheck, Users, BarChart3, PieChart, Activity, Filter, ArrowRightLeft, Settings, Phone, Save, Trash2, Maximize2, ChevronLeft, Sun, Moon, Mail, AlertTriangle, CircleOff, Info, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
@@ -5636,6 +5637,10 @@ function App() {
         <FundingProgramPage />
       ) : typeof window !== 'undefined' && currentPath === '/faq' ? (
         <FaqPage />
+      ) : typeof window !== 'undefined' && (currentPath === '/privacy-policy' || currentPath === '/privacy') ? (
+        <PrivacyPolicyPage />
+      ) : typeof window !== 'undefined' && (currentPath === '/refund-policy' || currentPath === '/refund') ? (
+        <RefundCancellationPage />
       ) : typeof window !== 'undefined' && isAdminPath(window.location.pathname) ? (
         <AdminRouter
           user={user}

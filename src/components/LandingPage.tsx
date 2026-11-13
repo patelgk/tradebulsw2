@@ -848,11 +848,10 @@ const Footer = ({ onLoginClick, onOpenPolicy }: { onLoginClick: () => void; onOp
       <div>
         <p className="text-xs font-bold text-white uppercase tracking-widest mb-4">Legal & Compliance</p>
         <ul className="space-y-2.5 text-xs text-slate-400">
-          <li><button onClick={() => onOpenPolicy('privacy')} className="hover:text-white transition">Privacy Policy</button></li>
-          <li><a href="/terms" className="hover:text-white transition">Terms & Conditions</a></li>
+          <li><a href="/terms-and-conditions" className="hover:text-white transition">Terms & Conditions</a></li>
+          <li><a href="/privacy-policy" className="hover:text-white transition">Privacy Policy</a></li>
           <li><a href="/risk-disclaimer" className="hover:text-white transition">Risk Disclosure</a></li>
-          <li><button onClick={() => onOpenPolicy('refund')} className="hover:text-white transition">Refund & Cancellation</button></li>
-          <li><button onClick={() => onOpenPolicy('disclaimer')} className="hover:text-white transition">Risk Disclaimer</button></li>
+          <li><a href="/refund-policy" className="hover:text-white transition">Refund & Cancellation</a></li>
         </ul>
       </div>
 
@@ -875,7 +874,9 @@ const Footer = ({ onLoginClick, onOpenPolicy }: { onLoginClick: () => void; onOp
         <span className="text-white/20">|</span>
         <a href="/faq" className="hover:text-white transition">FAQ</a>
         <span className="text-white/20">|</span>
-        <a href="/terms" className="hover:text-white transition">Terms & Conditions</a>
+        <a href="/terms-and-conditions" className="hover:text-white transition">Terms & Conditions</a>
+        <span className="text-white/20">|</span>
+        <a href="/privacy-policy" className="hover:text-white transition">Privacy</a>
         <span className="text-white/20">|</span>
         <a href="/risk-disclaimer" className="hover:text-white transition">Risk Disclosure</a>
       </div>
