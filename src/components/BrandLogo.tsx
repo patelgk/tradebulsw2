@@ -374,5 +374,4 @@ export default function BrandLogo({
   );
 }
 
-// ─── Legacy compat — LOGO_ALT kept for external references
-export { LOGO_ALT };
+// ─── Legacy compat — LOGO_ALT already exported at top
