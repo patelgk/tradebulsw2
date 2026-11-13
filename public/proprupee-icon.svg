@@ -1,22 +1,68 @@
-<svg viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="512" height="512" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="g" x1="18" y1="82" x2="84" y2="8" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4EF2C2"/>
-      <stop offset="0.56" stop-color="#00D4FF"/>
-      <stop offset="1" stop-color="#4EF2C2"/>
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#0d1a0d"/>
+      <stop offset="100%" stop-color="#050d05"/>
+    </radialGradient>
+    <linearGradient id="green" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#86efac"/>
     </linearGradient>
-    <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#4EF2C2" flood-opacity="0.55"/>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#c8d8d8"/>
+      <stop offset="100%" stop-color="#8fa8a8"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-sm" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
-  <rect x="6" y="6" width="84" height="84" rx="24" fill="#08121A" stroke="url(#g)" stroke-opacity="0.45"/>
-  <g filter="url(#s)" stroke="url(#g)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M20 72c17 8 40 1 52-20"/>
-    <path d="M58 18h20v20"/>
-    <path d="M78 18 53 43"/>
-    <path d="M29 63V48"/>
-    <path d="M43 67V36"/>
-    <path d="M57 57V43"/>
+
+  <!-- Background -->
+  <rect width="200" height="200" rx="40" fill="url(#bg)"/>
+
+  <!-- Neon green border -->
+  <rect x="3" y="3" width="194" height="194" rx="38" fill="none" stroke="#22c55e" stroke-width="3" opacity="0.75" filter="url(#glow)"/>
+
+  <!-- Faint candlestick bg -->
+  <g opacity="0.18">
+    <rect x="148" y="110" width="10" height="32" rx="2" fill="#22c55e"/>
+    <line x1="153" y1="104" x2="153" y2="110" stroke="#22c55e" stroke-width="1.5"/>
+    <line x1="153" y1="142" x2="153" y2="148" stroke="#22c55e" stroke-width="1.5"/>
+    <rect x="162" y="92" width="10" height="34" rx="2" fill="#22c55e"/>
+    <line x1="167" y1="86" x2="167" y2="92" stroke="#22c55e" stroke-width="1.5"/>
+    <line x1="167" y1="126" x2="167" y2="132" stroke="#22c55e" stroke-width="1.5"/>
+    <rect x="176" y="78" width="10" height="28" rx="2" fill="#22c55e"/>
+    <line x1="181" y1="72" x2="181" y2="78" stroke="#22c55e" stroke-width="1.5"/>
+    <line x1="181" y1="106" x2="181" y2="112" stroke="#22c55e" stroke-width="1.5"/>
   </g>
-  <text x="22" y="48" fill="#4EF2C2" font-size="42" font-weight="900" font-family="Arial, sans-serif" filter="url(#s)">₹</text>
+
+  <!-- R vertical stem -->
+  <rect x="38" y="42" width="18" height="116" rx="4" fill="url(#silver)"/>
+
+  <!-- R top bowl -->
+  <path d="M56 42 Q110 42 110 70 Q110 98 56 98 L56 42Z" fill="url(#silver)" opacity="0.9"/>
+  <!-- Bowl cutout -->
+  <path d="M60 52 Q96 52 96 70 Q96 86 60 88 L60 52Z" fill="url(#bg)"/>
+
+  <!-- Rupee symbol stripes -->
+  <line x1="62" y1="62" x2="94" y2="62" stroke="#22c55e" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+  <line x1="62" y1="74" x2="94" y2="74" stroke="#22c55e" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+
+  <!-- R leg -->
+  <path d="M56 98 L100 158 L118 158 L72 98Z" fill="url(#silver)" opacity="0.85"/>
+
+  <!-- Green arrow -->
+  <g filter="url(#glow-sm)">
+    <line x1="52" y1="155" x2="138" y2="52" stroke="url(#green)" stroke-width="10" stroke-linecap="round"/>
+    <polygon points="138,52 115,58 130,72" fill="#4ade80"/>
+  </g>
+
+  <!-- Floor glow -->
+  <ellipse cx="100" cy="175" rx="55" ry="6" fill="#22c55e" opacity="0.22"/>
 </svg>

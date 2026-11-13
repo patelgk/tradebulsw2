@@ -49,6 +49,7 @@ export default defineConfig(({ mode }) => {
       },
     },
       chunkSizeWarningLimit: 800,
+      assetsInclude: ['**/*.webmanifest'],
       rollupOptions: {
         output: {
           manualChunks: {

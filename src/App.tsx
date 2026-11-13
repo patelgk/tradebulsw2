@@ -16,7 +16,8 @@ if (typeof window !== 'undefined') {
 }
 
 import { LandingPage } from './components/LandingPage';
-import { APP_NAME } from './components/BrandLogo';
+import { APP_NAME, BrandIconSVG, LOGO_ALT } from './components/BrandLogo';
+import SplashScreen from './components/SplashScreen';
 import LWChart from './components/LWChart';
 import OptionChain from './components/OptionChainProduction';
 import GlobalSearch from './components/GlobalSearch';
@@ -279,9 +280,12 @@ const Header = ({
             <Menu className="h-6 w-6 text-primary" />
           </button>
         ) : null}
-        <div className="flex flex-col">
+        <div className="flex items-center gap-2">
+          {!isSubView && (
+            <BrandIconSVG size={32} className="rounded-xl flex-shrink-0" />
+          )}
           <h1 className="text-lg sm:text-xl font-black leading-none tracking-[-0.04em]">
-            {isSubView ? 'Option Chain' : APP_NAME}
+            {isSubView ? 'Option Chain' : <><span className="text-white">Prop</span><span className="text-[#4ade80]">Rupee</span></>}
           </h1>
         </div>
         {!isSubView && activeTab === 'trade' && (
@@ -424,8 +428,12 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
       <div className="flex flex-col items-center justify-center min-h-screen p-6">
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center">
-            <div className="inline-flex p-4 rounded-3xl bg-primary/10 mb-4">
-              <TrendingUp className="w-12 h-12 text-primary" />
+            <div className="inline-flex mb-4">
+              <BrandIconSVG
+                size={80}
+                className="rounded-2xl"
+                style={{ filter: 'drop-shadow(0 0 18px rgba(34,197,94,0.5))' } as React.CSSProperties}
+              />
             </div>
             <h2 className="text-3xl font-black tracking-tight">Welcome</h2>
             <p className="text-slate-400 font-bold text-sm mt-2 uppercase tracking-widest">
@@ -487,8 +495,12 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
             >
               ← Back to Login Options
             </button>
-            <div className="inline-flex p-3 sm:p-4 rounded-3xl bg-primary/10 mb-4">
-              <TrendingUp className="w-10 sm:w-12 h-10 sm:h-12 text-primary" />
+            <div className="inline-flex mb-4">
+              <BrandIconSVG
+                size={72}
+                className="rounded-2xl"
+                style={{ filter: 'drop-shadow(0 0 14px rgba(34,197,94,0.5))' } as React.CSSProperties}
+              />
             </div>
             <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
               {isForgot ? 'Recover Password' : isLogin ? 'Trader Login' : 'Create Account'}
@@ -672,8 +684,12 @@ const AuthView = ({ onAuthSuccess, showToast }: { onAuthSuccess: (user: any) => 
             >
               ← Back to Login Options
             </button>
-            <div className="inline-flex p-4 rounded-3xl bg-slate-100/50 dark:bg-white/10 mb-4">
-              <UserPlus className="w-12 h-12 text-slate-700 dark:text-slate-300" />
+            <div className="inline-flex mb-4">
+              <BrandIconSVG
+                size={80}
+                className="rounded-2xl"
+                style={{ filter: 'drop-shadow(0 0 14px rgba(34,197,94,0.5))' } as React.CSSProperties}
+              />
             </div>
             <h2 className="text-3xl font-black tracking-tight">
               {isForgot ? 'Recover Password' : isLogin ? 'Partner Login' : 'Become a Partner'}
@@ -4060,6 +4076,8 @@ export default function AppWrapper() {
 
 function App() {
   const darkMode = true;
+  // ── Splash screen state ───────────────────────────────────────────────────
+  const [splashDone, setSplashDone] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -5637,6 +5655,10 @@ function App() {
 
   return (
     <>
+      {/* ── Animated splash — only on initial app load, not SEO pages ── */}
+      {!splashDone && currentPath === '/' && (
+        <SplashScreen onFinished={() => setSplashDone(true)} duration={2200} />
+      )}
       {typeof window !== 'undefined' && currentPath === '/risk-disclaimer' ? (
         <RiskDisclosure />
       ) : typeof window !== 'undefined' && currentPath === '/terms-and-conditions' ? (

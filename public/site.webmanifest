@@ -1,0 +1,25 @@
+{
+  "name": "PropRupee",
+  "short_name": "PropRupee",
+  "description": "PropRupee — Trade · Perform · Get Funded. India's prop trading evaluation and funding platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050d05",
+  "theme_color": "#121717",
+  "lang": "en-IN",
+  "icons": [
+    {
+      "src": "/proprupee-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["finance", "business"]
+}

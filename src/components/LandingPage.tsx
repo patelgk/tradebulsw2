@@ -24,7 +24,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import { APP_NAME } from './BrandLogo';
+import { APP_NAME, BrandIconSVG, LOGO_ALT } from './BrandLogo';
 
 
 interface LandingPageProps {
@@ -170,9 +170,12 @@ const HeroDashboardMockup = () => (
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(163,28,24,0.14),transparent_28%),radial-gradient(circle_at_90%_20%,rgba(31,122,46,0.12),transparent_30%)]" />
       <div className="relative rounded-[1.65rem] border border-white/10 bg-[#121717]/90 p-4">
         <div className="mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#A31C18]/80">{APP_NAME} Terminal</p>
-            <h3 className="mt-1 text-lg font-black text-white">Challenge Dashboard</h3>
+          <div className="flex items-center gap-2">
+            <BrandIconSVG size={24} className="rounded-lg" />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#A31C18]/80">{APP_NAME} Terminal</p>
+              <h3 className="mt-0.5 text-lg font-black text-white">Challenge Dashboard</h3>
+            </div>
           </div>
           <div className="flex gap-1.5">
             <span className="h-3 w-3 rounded-full bg-[#A31C18]" />
@@ -225,8 +228,11 @@ const Header = ({
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#121717]/85 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <button onClick={onLogoClick} className="text-sm font-black uppercase tracking-[0.22em] text-white">
-          {APP_NAME}
+        <button onClick={onLogoClick} className="flex items-center gap-2.5 group" aria-label={`${APP_NAME} home`}>
+          <BrandIconSVG size={36} className="rounded-xl flex-shrink-0" />
+          <span className="text-sm font-black uppercase tracking-[0.18em] text-white">
+            Prop<span className="text-[#4ade80]">Rupee</span>
+          </span>
         </button>
 
         <nav className="hidden items-center gap-7 md:flex">
@@ -824,10 +830,10 @@ const Footer = ({ onLoginClick, onOpenPolicy }: { onLoginClick: () => void; onOp
     <div className="mx-auto max-w-7xl grid grid-cols-1 md:grid-cols-4 gap-10 pb-12 border-b border-white/10">
       <div className="space-y-4 md:col-span-1">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#A31C18] text-white font-black text-lg">
-            ₹
-          </div>
-          <span className="text-base font-black tracking-tight text-white">{APP_NAME}</span>
+          <BrandIconSVG size={36} className="rounded-xl flex-shrink-0" />
+          <span className="text-base font-black tracking-tight text-white">
+            Prop<span className="text-[#4ade80]">Rupee</span>
+          </span>
         </div>
         <p className="text-xs text-slate-400 leading-relaxed">
           Professional software and real-time market data analytics platform for modern traders and financial analysts.

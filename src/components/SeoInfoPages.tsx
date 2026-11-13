@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { ArrowRight, CheckCircle2, ChevronRight, Info } from 'lucide-react';
+import { LOGO_ALT, BrandIconSVG } from './BrandLogo';
 
 const pageLinks = [
   { label: 'What is Proprupee?', href: '/what-is-proprupee' },
@@ -83,7 +84,12 @@ const SeoPageLayout: React.FC<SeoPageProps> = ({ title, description, heading, in
     <div className="min-h-screen bg-[#121717] text-white">
       <header className="border-b border-white/10 bg-[#121717]/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <a href="/" className="text-sm font-black uppercase tracking-[0.24em] text-white">Proprupee</a>
+          <a href="/" className="flex items-center gap-2.5" aria-label="Proprupee home">
+            <BrandIconSVG size={32} className="rounded-xl" />
+            <span className="text-sm font-black uppercase tracking-[0.2em] text-white">
+              Prop<span className="text-[#4ade80]">Rupee</span>
+            </span>
+          </a>
           <nav className="flex flex-wrap gap-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">
             {pageLinks.map((link) => (
               <a key={link.href} href={link.href} className="transition hover:text-emerald-200">
