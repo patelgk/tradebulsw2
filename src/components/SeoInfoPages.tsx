@@ -7,39 +7,59 @@ const pageLinks = [
   { label: 'Trader Evaluation', href: '/trader-evaluation' },
   { label: 'Funding Program', href: '/funding-program' },
   { label: 'FAQ', href: '/faq' },
+  { label: 'Terms & Conditions', href: '/terms-and-conditions' },
   { label: 'Risk Disclaimer', href: '/risk-disclaimer' },
   { label: 'Privacy Policy', href: '/privacy-policy' },
   { label: 'Refund & Cancellation', href: '/refund-policy' },
 ];
 
+const setMeta = (name: string, content: string) => {
+  let el = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute('name', name);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+};
+
+const setOgMeta = (property: string, content: string) => {
+  let el = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute('property', property);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+};
+
 const setSeoTags = (title: string, description: string, canonical: string) => {
   if (typeof document === 'undefined') return;
 
+  // Title
   document.title = title;
 
-  let descriptionTag = document.querySelector('meta[name="description"]');
-  if (!descriptionTag) {
-    descriptionTag = document.createElement('meta');
-    descriptionTag.setAttribute('name', 'description');
-    document.head.appendChild(descriptionTag);
-  }
-  descriptionTag.setAttribute('content', description);
+  // Meta description + robots
+  setMeta('description', description);
+  setMeta('robots', 'index, follow');
 
-  let robotsTag = document.querySelector('meta[name="robots"]');
-  if (!robotsTag) {
-    robotsTag = document.createElement('meta');
-    robotsTag.setAttribute('name', 'robots');
-    document.head.appendChild(robotsTag);
-  }
-  robotsTag.setAttribute('content', 'index, follow');
-
-  let canonicalLink = document.querySelector('link[rel="canonical"]');
+  // Canonical
+  let canonicalLink = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
   if (!canonicalLink) {
     canonicalLink = document.createElement('link');
     canonicalLink.setAttribute('rel', 'canonical');
     document.head.appendChild(canonicalLink);
   }
   canonicalLink.setAttribute('href', canonical);
+
+  // Open Graph
+  setOgMeta('og:title', title);
+  setOgMeta('og:description', description);
+  setOgMeta('og:url', canonical);
+
+  // Twitter
+  setMeta('twitter:title', title);
+  setMeta('twitter:description', description);
 };
 
 interface SeoPageProps {
@@ -60,8 +80,8 @@ const SeoPageLayout: React.FC<SeoPageProps> = ({ title, description, heading, in
   }, [title, description]);
 
   return (
-    <div className="min-h-screen bg-[#050812] text-white">
-      <header className="border-b border-white/10 bg-[#050812]/85 backdrop-blur-xl">
+    <div className="min-h-screen bg-[#121717] text-white">
+      <header className="border-b border-white/10 bg-[#121717]/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <a href="/" className="text-sm font-black uppercase tracking-[0.24em] text-white">Proprupee</a>
           <nav className="flex flex-wrap gap-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">

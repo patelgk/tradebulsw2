@@ -5619,12 +5619,26 @@ function App() {
 
   const currentPath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '') || '/' : '/';
 
+  // ── Canonical redirects for alias paths (301-equivalent client-side) ──────
+  if (typeof window !== 'undefined') {
+    if (currentPath === '/terms') {
+      window.location.replace('/terms-and-conditions');
+      return null;
+    }
+    if (currentPath === '/privacy') {
+      window.location.replace('/privacy-policy');
+      return null;
+    }
+    if (currentPath === '/refund') {
+      window.location.replace('/refund-policy');
+      return null;
+    }
+  }
+
   return (
     <>
       {typeof window !== 'undefined' && currentPath === '/risk-disclaimer' ? (
         <RiskDisclosure />
-      ) : typeof window !== 'undefined' && currentPath === '/terms' ? (
-        <TermsAndConditions />
       ) : typeof window !== 'undefined' && currentPath === '/terms-and-conditions' ? (
         <TermsAndConditions />
       ) : typeof window !== 'undefined' && currentPath === '/what-is-proprupee' ? (
@@ -5637,9 +5651,9 @@ function App() {
         <FundingProgramPage />
       ) : typeof window !== 'undefined' && currentPath === '/faq' ? (
         <FaqPage />
-      ) : typeof window !== 'undefined' && (currentPath === '/privacy-policy' || currentPath === '/privacy') ? (
+      ) : typeof window !== 'undefined' && currentPath === '/privacy-policy' ? (
         <PrivacyPolicyPage />
-      ) : typeof window !== 'undefined' && (currentPath === '/refund-policy' || currentPath === '/refund') ? (
+      ) : typeof window !== 'undefined' && currentPath === '/refund-policy' ? (
         <RefundCancellationPage />
       ) : typeof window !== 'undefined' && isAdminPath(window.location.pathname) ? (
         <AdminRouter

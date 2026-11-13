@@ -1,5 +1,26 @@
 User-agent: *
 Allow: /
+
+# Private routes — keep bots out
 Disallow: /admin/
+Disallow: /admin
 Disallow: /api/
+
+# Explicitly allow all public SEO pages
+Allow: /what-is-proprupee
+Allow: /how-proprupee-works
+Allow: /trader-evaluation
+Allow: /funding-program
+Allow: /faq
+Allow: /terms-and-conditions
+Allow: /risk-disclaimer
+Allow: /privacy-policy
+Allow: /refund-policy
+
+# Static assets
+Allow: /sitemap.xml
+Allow: /robots.txt
+Allow: /og-image.png
+Allow: /proprupee-icon.svg
+
 Sitemap: https://www.proprupee.com/sitemap.xml

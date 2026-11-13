@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Homepage -->
   <url>
     <loc>https://www.proprupee.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
+
+  <!-- Core SEO pages -->
   <url>
     <loc>https://www.proprupee.com/what-is-proprupee</loc>
     <changefreq>monthly</changefreq>
@@ -30,10 +34,12 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+
+  <!-- Legal pages — canonical URLs only (no /terms alias) -->
   <url>
     <loc>https://www.proprupee.com/terms-and-conditions</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.proprupee.com/risk-disclaimer</loc>
@@ -43,11 +49,12 @@
   <url>
     <loc>https://www.proprupee.com/privacy-policy</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://www.proprupee.com/refund-policy</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.6</priority>
   </url>
+
 </urlset>

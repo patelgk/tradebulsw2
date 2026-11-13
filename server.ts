@@ -2325,15 +2325,23 @@ async function startServer() {
         setHeaders: (res, filePath) => {
           if (filePath.endsWith('.xml')) {
             res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
           } else if (filePath.endsWith('.txt')) {
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
           }
         },
       }));
+      // Explicit routes for crawlable files — placed after static middleware
+      // so they act as a fallback with guaranteed correct headers
       app.get('/sitemap.xml', (_req, res) => {
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
         res.sendFile(path.join(distPath, 'sitemap.xml'));
       });
       app.get('/robots.txt', (_req, res) => {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
         res.sendFile(path.join(distPath, 'robots.txt'));
       });
       app.get("*", (req, res) => {

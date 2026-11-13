@@ -2,60 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#08121A" />
+  <meta name="theme-color" content="#121717" />
   <meta name="robots" content="index, follow" />
 
-  <!-- SEO -->
-  <title>Proprupee | Prop Firm & Trader Funding Platform in India</title>
-  <!--SEO:TITLE-->
+  <!-- Primary SEO — homepage defaults; each route overrides via setSeoTags() -->
+  <title>Proprupee | Prop Firm &amp; Trader Funding Platform in India</title>
   <meta name="description" content="Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program. Learn how Proprupee works and apply for trader evaluation." />
-
-  <meta
-    name="keywords"
-    content="prop firm India, Indian prop firm, prop trading India, funded trader India, trader evaluation India, trading challenge India, Indian funded trader program, Proprupee"
-  />
-
+  <meta name="keywords" content="prop firm India, Indian prop firm, prop trading India, funded trader India, trader evaluation India, trading challenge India, Indian funded trader program, Proprupee" />
   <meta name="author" content="Proprupee" />
 
+  <!-- Canonical — homepage default; overridden per-route by React components -->
   <link rel="canonical" href="https://www.proprupee.com/" />
-  <!--SEO:CANONICAL-->
 
-  <!-- Sitemap -->
+  <!-- Sitemap discovery -->
   <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="/proprupee-icon.svg" />
 
-  <!-- Open Graph -->
+  <!-- Open Graph — homepage defaults -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Proprupee" />
-  <meta property="og:title" content="Proprupee | Prop Firm & Trader Funding Platform in India" />
-  <!--SEO:OG-TITLE-->
-  <meta
-    property="og:description"
-    content="Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program. Learn how Proprupee works and apply for trader evaluation."
-  />
-  <!--SEO:OG-DESC-->
+  <meta property="og:title" content="Proprupee | Prop Firm &amp; Trader Funding Platform in India" />
+  <meta property="og:description" content="Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program. Learn how Proprupee works and apply for trader evaluation." />
   <meta property="og:url" content="https://www.proprupee.com/" />
-  <!--SEO:OG-URL-->
   <meta property="og:image" content="https://www.proprupee.com/og-image.png" />
-  <!--SEO:OG-IMAGE-->
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="en_IN" />
 
-  <!-- Twitter -->
+  <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Proprupee | Prop Firm & Trader Funding Platform in India" />
-  <!--SEO:TWITTER-TITLE-->
-  <meta
-    name="twitter:description"
-    content="Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program. Learn how Proprupee works and apply for trader evaluation."
-  />
-  <!--SEO:TWITTER-DESC-->
+  <meta name="twitter:site" content="@proprupee" />
+  <meta name="twitter:title" content="Proprupee | Prop Firm &amp; Trader Funding Platform in India" />
+  <meta name="twitter:description" content="Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program. Learn how Proprupee works and apply for trader evaluation." />
   <meta name="twitter:image" content="https://www.proprupee.com/og-image.png" />
-  <!--SEO:TWITTER-IMAGE-->
 
-  <!-- JSON-LD Schema -->
+  <!-- JSON-LD: Organization -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -63,64 +47,45 @@
     "name": "Proprupee",
     "url": "https://www.proprupee.com/",
     "logo": "https://www.proprupee.com/proprupee-icon.svg",
-    "email": "support@proprupee.com",
-    "sameAs": [
-      "https://www.proprupee.com/"
-    ],
-    "areaServed": { "@type": "Country", "name": "India" },
-    "telephone": "+91-93032-59841",
-    "email": "support@proprupee.com",
-    "openingHours": "Mo-Sa 09:00-18:00",
-    "currenciesAccepted": "INR",
-    "paymentAccepted": "UPI, Credit Card, Net Banking",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "telephone": "+91-93032-59841",
+      "contactType": "customer support",
+      "email": "support@proprupee.com",
+      "areaServed": "IN",
+      "availableLanguage": "English"
+    },
+    "areaServed": {
+      "@type": "Country",
+      "name": "India"
+    },
     "description": "Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program in India."
   }
   </script>
+
+  <!-- JSON-LD: WebSite (no SearchAction — site has no search endpoint) -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "FinancialService",
+    "@type": "WebSite",
     "name": "Proprupee",
-    "areaServed": { "@type": "Country", "name": "India" },
-    "description": "Indian prop trading evaluation platform offering funded accounts up to 90% profit split.",
-    "currenciesAccepted": "INR",
-    "paymentAccepted": "UPI, Credit Card, Net Banking"
+    "url": "https://www.proprupee.com/",
+    "description": "Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program.",
+    "inLanguage": "en-IN"
   }
   </script>
-  <script type="application/ld+json">
-  {
-    "@context":"https://schema.org",
-    "@type":"WebSite",
-    "name":"Proprupee",
-    "url":"https://www.proprupee.com/",
-    "description":"Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program.",
-    "potentialAction":{
-      "@type":"SearchAction",
-      "target":"https://www.proprupee.com/?q={search_term_string}",
-      "query-input":"required name=search_term_string"
-    }
-  }
+
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-BNY6KEETPN"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-BNY6KEETPN');
   </script>
-  <!--SEO:JSONLD-->
-  <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-BNY6KEETPN"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-BNY6KEETPN');
-</script>
-
 </head>
-
 <body>
-
   <div id="root"></div>
-
   <script type="module" src="/src/main.tsx"></script>
-
 </body>
-
-
 </html>
