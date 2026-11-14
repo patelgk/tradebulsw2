@@ -50,10 +50,10 @@ const sectionMotion = {
 } as const;
 
 const primaryButton =
-  'group inline-flex items-center justify-center gap-2 rounded-full bg-[#A31C18] px-6 py-3 text-sm font-black text-white shadow-[0_20px_70px_rgba(163,28,24,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#c0211c] hover:shadow-[0_24px_90px_rgba(163,28,24,0.50)] active:translate-y-0';
+  'group inline-flex items-center justify-center gap-2 rounded-full bg-[var(--color-accent)] px-6 py-3 text-sm font-black text-white shadow-[0_20px_70px_rgba(163,28,24,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--color-accent-hover)] hover:shadow-[0_24px_90px_rgba(163,28,24,0.50)] active:translate-y-0';
 
 const secondaryButton =
-  'inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-[#A31C18]/60 hover:bg-[#A31C18]/10 active:translate-y-0';
+  'inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-[var(--color-accent)]/60 hover:bg-[var(--color-accent)]/10 active:translate-y-0';
 
 const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ');
 
@@ -64,7 +64,7 @@ const GlassCard = ({
   children: React.ReactNode;
   className?: string;
 }) => (
-  <div className={cx('rounded-[2rem] border border-white/10 bg-[#161d1d]/80 shadow-2xl shadow-black/40 backdrop-blur-2xl', className)}>
+  <div className={cx('rounded-[2rem] border border-white/10 bg-[var(--color-bg-elevated)]/60 shadow-2xl shadow-black/40 backdrop-blur-2xl', className)}>
     {children}
   </div>
 );
@@ -86,9 +86,9 @@ const CandlestickPreview = ({ compact = false }: { compact?: boolean }) => {
   ];
 
   return (
-    <div className={cx('relative overflow-hidden rounded-3xl border border-white/10 bg-[#0d1414]', compact ? 'h-48 sm:h-56' : 'h-[280px] sm:h-[320px] md:h-[390px]')}>
+    <div className={cx('relative overflow-hidden rounded-3xl border border-white/10 bg-[var(--color-bg-card)]', compact ? 'h-48 sm:h-56' : 'h-[280px] sm:h-[320px] md:h-[390px]')}>
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:42px_42px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_18%,rgba(163,28,24,0.18),transparent_34%),radial-gradient(circle_at_24%_82%,rgba(31,122,46,0.14),transparent_30%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_18%,var(--color-accent)/0.18,transparent_34%),radial-gradient(circle_at_24%_82%,var(--color-trading-up)/0.14,transparent_30%)]" />
       <svg className="absolute inset-x-0 bottom-10 h-40 w-full opacity-70" viewBox="0 0 760 180" preserveAspectRatio="none">
         <path
           d="M0 132 C74 100 92 118 140 86 C202 43 242 96 298 72 C354 48 388 22 438 55 C500 96 536 80 592 42 C638 12 686 32 760 18"
@@ -102,13 +102,13 @@ const CandlestickPreview = ({ compact = false }: { compact?: boolean }) => {
         />
         <defs>
           <linearGradient id="landing-chart-line" x1="0" x2="1">
-            <stop offset="0%" stopColor="#1f7a2e" />
-            <stop offset="55%" stopColor="#A31C18" />
-            <stop offset="100%" stopColor="#c0211c" />
+            <stop offset="0%" stopColor="var(--color-trading-up)" />
+            <stop offset="55%" stopColor="var(--color-accent)" />
+            <stop offset="100%" stopColor="var(--color-accent-hover)" />
           </linearGradient>
           <linearGradient id="landing-chart-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#A31C18" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#A31C18" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
           </linearGradient>
         </defs>
       </svg>
@@ -126,25 +126,25 @@ const CandlestickPreview = ({ compact = false }: { compact?: boolean }) => {
             <span
               className={cx(
                 'absolute w-full max-w-[18px] rounded-md shadow-lg',
-                candle.up ? 'bg-[#1f7a2e] shadow-green-900/40' : 'bg-[#A31C18] shadow-red-900/40'
+                candle.up ? 'bg-[var(--color-trading-up)] shadow-green-900/40' : 'bg-[var(--color-accent)] shadow-red-900/40'
               )}
               style={{ top: candle.y, height: candle.body }}
             />
           </motion.div>
         ))}
       </div>
-      <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-black/50 px-3 py-2 text-[11px] font-bold text-white backdrop-blur-xl">
-        <span className="h-2 w-2 rounded-full bg-[#A31C18] shadow-[0_0_18px_rgba(163,28,24,0.9)]" />
+      <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-[var(--color-bg-elevated)]/50 px-3 py-2 text-[11px] font-bold text-[var(--color-text-primary)] backdrop-blur-xl">
+        <span className="h-2 w-2 rounded-full bg-[var(--color-accent)] shadow-[0_0_18px_var(--color-accent)_/_0.9]" />
         Live NIFTY 50
       </div>
       <div className="absolute bottom-5 left-5 right-5 grid grid-cols-3 gap-3">
         {[
-          ['Equity', '₹12.5L', 'text-[#4ade80]'],
+          ['Equity', '₹12.5L', 'text-[var(--color-trading-up)]'],
           ['Risk Used', '3.8%', 'text-slate-200'],
-          ['Today', '+₹18,420', 'text-[#A31C18]'],
+          ['Today', '+₹18,420', 'text-[var(--color-accent)]'],
         ].map(([label, value, color]) => (
-          <div key={label} className="rounded-2xl border border-white/10 bg-[#121717]/80 p-3 backdrop-blur-xl">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">{label}</p>
+          <div key={label} className="rounded-2xl border border-white/10 bg-[var(--color-bg-elevated)]/50 p-3 backdrop-blur-xl">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--color-text-muted)]">{label}</p>
             <p className={cx('mt-1 text-sm font-black md:text-base', color)}>{value}</p>
           </div>
         ))}
@@ -160,43 +160,43 @@ const HeroDashboardMockup = () => (
     transition={{ duration: 0.85, delay: 0.2, ease: 'easeOut' }}
     className="relative mx-auto max-w-2xl lg:mx-0"
   >
-    <div className="absolute -left-10 top-16 hidden rounded-2xl border border-[#1f7a2e]/30 bg-[#1f7a2e]/10 px-4 py-3 text-sm font-black text-green-200 shadow-2xl shadow-green-900/20 backdrop-blur-xl sm:block">
+    <div className="absolute -left-10 top-16 hidden rounded-2xl border border-[var(--color-trading-up)]/30 bg-[var(--color-trading-up)]/10 px-4 py-3 text-sm font-black text-green-200 shadow-2xl shadow-green-900/20 backdrop-blur-xl sm:block">
       +₹24,880 Profit
     </div>
-    <div className="absolute -right-8 bottom-24 hidden rounded-2xl border border-[#A31C18]/30 bg-[#A31C18]/10 px-4 py-3 text-sm font-black text-red-200 shadow-2xl shadow-red-900/10 backdrop-blur-xl md:block">
+    <div className="absolute -right-8 bottom-24 hidden rounded-2xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-3 text-sm font-black text-red-200 shadow-2xl shadow-red-900/10 backdrop-blur-xl md:block">
       Risk Cut: -1.2%
     </div>
     <GlassCard className="relative overflow-hidden p-3">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(163,28,24,0.14),transparent_28%),radial-gradient(circle_at_90%_20%,rgba(31,122,46,0.12),transparent_30%)]" />
-      <div className="relative rounded-[1.65rem] border border-white/10 bg-[#121717]/90 p-4">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,var(--color-accent)/0.14,transparent_28%),radial-gradient(circle_at_90%_20%,var(--color-trading-up)/0.12,transparent_30%)]" />
+      <div className="relative rounded-[1.65rem] border border-white/10 bg-[var(--color-bg-elevated)]/90 p-4">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BrandIconSVG size={24} className="rounded-lg" />
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#A31C18]/80">{APP_NAME} Terminal</p>
-              <h3 className="mt-0.5 text-lg font-black text-white">Challenge Dashboard</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--color-accent)]/80">{APP_NAME} Terminal</p>
+              <h3 className="mt-0.5 text-lg font-black text-[var(--color-text-primary)]">Challenge Dashboard</h3>
             </div>
           </div>
           <div className="flex gap-1.5">
-            <span className="h-3 w-3 rounded-full bg-[#A31C18]" />
+            <span className="h-3 w-3 rounded-full bg-[var(--color-accent)]" />
             <span className="h-3 w-3 rounded-full bg-amber-400" />
-            <span className="h-3 w-3 rounded-full bg-[#1f7a2e]" />
+            <span className="h-3 w-3 rounded-full bg-[var(--color-trading-up)]" />
           </div>
         </div>
         <div className="grid gap-4 lg:grid-cols-[1fr_180px]">
           <CandlestickPreview />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
             {([
-              ['P&L', '+₹42,650', TrendingUp, 'text-[#4ade80]'],
-              ['Win Rate', '68.4%', Trophy, 'text-[#A31C18]'],
-              ['Active Traders', '12,842', Globe, 'text-slate-300'],
+              ['P&L', '+₹42,650', TrendingUp, 'text-[var(--color-trading-up)]'],
+              ['Win Rate', '68.4%', Trophy, 'text-[var(--color-accent)]'],
+              ['Active Traders', '12,842', Globe, 'text-[var(--color-text-secondary)]'],
             ] satisfies Array<[string, string, LucideIcon, string]>).map(([label, value, CardIcon, color]) => {
               return (
-                <div key={label} className="rounded-3xl border border-white/10 bg-[#1c2424]/60 p-4">
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#A31C18]/15">
+                <div key={label} className="rounded-3xl border border-white/10 bg-[var(--color-bg-elevated)]/60 p-4">
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--color-accent)]/15">
                     <CardIcon className={cx('h-5 w-5', color)} />
                   </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--color-text-muted)]">{label}</p>
                   <p className={cx('mt-1 text-xl font-black', color)}>{value}</p>
                 </div>
               );
@@ -226,18 +226,18 @@ const Header = ({
   ];
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#121717]/85 backdrop-blur-2xl">
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-[var(--color-border)] bg-[var(--color-bg-base)]/85 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <button onClick={onLogoClick} className="flex items-center gap-2.5 group" aria-label={`${APP_NAME} home`}>
           <BrandIconSVG size={36} className="rounded-xl flex-shrink-0" />
-          <span className="text-sm font-black uppercase tracking-[0.18em] text-white">
-            Prop<span className="text-[#4ade80]">Rupee</span>
+          <span className="text-sm font-black uppercase tracking-[0.18em] text-[var(--color-text-primary)]">
+            Prop<span className="text-[var(--color-trading-up)]">Rupee</span>
           </span>
         </button>
 
         <nav className="hidden items-center gap-7 md:flex">
           {links.map(([label, href]) => (
-            <a key={label} href={href} className="text-xs font-black uppercase tracking-[0.22em] text-slate-400 transition-colors hover:text-[#A31C18]">
+            <a key={label} href={href} className="text-xs font-black uppercase tracking-[0.22em] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-accent)]">
               {label}
             </a>
           ))}
@@ -254,7 +254,7 @@ const Header = ({
 
         <button
           onClick={() => setMenuOpen((value) => !value)}
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-white md:hidden"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-[var(--color-text-primary)] md:hidden"
           aria-label="Open menu"
         >
           {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -267,11 +267,11 @@ const Header = ({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="border-t border-white/10 bg-[#121717] px-4 py-5 md:hidden"
+            className="border-t border-[var(--color-border)] bg-[var(--color-bg-base)] px-4 py-5 md:hidden"
           >
             <div className="flex flex-col gap-3">
               {links.map(([label, href]) => (
-                <a key={label} href={href} onClick={() => setMenuOpen(false)} className="rounded-2xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-slate-200">
+                <a key={label} href={href} onClick={() => setMenuOpen(false)} className="rounded-2xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-[var(--color-text-secondary)]">
                   {label}
                 </a>
               ))}
@@ -297,22 +297,22 @@ const Header = ({
 
 const Hero = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLoggedIn?: boolean }) => (
   <section className="relative overflow-hidden px-4 pb-20 pt-32 sm:px-6 lg:px-8 lg:pb-28 lg:pt-40">
-    <div className="absolute inset-0 bg-[#121717]" />
+    <div className="absolute inset-0 bg-[var(--color-bg-base)]" />
     <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(circle_at_center,black,transparent_78%)]" />
-    <div className="absolute -left-32 top-20 h-80 w-80 rounded-full bg-[#A31C18]/15 blur-[110px]" />
-    <div className="absolute -right-24 top-0 h-96 w-96 rounded-full bg-[#1f7a2e]/12 blur-[130px]" />
-    <div className="absolute bottom-0 left-1/2 h-72 w-[38rem] -translate-x-1/2 rounded-full bg-[#A31C18]/8 blur-[120px]" />
+    <div className="absolute -left-32 top-20 h-80 w-80 rounded-full bg-[var(--color-accent)]/15 blur-[110px]" />
+    <div className="absolute -right-24 top-0 h-96 w-96 rounded-full bg-[var(--color-trading-up)]/12 blur-[130px]" />
+    <div className="absolute bottom-0 left-1/2 h-72 w-[38rem] -translate-x-1/2 rounded-full bg-[var(--color-accent)]/8 blur-[120px]" />
 
     <div className="relative mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[0.92fr_1.08fr]">
       <motion.div initial="hidden" animate="visible" transition={{ duration: 0.75, ease: 'easeOut' }} variants={fadeUp}>
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#A31C18]/30 bg-[#A31C18]/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.24em] text-red-200">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.24em] text-red-200">
           <Sparkles className="h-4 w-4" />
           Real-time prop trading workspace
         </div>
-        <h1 className="max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.07em] text-white sm:text-6xl lg:text-7xl xl:text-[5.6rem]">
+        <h1 className="max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.07em] text-[var(--color-text-primary)] sm:text-6xl lg:text-7xl xl:text-[5.6rem]">
           Indian Prop Firm for Traders
         </h1>
-        <p className="mt-7 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+        <p className="mt-7 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)] sm:text-lg">
           Proprupee evaluates traders based on their trading skills and strategy and provides eligible traders access to its funding program. Learn how Proprupee works and apply for trader evaluation.
         </p>
         <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -324,10 +324,10 @@ const Hero = ({ onLoginClick, isLoggedIn }: { onLoginClick: () => void; isLogged
             Trading Skills Evaluate Karwayein <MonitorSmartphone className="h-4 w-4" />
           </a>
         </div>
-        <div className="mt-10 flex flex-wrap gap-3 text-xs font-bold text-slate-400">
+        <div className="mt-10 flex flex-wrap gap-3 text-xs font-bold text-[var(--color-text-secondary)]">
           {['NIFTY & BANKNIFTY', 'Trader evaluation', 'Funding program'].map((item) => (
             <span key={item} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2">
-              <CheckCircle2 className="h-4 w-4 text-[#1f7a2e]" />
+              <CheckCircle2 className="h-4 w-4 text-[var(--color-trading-up)]" />
               {item}
             </span>
           ))}
