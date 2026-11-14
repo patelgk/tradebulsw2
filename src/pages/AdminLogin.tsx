@@ -53,7 +53,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onError 
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-base-themed flex items-center justify-center p-4">
       {/* Background Effects */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute w-96 h-96 bg-primary/10 rounded-full blur-3xl -top-20 -right-20" />
@@ -62,22 +62,22 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onError 
 
       {/* Login Card */}
       <div className="relative w-full max-w-md">
-        <div className="bg-white/10 dark:bg-slate-800/50 backdrop-blur-xl rounded-2xl p-8 border border-white/10 dark:border-slate-700/50 shadow-2xl">
+        <div className="bg-card-themed/80 backdrop-blur-xl rounded-2xl p-8 border border-themed shadow-2xl">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
               <ShieldCheck className="w-8 h-8 text-primary" />
-              <h1 className="text-2xl font-black text-white">Admin Login</h1>
+              <h1 className="text-2xl font-black text-primary-themed">Admin Login</h1>
             </div>
-            <p className="text-slate-300 text-sm">
+            <p className="text-secondary-themed text-sm">
               Secure access to Proprupee administration panel
             </p>
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
-              <p className="text-sm text-red-200">{error}</p>
+            <div className="mb-4 p-3 bg-negative/20 border border-negative/50 rounded-lg">
+              <p className="text-sm text-negative">{error}</p>
             </div>
           )}
 
@@ -85,7 +85,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onError 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
             <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
+              <label className="block text-sm font-semibold text-primary-themed mb-2">
                 Admin Email
               </label>
               <input

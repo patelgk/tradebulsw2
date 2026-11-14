@@ -38,7 +38,48 @@ export interface BrandIconProps {
   className?: string;
 }
 
-export const BrandIconSVG: React.FC<BrandIconProps> = ({ size = 40, className = '' }) => (
+/**
+ * Theme-aware SVG logo colors
+ * Returns colors based on current theme (light or dark)
+ */
+function getSVGColors(isDark: boolean) {
+  if (isDark) {
+    return {
+      bgLight: '#0d1a0d',
+      bgDark: '#050d05',
+      greenLight: '#22c55e',
+      greenDark: '#86efac',
+      silverLight: '#ffffff',
+      silverMid: '#c8d8d8',
+      silverDark: '#8fa8a8',
+      silverDarkBg: '#0a1408',
+      greenAccent: '#4ade80',
+      neonBorder: '#22c55e',
+    };
+  }
+  // Light theme
+  return {
+    bgLight: '#e0e7e0',
+    bgDark: '#c8d8d0',
+    greenLight: '#128B42',
+    greenDark: '#0E7537',
+    silverLight: '#15231B',
+    silverMid: '#3a4a3d',
+    silverDark: '#2d3d30',
+    silverDarkBg: '#f0f5f0',
+    greenAccent: '#0E7537',
+    neonBorder: '#128B42',
+  };
+}
+
+export const BrandIconSVG: React.FC<BrandIconProps> = ({ size = 40, className = '' }) => {
+  const isDark = typeof window !== 'undefined' 
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches 
+    : true;
+  
+  const colors = getSVGColors(isDark);
+  
+  return (
   <svg
     width={size}
     height={size}
@@ -53,19 +94,19 @@ export const BrandIconSVG: React.FC<BrandIconProps> = ({ size = 40, className = 
     <defs>
       {/* Background */}
       <radialGradient id="bi-bg" cx="50%" cy="50%" r="70%">
-        <stop offset="0%"   stopColor="#0d1a0d" />
-        <stop offset="100%" stopColor="#050d05" />
+        <stop offset="0%"   stopColor={colors.bgLight} />
+        <stop offset="100%" stopColor={colors.bgDark} />
       </radialGradient>
       {/* Green glow for arrow + accents */}
       <linearGradient id="bi-green" x1="0" y1="1" x2="1" y2="0">
-        <stop offset="0%"   stopColor="#22c55e" />
-        <stop offset="100%" stopColor="#86efac" />
+        <stop offset="0%"   stopColor={colors.greenLight} />
+        <stop offset="100%" stopColor={colors.greenDark} />
       </linearGradient>
       {/* Silver gradient for R letterform */}
       <linearGradient id="bi-silver" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%"   stopColor="#ffffff" />
-        <stop offset="50%"  stopColor="#c8d8d8" />
-        <stop offset="100%" stopColor="#8fa8a8" />
+        <stop offset="0%"   stopColor={colors.silverLight} />
+        <stop offset="50%"  stopColor={colors.silverMid} />
+        <stop offset="100%" stopColor={colors.silverDark} />
       </linearGradient>
       {/* Outer neon glow border */}
       <filter id="bi-glow" x="-20%" y="-20%" width="140%" height="140%">
@@ -88,7 +129,7 @@ export const BrandIconSVG: React.FC<BrandIconProps> = ({ size = 40, className = 
     <rect
       x="3" y="3" width="194" height="194" rx="38"
       fill="none"
-      stroke="#22c55e"
+      stroke={colors.neonBorder}
       strokeWidth="3"
       opacity="0.75"
       filter="url(#bi-glow)"
@@ -99,9 +140,9 @@ export const BrandIconSVG: React.FC<BrandIconProps> = ({ size = 40, className = 
       [148,110,32,10], [160,95,32,10], [172,80,32,10], [184,68,32,10],
     ].map(([x,y,h,w], i) => (
       <g key={i} opacity="0.18">
-        <rect x={x} y={y} width={w} height={h} rx="2" fill="#22c55e" />
-        <line x1={x+w/2} y1={y-6} x2={x+w/2} y2={y}    stroke="#22c55e" strokeWidth="1.5" />
-        <line x1={x+w/2} y1={y+h} x2={x+w/2} y2={y+h+6} stroke="#22c55e" strokeWidth="1.5" />
+        <rect x={x} y={y} width={w} height={h} rx="2" fill={colors.greenLight} />
+        <line x1={x+w/2} y1={y-6} x2={x+w/2} y2={y}    stroke={colors.greenLight} strokeWidth="1.5" />
+        <line x1={x+w/2} y1={y+h} x2={x+w/2} y2={y+h+6} stroke={colors.greenLight} strokeWidth="1.5" />
       </g>
     ))}
 
@@ -127,8 +168,8 @@ export const BrandIconSVG: React.FC<BrandIconProps> = ({ size = 40, className = 
     />
 
     {/* ── Rupee symbol stripes inside R bowl ── */}
-    <line x1="62" y1="62" x2="94" y2="62" stroke="#22c55e" strokeWidth="5" strokeLinecap="round" opacity="0.9" />
-    <line x1="62" y1="74" x2="94" y2="74" stroke="#22c55e" strokeWidth="5" strokeLinecap="round" opacity="0.9" />
+    <line x1="62" y1="62" x2="94" y2="62" stroke={colors.greenAccent} strokeWidth="5" strokeLinecap="round" opacity="0.9" />
+    <line x1="62" y1="74" x2="94" y2="74" stroke={colors.greenAccent} strokeWidth="5" strokeLinecap="round" opacity="0.9" />
 
     {/* ── Green arrow cutting diagonally through the R ── */}
     <g filter="url(#bi-glow-sm)">
@@ -143,14 +184,15 @@ export const BrandIconSVG: React.FC<BrandIconProps> = ({ size = 40, className = 
       {/* Arrow head */}
       <polygon
         points="138,52 115,58 130,72"
-        fill="#4ade80"
+        fill={colors.greenAccent}
       />
     </g>
 
     {/* ── Neon floor glow line ── */}
-    <ellipse cx="100" cy="175" rx="55" ry="6" fill="#22c55e" opacity="0.22" />
+    <ellipse cx="100" cy="175" rx="55" ry="6" fill={colors.greenLight} opacity="0.22" />
   </svg>
 );
+}
 
 // ─── Full Horizontal Logo (Banner / Wordmark) ────────────────────────────────
 // Matches the banner reference: icon-mark + bull silhouette + PropRupee + tagline
