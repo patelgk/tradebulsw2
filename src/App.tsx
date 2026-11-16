@@ -4483,15 +4483,20 @@ function App() {
     // Reset chart subscription tracking so it re-subscribes on new socket
     chartSubscribedKeyRef.current = null;
     needsResubscribeRef.current = true;
-    // Connect to the backend server - use environment variable or default to localhost
-    const socketUrl = process.env.REACT_APP_API_URL || window.location.origin || 'http://localhost:3000';
+    // Always connect to the same origin — works for both local and Render
+    const socketUrl = window.location.origin;
     const socket = io(socketUrl, {
+      // Start with polling so it works through Render's HTTP proxy,
+      // then upgrade to websocket once the connection is established.
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelayMax: 10000,
       randomizationFactor: 0.5,
-      timeout: 20000,
+      timeout: 30000,
+      // Force new connection (don't reuse stale ones)
+      forceNew: true,
     });
     socketRef.current = socket;
 

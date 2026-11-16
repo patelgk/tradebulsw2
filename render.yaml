@@ -4,11 +4,15 @@ services:
     name: proprupee-app
     env: node
     plan: starter
+    region: singapore   # closest to India for lower Dhan API latency
     buildCommand: npm ci && npm run build
-    startCommand: npm start
+    startCommand: NODE_ENV=production npm start
+    # Render exposes the PORT env var — server must listen on it
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000
       - key: ENABLE_MARKET_SIMULATOR
         value: false
       - key: TEST_MODE
@@ -17,6 +21,11 @@ services:
         value: false
       - key: DISABLE_DHAN_AUTOFETCH
         value: false
+      - key: OPTION_CHAIN_WS_STRIKE_RANGE
+        value: 10
+      - key: DHAN_SUBSCRIBE_BATCH_SIZE
+        value: 50
+      # Set these in Render Dashboard → Environment:
       - key: MONGODB_URI
         sync: false
       - key: DHAN_CLIENT_ID
@@ -35,5 +44,3 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
-      - key: CORS_ORIGINS
-        value: "*"

@@ -1,0 +1,79 @@
+===========================================================
+  RENDER DEPLOYMENT CHECKLIST — PropRupee
+===========================================================
+
+STEP 1: Set Environment Variables in Render Dashboard
+-------------------------------------------------------
+Go to: Render Dashboard → proprupee-app → Environment
+
+REQUIRED (must set manually):
+  DHAN_CLIENT_ID       = 1110902733
+  DHAN_ACCESS_TOKEN    = eyJ0eXAiOiJKV1Qi... (your full token)
+  MONGODB_URI          = mongodb+srv://...
+
+OPTIONAL (email/notifications):
+  SMTP_HOST            = smtp.gmail.com
+  SMTP_PORT            = 587
+  SMTP_USER            = your@gmail.com
+  SMTP_PASS            = your-app-password
+  SMTP_FROM            = your@gmail.com
+  ADMIN_EMAIL          = admin@proprupee.com
+
+ALREADY SET IN render.yaml (no action needed):
+  NODE_ENV             = production
+  PORT                 = 10000
+  ENABLE_MARKET_SIMULATOR = false
+  TEST_MODE            = false
+  DISABLE_DHAN_WS      = false
+
+STEP 2: Push These Changes to Git
+--------------------------------------------------
+  git add -A
+  git commit -m "fix: Render deployment - Socket.IO transports, env logging"
+  git push origin main
+
+Render will auto-deploy on push.
+
+STEP 3: Verify in Render Logs After Deploy
+--------------------------------------------------
+You should see these lines at startup:
+  [Config] DHAN_CLIENT_ID: ✅ set (1110902733)
+  [Config] DHAN_ACCESS_TOKEN: ✅ set (length=327)
+  [MarketFeed] Starting Dhan WebSocket connection...
+  [DhanFeed] ✅ WebSocket connected successfully.
+
+If you see:
+  [Config] DHAN_ACCESS_TOKEN: ❌ MISSING
+  → Go back to Step 1 and set the token.
+
+STEP 4: Browser Check
+--------------------------------------------------
+Open your Render URL in browser and check DevTools Console:
+  ✅ Should see: "[📡 SOCKET CONNECTED]"
+  ✅ Should see: "[📊 INDEX TICK] price=25xxx"
+  ❌ Should NOT see: "401" or "Could not establish connection"
+
+===========================================================
+  WHAT WAS FIXED
+===========================================================
+
+1. Socket.IO transports:
+   - Server: added polling+websocket, pingTimeout=60s, allowEIO3
+   - Client: starts with polling (works through Render proxy),
+     upgrades to websocket when possible
+
+2. Environment variable logging:
+   - Server now logs DHAN token status at startup
+   - Easy to verify in Render logs if credentials are set
+
+3. render.yaml:
+   - Added PORT=10000 (Render default)
+   - Removed CORS_ORIGINS (not needed with open CORS)
+   - Added region: singapore (closest to India)
+   - Added missing env vars for option chain batch size
+
+4. Frontend connection:
+   - Always uses window.location.origin (correct for Render)
+   - forceNew: true prevents stale connections
+
+===========================================================

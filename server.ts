@@ -49,12 +49,34 @@ app.use(express.json());
 app.use("/api", dhanRoutes);
 
 const httpServer = createServer(app);
-const io = new Server(httpServer, { cors: { origin: "*" } });
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+    credentials: false,
+  },
+  // Render (and most reverse proxies) can drop long-lived connections.
+  // Allow both transports so the client falls back to polling if WS upgrade fails.
+  transports: ["polling", "websocket"],
+  // Keep-alive / ping settings — Render idles connections after 55s
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  // Allow EIO3 clients (older socket.io-client versions)
+  allowEIO3: true,
+  // Increase the buffer for high-frequency market data
+  maxHttpBufferSize: 1e6,
+});
 
 // ─── Market Feed Manager (single instance) ────────────────────────────────────
 
 const DHAN_CLIENT_ID    = process.env.DHAN_CLIENT_ID    || "";
 const DHAN_ACCESS_TOKEN = process.env.DHAN_ACCESS_TOKEN || "";
+
+// Log credential status at startup (never log the actual token value)
+console.log(`[Config] DHAN_CLIENT_ID: ${DHAN_CLIENT_ID ? `✅ set (${DHAN_CLIENT_ID})` : "❌ MISSING"}`);
+console.log(`[Config] DHAN_ACCESS_TOKEN: ${DHAN_ACCESS_TOKEN ? `✅ set (length=${DHAN_ACCESS_TOKEN.length})` : "❌ MISSING — chart history & market feed will fail"}`);
+console.log(`[Config] NODE_ENV: ${process.env.NODE_ENV || "not set"}`);
+console.log(`[Config] PORT: ${process.env.PORT || "3000 (default)"}`);
 
 const marketFeed = new MarketFeedManager(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN, io);
 const marketSimulator = new DevelopmentMarketSimulator(marketFeed);
