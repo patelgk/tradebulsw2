@@ -855,23 +855,8 @@ app.post("/api/auth/forgot-password", async (req, res) => {
 app.get("/api/trades", async (req, res) => {
   try {
     const filter = req.query.userId ? { userId: req.query.userId as string } : {};
-    
-    // If fetching for a specific user, check if they're active (for UI purposes)
-    if (filter.userId) {
-      const user = await User.findOne({ _id: filter.userId });
-      if (user && user.accountStatus !== 'active') {
-        // Still return trades but include account status so UI can show warning
-        const trades = await Trade.find(filter).sort({ time: -1 });
-        return res.json({ 
-          trades,
-          accountStatus: user.accountStatus,
-          warning: `Account is ${user.accountStatus}. Trading is disabled.`
-        });
-      }
-    }
-    
     const trades = await Trade.find(filter).sort({ time: -1 });
-    res.json(Array.isArray(trades) ? { trades } : trades);
+    res.json(trades);
   } catch { res.status(500).json({ error: "Failed to fetch trades" }); }
 });
 

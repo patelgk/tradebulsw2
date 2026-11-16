@@ -4480,8 +4480,11 @@ function App() {
 
   useEffect(() => {
     if (!user || !hasStarted) return;
-    // In development, explicitly specify the backend URL
-    const socketUrl = 'https://tradebulsw2-w71e.onrender.com';
+    // Reset chart subscription tracking so it re-subscribes on new socket
+    chartSubscribedKeyRef.current = null;
+    needsResubscribeRef.current = true;
+    // Connect to the backend server - use environment variable or default to localhost
+    const socketUrl = process.env.REACT_APP_API_URL || window.location.origin || 'http://localhost:3000';
     const socket = io(socketUrl, {
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -5116,7 +5119,7 @@ function App() {
       if (chartTickFrame !== null) window.cancelAnimationFrame(chartTickFrame);
       clearInterval(pollInterval);
     };
-  }, []);
+  }, [user, hasStarted]);
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -5136,7 +5139,8 @@ function App() {
       socket.emit('chart:unsubscribe', { chartKey: chartSelection.chartKey });
       chartSubscribedKeyRef.current = null;
     };
-  }, [chartSelection]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartSelection.chartKey]);
 
   // Keyboard shortcuts for search
   useEffect(() => {
@@ -5163,7 +5167,9 @@ function App() {
         return;
       }
       try {
-        const trades = await api.getTrades(user.uid);
+        const response = await api.getTrades(user.uid);
+        // Server returns { trades: [...] } or plain array — normalise both
+        const trades = Array.isArray(response) ? response : (response?.trades ?? []);
         setAllTrades(trades);
         consecutiveErrors = 0;
         // Sync to Dexie - Ensure each trade has an 'id' field for Dexie primary key
