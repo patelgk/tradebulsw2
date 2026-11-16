@@ -81,6 +81,9 @@ const socketChartSubscriptions = new Map<string, Set<string>>();
 const socketSymbolSubscriptions = new Map<string, Set<string>>();
 const chartSubscriptionRefCounts = new Map<string, number>();
 
+// Chart history request deduplication - prevents concurrent duplicate requests
+const inFlightChartRequests = new Map<string, Promise<any>>();
+
 const INDEX_SECURITY_MAP: Record<string, { securityId: string; exchangeSegment: "IDX_I" | "NSE_FNO"; instrument: "INDEX" | "OPTIDX" }> = {
   "Nifty 50":      { securityId: "13",  exchangeSegment: "IDX_I", instrument: "INDEX" },
   "Bank Nifty":    { securityId: "25",  exchangeSegment: "IDX_I", instrument: "INDEX" },
@@ -163,73 +166,174 @@ async function fetchChartHistory(params: { symbol: string; securityId: string; e
     payload.toDate = now.toISOString().split("T")[0];
   }
 
-  const r = await axios.post(endpoint, payload, {
-    headers: { "access-token": DHAN_ACCESS_TOKEN, "client-id": DHAN_CLIENT_ID, "Content-Type": "application/json" },
-    timeout: 10000,
-  });
-  const d = r.data?.data;
-  if (r.data && Array.isArray(r.data.timestamp) && Array.isArray(r.data.open) && Array.isArray(r.data.high) && Array.isArray(r.data.low) && Array.isArray(r.data.close)) {
-    return r.data.timestamp.map((t: number, i: number) => ({
-      time: new Date(t * 1000).toISOString(),
-      open: r.data.open?.[i] || 0,
-      high: r.data.high?.[i] || 0,
-      low: r.data.low?.[i] || 0,
-      close: r.data.close?.[i] || 0,
-      volume: r.data.volume?.[i] || 0,
-    }));
+  try {
+    const r = await axios.post(endpoint, payload, {
+      headers: { "access-token": DHAN_ACCESS_TOKEN, "client-id": DHAN_CLIENT_ID, "Content-Type": "application/json" },
+      timeout: 30000, // Increased from 10s to 30s for historical data
+    });
+
+    // Strict format validation
+    const d = r.data?.data;
+    
+    // Format 1: timestamp array with separate open/high/low/close arrays
+    if (r.data && Array.isArray(r.data.timestamp) && Array.isArray(r.data.open) && Array.isArray(r.data.high) && Array.isArray(r.data.low) && Array.isArray(r.data.close)) {
+      return r.data.timestamp.map((t: number, i: number) => ({
+        time: new Date(t * 1000).toISOString(),
+        open: r.data.open?.[i] || 0,
+        high: r.data.high?.[i] || 0,
+        low: r.data.low?.[i] || 0,
+        close: r.data.close?.[i] || 0,
+        volume: r.data.volume?.[i] || 0,
+      }));
+    }
+    
+    // Format 2: data.start_Time with separate arrays
+    if (d && Array.isArray(d.start_Time) && Array.isArray(d.open) && Array.isArray(d.high) && Array.isArray(d.low) && Array.isArray(d.close)) {
+      return d.start_Time.map((t: number, i: number) => ({
+        time: new Date(t * 1000).toISOString(),
+        open: d.open?.[i] || 0,
+        high: d.high?.[i] || 0,
+        low: d.low?.[i] || 0,
+        close: d.close?.[i] || 0,
+        volume: d.volume?.[i] || 0,
+      }));
+    }
+    
+    // Format 3: Array of candle objects
+    if (Array.isArray(d) && d.length > 0 && d[0].open !== undefined && d[0].high !== undefined) {
+      return d.map((c: any) => ({
+        time: new Date((c.start_Time || c.time || 0) * 1000).toISOString(),
+        open: c.open, 
+        high: c.high, 
+        low: c.low, 
+        close: c.close,
+        volume: c.volume || 0,
+      }));
+    }
+
+    throw new Error(`Unexpected response format from Dhan history API: ${JSON.stringify(r.data).substring(0, 200)}`);
+  } catch (err: any) {
+    // Map Dhan API errors to appropriate HTTP status codes
+    if (err.response) {
+      const status = err.response.status;
+      const data = err.response.data;
+      
+      // 400: Invalid request parameters
+      if (status === 400) {
+        const error = new Error(`Invalid chart history request: ${data?.message || data?.error || "Bad request"}`);
+        (error as any).httpStatus = 400;
+        throw error;
+      }
+      
+      // 401/403: Authentication failure
+      if (status === 401 || status === 403) {
+        const error = new Error(`Authentication failed: Check Dhan access token and client ID`);
+        (error as any).httpStatus = 401;
+        throw error;
+      }
+      
+      // 429: Rate limited
+      if (status === 429) {
+        const error = new Error(`Rate limited by Dhan API. Retry after 3 seconds.`);
+        (error as any).httpStatus = 429;
+        throw error;
+      }
+      
+      // 503/504: Service unavailable
+      if (status === 503 || status === 504) {
+        const error = new Error(`Dhan service temporarily unavailable`);
+        (error as any).httpStatus = 503;
+        throw error;
+      }
+    }
+    
+    // Timeout errors
+    if (err.code === "ECONNABORTED" || err.message.includes("timeout")) {
+      const error = new Error(`Chart history request timeout after 30s. Dhan API may be slow.`);
+      (error as any).httpStatus = 503;
+      throw error;
+    }
+    
+    // Network errors
+    if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND") {
+      const error = new Error(`Cannot reach Dhan API. Network error.`);
+      (error as any).httpStatus = 503;
+      throw error;
+    }
+    
+    // Re-throw with default error handling
+    throw err;
   }
-  if (d && Array.isArray(d.start_Time)) {
-    return d.start_Time.map((t: number, i: number) => ({
-      time:   new Date(t * 1000).toISOString(),
-      open:   d.open?.[i]   || 0,
-      high:   d.high?.[i]   || 0,
-      low:    d.low?.[i]    || 0,
-      close:  d.close?.[i]  || 0,
-      volume: d.volume?.[i] || 0,
-    }));
-  }
-  if (Array.isArray(d)) {
-    return d.map((c: any) => ({
-      time:   new Date((c.start_Time || c.time || 0) * 1000).toISOString(),
-      open:   c.open, high: c.high, low: c.low, close: c.close,
-      volume: c.volume || 0,
-    }));
-  }
-  throw new Error("Unexpected response format from Dhan history API");
 }
 
 async function handleChartHistory(req: express.Request, res: express.Response) {
   if (!DHAN_ACCESS_TOKEN) {
-    return res.status(400).json({ error: "No credentials" });
+    return res.status(400).json({ error: "No credentials", message: "Dhan access token not configured" });
   }
 
   const chartReq = resolveChartHistoryRequest(req);
   if (!chartReq) {
-    return res.status(400).json({ error: "Symbol not supported" });
+    return res.status(400).json({ error: "Invalid request", message: "Symbol not supported or invalid parameters" });
   }
 
+  // Check local cache first
   const cached = marketFeed.getChartHistory(chartReq);
   if (cached.length > 0) {
     return res.json(cached);
   }
 
+  // Create deduplication key for this request
+  const dedupeKey = `${chartReq.symbol}:${chartReq.securityId}:${chartReq.exchangeSegment}:${chartReq.timeframe}`;
+  
+  // If this exact request is already in-flight, wait for it instead of making a duplicate
+  if (inFlightChartRequests.has(dedupeKey)) {
+    try {
+      const cachedResult = await inFlightChartRequests.get(dedupeKey);
+      return res.json(cachedResult);
+    } catch (err: any) {
+      const statusCode = err.httpStatus || 502;
+      return res.status(statusCode).json({ 
+        error: "Chart history fetch failed", 
+        message: err.message 
+      });
+    }
+  }
+
+  // Create a promise for this request and store it
+  const requestPromise = (async () => {
+    try {
+      const candles = await fetchChartHistory(chartReq);
+      marketFeed.seedChartHistory({
+        instrumentType: chartReq.instrumentType,
+        symbol: chartReq.symbol,
+        securityId: chartReq.securityId,
+        exchangeSegment: chartReq.exchangeSegment,
+        timeframe: chartReq.timeframe as any,
+        strike: chartReq.strike,
+        optionType: chartReq.optionType,
+        date: chartReq.date,
+        candles,
+      });
+      return candles;
+    } finally {
+      // Remove from in-flight tracking after completion
+      inFlightChartRequests.delete(dedupeKey);
+    }
+  })();
+
+  // Store in-flight request
+  inFlightChartRequests.set(dedupeKey, requestPromise);
+
   try {
-    const candles = await fetchChartHistory(chartReq);
-    marketFeed.seedChartHistory({
-      instrumentType: chartReq.instrumentType,
-      symbol: chartReq.symbol,
-      securityId: chartReq.securityId,
-      exchangeSegment: chartReq.exchangeSegment,
-      timeframe: chartReq.timeframe as any,
-      strike: chartReq.strike,
-      optionType: chartReq.optionType,
-      date: chartReq.date,
-      candles,
-    });
+    const candles = await requestPromise;
     return res.json(candles);
   } catch (err: any) {
     console.error("[API] History fetch failed:", err.response?.data || err.message);
-    return res.status(502).json({ error: "History fetch failed", message: err.message });
+    const statusCode = err.httpStatus || 502;
+    return res.status(statusCode).json({ 
+      error: "Chart history fetch failed", 
+      message: err.message 
+    });
   }
 }
 

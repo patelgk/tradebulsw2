@@ -227,7 +227,7 @@ export class MarketFeedManager {
   private _emptyState(): SymbolState {
     return {
       price: 0, change: 0, changePct: 0,
-      dayOpen: 0, dayHigh: 0, dayLow: 0, prevClose: 0, volume: 0,
+      dayOpen: 0, dayHigh: 0, dayLow: 0, prevClose: undefined as any, volume: 0,
       timestamp: "--:--:--",
       expiry: "", expiries: [],
       optionChain: [],
@@ -879,30 +879,35 @@ export class MarketFeedManager {
           });
         }
         
-        // DEFER chart candle update to next tick (no await)
-        setImmediate(() => {
-          for (const chartKey of chartKeys) {
-            const sub = this.chartSubscriptions.get(chartKey);
-            if (!sub) continue;
-            const tf = sub.timeframe || "5m";
-            const chartMetaBase = {
-              symbol: sub.symbol,
-              securityId: sub.securityId,
-              exchangeSegment: sub.exchangeSegment,
-              optionType: sub.optionType,
-              strike: sub.strike,
-              instrumentType: "OPTION" as const,
-            };
-            const cacheKey = this._chartCacheKey({ ...chartMetaBase, timeframe: tf }, this._tradingDateKey(tickTimeMs));
-            const candle = this._upsertChartCandle(cacheKey, tickTimeMs, optionPrice, volume, tf);
-            this._emitWithDebug("market:candleUpdate", {
-              chartKey,
-              cacheKey,
-              timeframe: tf,
-              candle,
-            }, undefined, `chart:${chartKey}`);
-          }
-        });
+        // PROCESS chart candle updates IMMEDIATELY (not deferred)
+        for (const chartKey of chartKeys) {
+          const sub = this.chartSubscriptions.get(chartKey);
+          if (!sub) continue;
+          const tf = sub.timeframe || "5m";
+          const chartMetaBase = {
+            symbol: sub.symbol,
+            securityId: sub.securityId,
+            exchangeSegment: sub.exchangeSegment,
+            optionType: sub.optionType,
+            strike: sub.strike,
+            instrumentType: "OPTION" as const,
+          };
+          const cacheKey = this._chartCacheKey({ ...chartMetaBase, timeframe: tf }, this._tradingDateKey(tickTimeMs));
+          const candle = this._upsertChartCandle(cacheKey, tickTimeMs, optionPrice, volume, tf);
+          this._emitWithDebug("market:candleUpdate", {
+            chartKey,
+            cacheKey,
+            timeframe: tf,
+            symbol: sub.symbol,
+            securityId: sub.securityId,
+            exchangeSegment: sub.exchangeSegment,
+            strike: sub.strike,
+            optionType: sub.optionType,
+            candle,
+            timestamp,
+            source: "ws",
+          }, undefined, `chart:${chartKey}`);
+        }
       }
       
       // DEFER DB write
@@ -920,7 +925,13 @@ export class MarketFeedManager {
     }
 
     // INDEX PRICE TICK
-    s.price = +(update.ltp || 0).toFixed(2);
+    const indexPrice = +(update.ltp || 0).toFixed(2);
+    // VALIDATION: Never overwrite valid price with zero or negative
+    if (indexPrice <= 0) {
+      this._logTick(`[MarketFeed] ⚠️ SKIPPED zero/negative index price token=${securityId} symbol=${symbol} ltp=${update.ltp}`);
+      return;
+    }
+    s.price = indexPrice;
     s.dataSource = "Dhan";
     s.isMarketOpen = this._isMarketOpen();
     s.timestamp = new Date().toLocaleTimeString("en-IN", { hour12: false });
@@ -987,28 +998,26 @@ export class MarketFeedManager {
         }, undefined, `chart:${chartKey}`);
       }
       
-      // DEFER chart candle update to next tick
-      setImmediate(() => {
-        for (const chartKey of chartKeys) {
-          const sub = this.chartSubscriptions.get(chartKey);
-          if (!sub) continue;
-          const tf = sub.timeframe || "5m";
-          const chartMetaBase = {
-            symbol: sub.symbol,
-            securityId: sub.securityId,
-            exchangeSegment: sub.exchangeSegment,
-            instrumentType: sub.instrument === "INDEX" ? "INDEX" as const : "OPTION" as const,
-          };
-          const cacheKey = this._chartCacheKey({ ...chartMetaBase, timeframe: tf }, this._tradingDateKey(tickTimeMs));
-          const candle = this._upsertChartCandle(cacheKey, tickTimeMs, s.price, volume, tf);
-          this._emitWithDebug("market:candleUpdate", {
-            chartKey,
-            cacheKey,
-            timeframe: tf,
-            candle,
-          }, undefined, `chart:${chartKey}`);
-        }
-      });
+      // PROCESS chart candle updates IMMEDIATELY (not deferred)
+      for (const chartKey of chartKeys) {
+        const sub = this.chartSubscriptions.get(chartKey);
+        if (!sub) continue;
+        const tf = sub.timeframe || "5m";
+        const chartMetaBase = {
+          symbol: sub.symbol,
+          securityId: sub.securityId,
+          exchangeSegment: sub.exchangeSegment,
+          instrumentType: sub.instrument === "INDEX" ? "INDEX" as const : "OPTION" as const,
+        };
+        const cacheKey = this._chartCacheKey({ ...chartMetaBase, timeframe: tf }, this._tradingDateKey(tickTimeMs));
+        const candle = this._upsertChartCandle(cacheKey, tickTimeMs, s.price, volume, tf);
+        this._emitWithDebug("market:candleUpdate", {
+          chartKey,
+          cacheKey,
+          timeframe: tf,
+          candle,
+        }, undefined, `chart:${chartKey}`);
+      }
     }
 
     // DEFER DB write
@@ -1385,8 +1394,8 @@ export class MarketFeedManager {
     const ist  = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
     const day  = ist.getUTCDay();
     const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
-    // Allow extended market hours for testing/live feeds or weekends if needed, or normal 9:15 AM to 3:30 PM (555 mins to 930 mins)
-    return day >= 0 && day <= 6 && mins >= 0 && mins <= 1440;
+    // Indian stock market: Mon-Fri 9:15 AM to 3:30 PM IST (555 mins to 930 mins, UTC days 1-5)
+    return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
   }
 
   private _emitWithDebug(eventName: string, payload: any, meta?: {symbol?: string; strike?: string; type?: string}, room?: string) {
